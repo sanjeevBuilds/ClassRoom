@@ -1,0 +1,34 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+.env
+
+# Student data — never commit raw video/photos of students (privacy/consent)
+data/raw_videos/*
+!data/raw_videos/.gitkeep
+data/roster/*
+!data/roster/.gitkeep
+data/annotations/*
+!data/annotations/.gitkeep
+*.mp4
+*.mov
+*.avi
+*.jpg
+*.jpeg
+*.png
+!docs/**/*.png
+
+# Model weights (large binaries — fetch via a setup script instead, not git)
+*.onnx
+*.pt
+*.pth
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
+
+# Word doc reference copies — .md files are the source of truth for the repo
+*.docx
+~$*

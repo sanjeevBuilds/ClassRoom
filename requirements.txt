@@ -1,0 +1,39 @@
+# ClassRoom — Automated CPU-Oriented Classroom Attendance System
+# Shared, pinned environment. Owned by Teammate 1.
+#
+# Everyone: create your virtualenv FROM THIS FILE, don't `pip install` on your own.
+#   python3 -m venv venv
+#   source venv/bin/activate        # Windows: venv\Scripts\activate
+#   pip install -r requirements.txt
+#
+# Note (Windows/Linux only): the line below installs the default `torch` wheel,
+# which can pull a large CUDA build on those platforms even though this project
+# is CPU-only. If that happens, install the CPU-only wheel instead BEFORE
+# running `pip install -r requirements.txt` again:
+#   pip install torch==2.4.1 --index-url https://download.pytorch.org/whl/cpu
+# macOS (Apple Silicon/Intel) torch wheels are CPU-only by default — no action needed.
+
+# Core CV / numerics
+opencv-python==4.10.0.84
+numpy==1.26.4
+scipy==1.14.1
+
+# Face detection / recognition (Modules 3 & 4)
+onnxruntime==1.19.2
+insightface==0.7.3
+ultralytics==8.3.0          # YOLOv8-face
+facenet-pytorch==2.6.0      # MTCNN
+torch==2.4.1
+torchvision==0.19.1
+
+# Clustering / matching / evaluation (Modules 4, 5)
+scikit-learn==1.5.2
+pandas==2.2.3
+
+# Reporting (Module 5, Phase 5/6)
+matplotlib==3.9.2
+seaborn==0.13.2
+openpyxl==3.1.5
+
+# Web UI & hosting (Module 1, Phase 4)
+streamlit==1.39.0
