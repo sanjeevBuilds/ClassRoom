@@ -1,4 +1,13 @@
-# Python
+# Flutter / Dart
+.dart_tool/
+.packages
+build/
+*.iml
+.flutter-plugins
+.flutter-plugins-dependencies
+.metadata
+
+# Python legacy (no longer used — kept in docs/legacy/ for reference)
 venv/
 __pycache__/
 *.pyc
@@ -18,8 +27,11 @@ data/annotations/*
 *.jpeg
 *.png
 !docs/**/*.png
+!assets/**/*.png
 
-# Model weights (large binaries — fetch via a setup script instead, not git)
+# Model weights (large binaries — download via setup script, not git)
+assets/models/*.onnx
+assets/models/*.tflite
 *.onnx
 *.pt
 *.pth
@@ -28,7 +40,24 @@ data/annotations/*
 .DS_Store
 .vscode/
 .idea/
+*.swp
 
-# Word doc reference copies — .md files are the source of truth for the repo
+# Word doc reference copies
 *.docx
 ~$*
+
+# Android
+android/.gradle/
+android/local.properties
+android/app/debug/
+android/app/profile/
+android/app/release/
+**/android/key.properties
+
+# iOS
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/Flutter.framework
+ios/Flutter/Flutter.podspec
+ios/Flutter/Generated.xcconfig
+ios/Flutter/app.framework
