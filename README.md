@@ -16,7 +16,7 @@ zero cloud, and zero cost.
 │                                                              │
 │  Camera (video capture) → Frame Decoder (4 FPS)              │
 │    → Blur Filter (Variance-of-Laplacian via OpenCV)          │
-│    → Face Detection (YuNet ONNX / YOLOv8n-face TFLite)      │
+│    → Face Detection (YuNet / RetinaFace ONNX / Haar Cascade) │
 │    → ArcFace Embedding (MobileFaceNet ONNX, NPU accelerated)│
 │    → Homography Compensation (ORB + RANSAC via OpenCV)       │
 │    → Identity Clustering (Agglomerative, custom Dart)        │
@@ -33,10 +33,11 @@ zero cloud, and zero cost.
 | :--- | :--- |
 | **Framework** | Flutter (Dart) — single codebase for Android + iOS |
 | **Camera** | `camera` package |
-| **Image Processing** | `opencv_dart` (blur filter, ORB features, homography) |
-| **Face Detection** | `flutter_onnxruntime` + YuNet ONNX (INT8 quantized) |
+| **Image Processing** | `opencv_dart` (blur filter, ORB features, homography, Haar Cascade) |
+| **Face Detection (primary)** | `flutter_onnxruntime` + YuNet ONNX (INT8 quantized) |
+| **Face Detection (secondary — rear-row recall)** | `flutter_onnxruntime` + RetinaFace-MobileNet0.25 ONNX (INT8 quantized) |
+| **Face Detection (baseline)** | `opencv_dart` Haar Cascade — classic-CV comparison point, no model download needed |
 | **Face Embedding** | `flutter_onnxruntime` + ArcFace MobileFaceNet ONNX |
-| **YOLO Benchmark** | `tflite_flutter` + YOLOv8n-face TFLite (INT8) |
 | **NPU Acceleration** | NNAPI (Android) / CoreML (iOS) via runtime delegates |
 | **Clustering** | Custom Dart HAC implementation |
 | **Roster DB** | `sqflite` (encrypted local SQLite) |
@@ -64,10 +65,11 @@ ClassRoom/
 │   │   ├── blur_motion/                 # Teammate 2: blur + homography
 │   │   │   ├── blur_filter.dart
 │   │   │   └── homography.dart
-│   │   ├── face_detection/              # Teammate 3: YuNet + YOLO
+│   │   ├── face_detection/              # Teammate 3: YuNet + RetinaFace + Haar
 │   │   │   ├── detector_base.dart
 │   │   │   ├── yunet_detector.dart
-│   │   │   └── yolo_detector.dart
+│   │   │   ├── retinaface_detector.dart
+│   │   │   └── haar_cascade_detector.dart
 │   │   ├── embedding_clustering/        # Teammate 4: ArcFace + HAC
 │   │   │   ├── arcface_embedder.dart
 │   │   │   └── clustering.dart
@@ -89,10 +91,10 @@ ClassRoom/
 │       ├── image_utils.dart
 │       └── math_utils.dart
 ├── assets/
-│   └── models/                          # ONNX/TFLite model weights
+│   └── models/                          # ONNX model weights (Haar Cascade ships inside opencv_dart)
 │       ├── yunet_int8.onnx
-│       ├── arcface_mobilefacenet_int8.onnx
-│       └── yolov8n_face_int8.tflite
+│       ├── retinaface_mobilenet025_int8.onnx
+│       └── arcface_mobilefacenet_int8.onnx
 ├── docs/
 │   ├── interface_contract.md            # Shared data schema between modules
 │   └── legacy/                          # Original Python-era reference docs
@@ -135,13 +137,14 @@ flutter test
 
 ### Model Weights
 
-Download the INT8-quantized ONNX/TFLite models and place in `assets/models/`:
+Download the INT8-quantized ONNX models and place in `assets/models/` (Haar Cascade needs no
+download — its XML cascade file ships inside `opencv_dart`):
 
 | Model | File | Size | Purpose |
 | :--- | :--- | :--- | :--- |
 | YuNet (detection) | `yunet_int8.onnx` | ~100 KB | Face detection (primary) |
+| RetinaFace-MobileNet0.25 (detection) | `retinaface_mobilenet025_int8.onnx` | ~1.7 MB | Face detection (rear-row recall benchmark) |
 | ArcFace MobileFaceNet | `arcface_mobilefacenet_int8.onnx` | ~600 KB | Face embedding |
-| YOLOv8n-face | `yolov8n_face_int8.tflite` | ~1.5 MB | Detection benchmark |
 
 ## Pipeline Flow
 

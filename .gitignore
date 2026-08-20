@@ -29,12 +29,17 @@ data/annotations/*
 !docs/**/*.png
 !assets/**/*.png
 
-# Model weights (large binaries — download via setup script, not git)
-assets/models/*.onnx
-assets/models/*.tflite
+# Model weights — the 3 MVP models ARE committed (verified, small: ~14.6MB
+# total — yunet_int8.onnx ~100KB, haarcascade xml ~930KB,
+# arcface_mobilefacenet.onnx ~13.6MB). Only block future large/unverified
+# model files by default so nobody accidentally commits a huge one.
 *.onnx
+*.tflite
 *.pt
 *.pth
+!assets/models/yunet_int8.onnx
+!assets/models/retinaface_mobilenet025_int8.onnx
+!assets/models/arcface_mobilefacenet.onnx
 
 # OS / editor
 .DS_Store

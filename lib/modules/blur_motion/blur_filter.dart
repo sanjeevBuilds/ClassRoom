@@ -1,4 +1,3 @@
-import 'dart:typed_data';
 import 'package:opencv_dart/opencv_dart.dart' as cv;
 
 /// Module 2: Blur Rejection via Variance-of-Laplacian
@@ -11,7 +10,7 @@ import 'package:opencv_dart/opencv_dart.dart' as cv;
 class BlurFilter {
   /// Sharpness threshold. Frames with Var(Laplacian) below this are dropped.
   /// Calibrate via grid search over τ ∈ {50, 100, 150, 200, 250} on
-  /// a labeled validation set.
+  /// a labeled validation set — this default is a starting point, not tuned.
   final double tauBlur;
 
   BlurFilter({this.tauBlur = 100.0});
@@ -20,32 +19,37 @@ class BlurFilter {
   ///
   /// Higher score = sharper image. Blurred panning frames typically
   /// score below 50–100.
-  ///
-  /// Implementation:
-  /// 1. Convert to grayscale: cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
-  /// 2. Apply Laplacian: cv.Laplacian(gray, cv.MatType.CV_64F)
-  /// 3. Compute variance of the result matrix
   double computeSharpness(cv.Mat frame) {
-    // TODO: Implement using opencv_dart
-    // final gray = cv.cvtColor(frame, cv.COLOR_BGR2GRAY);
-    // final laplacian = cv.Laplacian(gray, cv.MatType.CV_64F);
-    // final meanStd = cv.meanStdDev(laplacian);
-    // final stddev = meanStd.$2.at<double>(0, 0);
-    // return stddev * stddev; // variance = stddev^2
-    throw UnimplementedError('Module 2: blur filter not yet implemented');
+    final gray = cv.cvtColor(frame, cv.COLOR_BGR2GRAY);
+    final lap = cv.laplacian(gray, cv.MatType.CV_64F);
+    final (_, stddev) = cv.meanStdDev(lap);
+    gray.release();
+    lap.release();
+    return stddev.val1 * stddev.val1; // variance = stddev^2 (single-channel grayscale)
   }
 
-  /// Filter a list of frame dicts, keeping only those above τ_blur.
+  /// Filter a list of frame dicts (as produced by [FrameSampler]), keeping
+  /// only those above τ_blur.
   ///
-  /// Adds a `sharpness_score` field to each frame dict.
-  /// Returns only the sharp frames.
+  /// Runs sharpness scoring on `frame_lowres` (detection resolution is
+  /// enough to judge blur, and it's faster than scoring the full-res frame).
+  /// Adds a `sharpness_score` field to each surviving frame dict; frames
+  /// below the threshold have their Mats released and are dropped.
   List<Map<String, dynamic>> filterBlurryFrames(
-      List<Map<String, dynamic>> frames) {
-    // TODO: Implement
-    // For each frame:
-    //   score = computeSharpness(frame['frame'])
-    //   frame['sharpness_score'] = score
-    //   keep if score >= tauBlur
-    throw UnimplementedError('Module 2: blur filtering not yet implemented');
+    List<Map<String, dynamic>> frames,
+  ) {
+    final kept = <Map<String, dynamic>>[];
+    for (final frame in frames) {
+      final lowres = frame['frame_lowres'] as cv.Mat;
+      final score = computeSharpness(lowres);
+      if (score >= tauBlur) {
+        frame['sharpness_score'] = score;
+        kept.add(frame);
+      } else {
+        (frame['frame'] as cv.Mat).release();
+        lowres.release();
+      }
+    }
+    return kept;
   }
 }

@@ -14,6 +14,13 @@ class Detection {
   final double confidence;
   final String detector;
 
+  /// 5 facial landmarks — [rightEye, leftEye, nose, rightMouth, leftMouth],
+  /// each `[x, y]` in the same original-frame pixel coordinates as [bbox].
+  /// Null for detectors that don't provide landmarks (e.g. Haar Cascade).
+  /// When present, used for proper similarity-transform face alignment
+  /// before embedding (see ArcFaceEmbedder) instead of a plain bbox crop.
+  final List<List<double>>? landmarks;
+
   /// Unique ID for this detection, e.g. "frame42_det0"
   String get detectionId => 'frame${frameId}_det$_detIndex';
   final int _detIndex;
@@ -25,6 +32,7 @@ class Detection {
     required this.confidence,
     required this.detector,
     required int detIndex,
+    this.landmarks,
   }) : _detIndex = detIndex;
 
   Map<String, dynamic> toJson() => {

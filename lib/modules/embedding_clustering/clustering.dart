@@ -52,19 +52,82 @@ class IdentityClusterer {
       ];
     }
 
-    // TODO: Implement full HAC algorithm
-    // 1. Initialize N clusters, one per embedding
-    // 2. Build NxN distance matrix (cosine distance)
-    // 3. Loop:
-    //    a. Find minimum distance pair (i, j)
-    //    b. If min_distance > tauCluster, stop
-    //    c. Merge clusters i and j (average linkage)
-    //    d. Update distance matrix
-    // 4. For each final cluster:
-    //    a. Compute centroid = mean of member embeddings
-    //    b. L2-normalize the centroid
-    //    c. Create IdentityCluster object
-    throw UnimplementedError('Module 4: HAC clustering not yet implemented');
+    final n = embeddings.length;
+
+    // Pairwise cosine distance matrix, computed once up front.
+    final dist = List.generate(n, (_) => List<double>.filled(n, 0.0));
+    for (var i = 0; i < n; i++) {
+      for (var j = i + 1; j < n; j++) {
+        final d = _cosineDistance(embeddings[i].vector, embeddings[j].vector);
+        dist[i][j] = d;
+        dist[j][i] = d;
+      }
+    }
+
+    // Each cluster starts as a single embedding's index; merged clusters
+    // hold all their members' indices for average-linkage distance.
+    var clusters = List.generate(n, (i) => <int>[i]);
+
+    while (clusters.length > 1) {
+      var minDist = double.infinity;
+      var mergeA = -1, mergeB = -1;
+
+      for (var a = 0; a < clusters.length; a++) {
+        for (var b = a + 1; b < clusters.length; b++) {
+          final avgDist = _averageLinkageDistance(clusters[a], clusters[b], dist);
+          if (avgDist < minDist) {
+            minDist = avgDist;
+            mergeA = a;
+            mergeB = b;
+          }
+        }
+      }
+
+      if (minDist > tauCluster) break;
+
+      clusters[mergeA] = [...clusters[mergeA], ...clusters[mergeB]];
+      clusters.removeAt(mergeB);
+    }
+
+    return List.generate(clusters.length, (i) {
+      final memberIndices = clusters[i];
+      final centroid = _computeCentroid(memberIndices.map((idx) => embeddings[idx].vector));
+      return IdentityCluster(
+        clusterId: 'c${i.toString().padLeft(3, '0')}',
+        centroidEmbedding: centroid,
+        memberDetectionIds: memberIndices.map((idx) => embeddings[idx].detectionId).toList(),
+        tauClusterUsed: tauCluster,
+      );
+    });
+  }
+
+  /// Average-linkage distance: mean pairwise cosine distance between every
+  /// member of cluster [a] and every member of cluster [b].
+  double _averageLinkageDistance(List<int> a, List<int> b, List<List<double>> dist) {
+    double sum = 0.0;
+    for (final i in a) {
+      for (final j in b) {
+        sum += dist[i][j];
+      }
+    }
+    return sum / (a.length * b.length);
+  }
+
+  /// Mean of the given vectors, re-normalized to unit length.
+  Float32List _computeCentroid(Iterable<Float32List> vectors) {
+    final dim = vectors.first.length;
+    final sum = Float32List(dim);
+    var count = 0;
+    for (final v in vectors) {
+      for (var i = 0; i < dim; i++) {
+        sum[i] += v[i];
+      }
+      count++;
+    }
+    for (var i = 0; i < dim; i++) {
+      sum[i] /= count;
+    }
+    return _l2Normalize(sum);
   }
 
   /// L2-normalize a vector in-place.
