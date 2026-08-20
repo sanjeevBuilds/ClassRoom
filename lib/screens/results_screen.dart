@@ -11,9 +11,12 @@ class ResultsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final present = results.where((r) => r.status == AttendanceStatus.present).toList();
-    final absent = results.where((r) => r.status == AttendanceStatus.absent).toList();
-    final guests = results.where((r) => r.status == AttendanceStatus.unknownGuest).toList();
+    final debugEntry = results.where((r) => r.studentId == '__pipeline_debug__').firstOrNull;
+    final displayResults = results.where((r) => r.studentId != '__pipeline_debug__').toList();
+
+    final present = displayResults.where((r) => r.status == AttendanceStatus.present).toList();
+    final absent = displayResults.where((r) => r.status == AttendanceStatus.absent).toList();
+    final guests = displayResults.where((r) => r.status == AttendanceStatus.unknownGuest).toList();
 
     return Scaffold(
       appBar: AppBar(title: const Text('Attendance Result')),
@@ -23,18 +26,35 @@ class ResultsScreen extends StatelessWidget {
           _SummaryRow(present: present.length, absent: absent.length, guests: guests.length),
           const SizedBox(height: 24),
           if (present.isNotEmpty) ...[
-            Text('Present', style: Theme.of(context).textTheme.titleMedium),
+            Text('Present (${present.length})', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
             ...present.map((r) => _ResultTile(result: r)),
             const SizedBox(height: 16),
           ],
           if (absent.isNotEmpty) ...[
-            Text('Absent', style: Theme.of(context).textTheme.titleMedium),
+            Text('Absent (${absent.length})', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
             ...absent.map((r) => _ResultTile(result: r)),
             const SizedBox(height: 16),
           ],
           if (guests.isNotEmpty) ...[
-            Text('Unrecognized', style: Theme.of(context).textTheme.titleMedium),
+            Text('Unrecognized / Guests (${guests.length})', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
             ...guests.map((r) => _ResultTile(result: r)),
+            const SizedBox(height: 16),
+          ],
+          if (debugEntry != null) ...[
+            const Divider(),
+            ExpansionTile(
+              leading: const Icon(Icons.analytics_outlined, size: 20),
+              title: const Text('Pipeline Telemetry', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: Text(
+                    debugEntry.name ?? '',
+                    style: const TextStyle(fontSize: 12, fontFamily: 'monospace', color: Colors.grey),
+                  ),
+                ),
+              ],
+            ),
           ],
         ],
       ),
@@ -96,7 +116,11 @@ class _ResultTile extends StatelessWidget {
         },
       ),
       title: Text(result.name ?? 'Unrecognized face'),
-      subtitle: Text('Confidence: ${(result.similarityScore * 100).toStringAsFixed(1)}%'),
+      subtitle: Text(
+        result.status == AttendanceStatus.present
+            ? 'Match Confidence: ${(result.similarityScore.clamp(0.0, 1.0) * 100).toStringAsFixed(1)}%'
+            : 'Similarity: ${(result.similarityScore.clamp(0.0, 1.0) * 100).toStringAsFixed(1)}%',
+      ),
     );
   }
 }
