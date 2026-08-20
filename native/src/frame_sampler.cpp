@@ -34,8 +34,11 @@ std::vector<SampledFrame> FrameSampler::SampleFrames(
       sf.frame_id = sampled_frame_id;
       sf.timestamp_sec =
           native_fps > 0 ? native_frame_index / native_fps : 0.0;
-      // clone(): raw_frame is reused by capture.read() next iteration, so
-      // the kept copy must own its own buffer, not alias raw_frame's.
+      sf.frame = raw_frame.clone();
+      if (sf.frame.empty() || sf.frame.cols <= 0 || sf.frame.rows <= 0) {
+        ++native_frame_index;
+        continue;
+      }
       // Preserve aspect ratio: scale the long dimension to 640 and the short
       // dimension proportionally, preventing portrait mobile video from being
       // squashed into landscape 640x360.

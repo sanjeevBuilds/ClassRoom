@@ -242,7 +242,7 @@ const char* ClassroomProcessSweepVideo(
     // uncaught C++ exception propagating through an FFI call is undefined
     // behavior on the Dart side, not a catchable Dart exception. Convert
     // to a JSON error object instead, which the Dart binding checks for.
-    std::string err = std::string("{\"error\":\"") + e.what() + "\"}";
+    std::string err = std::string("{\"error\":\"") + classroom::JsonEscape(e.what()) + "\"}";
     return CopyToHeap(err);
   } catch (...) {
     return CopyToHeap(std::string("{\"error\":\"unknown native exception\"}"));

@@ -80,16 +80,26 @@ Embedding ArcFaceEmbedder::ExtractEmbedding(const cv::Mat& frame,
 
 cv::Mat ArcFaceEmbedder::CropAndResize(const cv::Mat& frame,
                                         const std::array<double, 4>& bbox) const {
+  if (frame.empty() || frame.cols <= 0 || frame.rows <= 0) {
+    return cv::Mat::zeros(kInputSize, kInputSize, CV_8UC3);
+  }
   const double x1 = bbox[0], y1 = bbox[1], x2 = bbox[2], y2 = bbox[3];
-  const double w = x2 - x1, h = y2 - y1;
+  const double w = std::max(1.0, x2 - x1), h = std::max(1.0, y2 - y1);
   constexpr double kPadFrac = 0.2;
 
-  const int px1 = std::clamp(static_cast<int>(x1 - w * kPadFrac), 0, frame.cols - 1);
-  const int py1 = std::clamp(static_cast<int>(y1 - h * kPadFrac), 0, frame.rows - 1);
+  const int px1 = std::clamp(static_cast<int>(x1 - w * kPadFrac), 0, std::max(0, frame.cols - 1));
+  const int py1 = std::clamp(static_cast<int>(y1 - h * kPadFrac), 0, std::max(0, frame.rows - 1));
   const int px2 = std::clamp(static_cast<int>(x2 + w * kPadFrac), px1 + 1, frame.cols);
   const int py2 = std::clamp(static_cast<int>(y2 + h * kPadFrac), py1 + 1, frame.rows);
 
+  if (px2 <= px1 || py2 <= py1) {
+    return cv::Mat::zeros(kInputSize, kInputSize, CV_8UC3);
+  }
+
   cv::Mat crop = frame(cv::Rect(px1, py1, px2 - px1, py2 - py1));
+  if (crop.empty()) {
+    return cv::Mat::zeros(kInputSize, kInputSize, CV_8UC3);
+  }
   cv::Mat resized;
   cv::resize(crop, resized, cv::Size(kInputSize, kInputSize));
   return resized;
@@ -98,6 +108,9 @@ cv::Mat ArcFaceEmbedder::CropAndResize(const cv::Mat& frame,
 cv::Mat ArcFaceEmbedder::NormCrop(
     const cv::Mat& frame,
     const std::vector<std::array<double, 2>>& landmarks) const {
+  if (frame.empty() || frame.cols <= 0 || frame.rows <= 0) {
+    return cv::Mat::zeros(kInputSize, kInputSize, CV_8UC3);
+  }
   auto m = EstimateSimilarityTransform(landmarks, kReferenceLandmarks);
   cv::Mat transform(2, 3, CV_64F);
   transform.at<double>(0, 0) = m[0];
@@ -108,6 +121,9 @@ cv::Mat ArcFaceEmbedder::NormCrop(
   transform.at<double>(1, 2) = m[5];
   cv::Mat warped;
   cv::warpAffine(frame, warped, transform, cv::Size(kInputSize, kInputSize));
+  if (warped.empty()) {
+    return cv::Mat::zeros(kInputSize, kInputSize, CV_8UC3);
+  }
   return warped;
 }
 
