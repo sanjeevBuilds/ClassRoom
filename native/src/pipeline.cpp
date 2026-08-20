@@ -90,7 +90,7 @@ std::vector<AttendanceResult> ProcessSweepVideo(const std::string& video_path,
   const size_t n_sharp = sharp_frames.size();
 
   YuNetDetector detector;
-  detector.Init(config.yunet_model_path);
+  detector.Init(config.yunet_model_path, 0.45, 0.3);
 
   ArcFaceEmbedder embedder;
   embedder.Init(config.arcface_model_path);
@@ -152,7 +152,7 @@ bool EnrollStudentFromPhoto(const std::string& photo_path,
   }
 
   YuNetDetector detector;
-  detector.Init(config.yunet_model_path);
+  detector.Init(config.yunet_model_path, 0.45, 0.3);
   auto detections = detector.Detect(frame, 0, 0.0);
 
   const Detection* largest = LargestFace(detections);

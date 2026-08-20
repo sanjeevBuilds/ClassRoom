@@ -36,9 +36,21 @@ std::vector<SampledFrame> FrameSampler::SampleFrames(
           native_fps > 0 ? native_frame_index / native_fps : 0.0;
       // clone(): raw_frame is reused by capture.read() next iteration, so
       // the kept copy must own its own buffer, not alias raw_frame's.
-      sf.frame = raw_frame.clone();
-      cv::resize(sf.frame, sf.frame_lowres,
-                 cv::Size(kLowResWidth, kLowResHeight));
+      // Preserve aspect ratio: scale the long dimension to 640 and the short
+      // dimension proportionally, preventing portrait mobile video from being
+      // squashed into landscape 640x360.
+      const int max_dim = 640;
+      int low_w, low_h;
+      if (sf.frame.cols >= sf.frame.rows) {
+        low_w = max_dim;
+        low_h = std::max(1, static_cast<int>(std::lround(
+                                sf.frame.rows * (static_cast<double>(max_dim) / sf.frame.cols))));
+      } else {
+        low_h = max_dim;
+        low_w = std::max(1, static_cast<int>(std::lround(
+                                sf.frame.cols * (static_cast<double>(max_dim) / sf.frame.rows))));
+      }
+      cv::resize(sf.frame, sf.frame_lowres, cv::Size(low_w, low_h));
       frames.push_back(std::move(sf));
       ++sampled_frame_id;
     }
