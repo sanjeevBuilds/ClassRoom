@@ -8,6 +8,7 @@ This directory contains all research papers, architecture documents, implementat
 
 ```
 docs/
+├── PROJECT_STATUS_AND_ROADMAP.md            # Completed items summary & future roadmap
 ├── CPP_AND_FLUTTER_IMPLEMENTATION_REPORT.md # Master C++ & Flutter implementation report
 ├── CPP_ENGINE_IMPLEMENTATION.md             # Detailed C++ native engine & FFI technical summary
 ├── interface_contract.md                    # Shared Data Model Interface Contract
@@ -24,6 +25,7 @@ docs/
 
 ## 📌 Quick Links
 
+* 📋 **[Project Status & Roadmap](file:///Users/sanjeev/Documents/ClassRoom/docs/PROJECT_STATUS_AND_ROADMAP.md)**: Concise checklist of completed work and upcoming tasks.
 * 📘 **[Master C++ & Flutter Implementation Report](file:///Users/sanjeev/Documents/ClassRoom/docs/CPP_AND_FLUTTER_IMPLEMENTATION_REPORT.md)**: Full end-to-end report on native C++ engine, Flutter FFI isolate architecture, and iOS deployment.
 * ⚙️ **[C++ Engine Technical Summary](file:///Users/sanjeev/Documents/ClassRoom/docs/CPP_ENGINE_IMPLEMENTATION.md)**: Technical deep-dive into C API, ONNX Runtime C API integration, and static linking.
 * 📑 **[Data Interface Contract](file:///Users/sanjeev/Documents/ClassRoom/docs/interface_contract.md)**: Standardized data structures (Detection, Embedding, IdentityCluster, AttendanceResult).
