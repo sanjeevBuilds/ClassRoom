@@ -272,6 +272,47 @@ int ClassroomEnrollStudentFromPhoto(const char* photo_path,
   }
 }
 
+const char* ClassroomGetEnrolledStudents(const char* roster_db_path) {
+  try {
+    classroom::RosterDB roster_db;
+    roster_db.Init(roster_db_path);
+    auto roster = roster_db.GetAllEntries();
+    roster_db.Close();
+
+    std::ostringstream os;
+    os << "[";
+    for (size_t i = 0; i < roster.size(); ++i) {
+      if (i > 0) os << ",";
+      os << "{\"student_id\":\"" << classroom::JsonEscape(roster[i].student_id) << "\","
+         << "\"name\":\"" << classroom::JsonEscape(roster[i].name) << "\","
+         << "\"embeddings_count\":" << roster[i].reference_embeddings.size() << "}";
+    }
+    os << "]";
+    return CopyToHeap(os.str());
+  } catch (const std::exception& e) {
+    std::string err = std::string("{\"error\":\"") + classroom::JsonEscape(e.what()) + "\"}";
+    return CopyToHeap(err);
+  } catch (...) {
+    return CopyToHeap(std::string("{\"error\":\"unknown native exception\"}"));
+  }
+}
+
+int ClassroomDeleteStudent(const char* student_id, const char* roster_db_path) {
+  try {
+    classroom::RosterDB roster_db;
+    roster_db.Init(roster_db_path);
+    roster_db.DeleteStudent(student_id);
+    roster_db.Close();
+    return 1;
+  } catch (const std::exception& e) {
+    g_last_error = e.what();
+    return -1;
+  } catch (...) {
+    g_last_error = "unknown native exception";
+    return -1;
+  }
+}
+
 const char* ClassroomGetLastError() { return g_last_error.c_str(); }
 
 void ClassroomFreeString(const char* ptr) { delete[] ptr; }

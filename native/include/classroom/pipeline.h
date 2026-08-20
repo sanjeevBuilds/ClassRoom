@@ -82,6 +82,13 @@ CLASSROOM_EXPORT int ClassroomEnrollStudentFromPhoto(
     const char* yunet_model_path, const char* arcface_model_path,
     const char* roster_db_path);
 
+// Returns a JSON list of enrolled students: [{"student_id":"...","name":"...","embeddings_count":1}]
+// Caller MUST call ClassroomFreeString() on the result.
+CLASSROOM_EXPORT const char* ClassroomGetEnrolledStudents(const char* roster_db_path);
+
+// Deletes a student and their face embeddings by student_id. Returns 1 on success, -1 on error.
+CLASSROOM_EXPORT int ClassroomDeleteStudent(const char* student_id, const char* roster_db_path);
+
 // Valid only immediately after a ClassroomEnrollStudentFromPhoto() call
 // that returned -1. Result is owned by the library, do not free.
 CLASSROOM_EXPORT const char* ClassroomGetLastError();

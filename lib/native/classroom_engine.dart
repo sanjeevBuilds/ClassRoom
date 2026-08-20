@@ -83,6 +83,16 @@ class ClassroomEngine {
         )));
   }
 
+  /// Returns a list of all currently enrolled students: [{'student_id': '...', 'name': '...'}]
+  Future<List<Map<String, dynamic>>> getEnrolledStudents() {
+    return Isolate.run(() => _getEnrolledStudents(rosterDbPath));
+  }
+
+  /// Deletes an individual enrolled student and their face embeddings by studentId.
+  Future<bool> deleteStudent(String studentId) {
+    return Isolate.run(() => _deleteStudent(studentId, rosterDbPath));
+  }
+
   /// Clears all enrolled student records from the local SQLite roster DB.
   Future<void> clearRoster() async {
     final file = File(rosterDbPath);
@@ -188,5 +198,38 @@ List<AttendanceResult> _processSweepVideo(_SweepArgs args) {
     if (resultPtr != null) {
       bindings.freeString(resultPtr);
     }
+  }
+}
+
+List<Map<String, dynamic>> _getEnrolledStudents(String rosterDbPath) {
+  final bindings = ClassroomBindings();
+  final pathPtr = rosterDbPath.toNativeUtf8();
+  Pointer<Utf8>? resultPtr;
+  try {
+    resultPtr = bindings.getEnrolledStudents(pathPtr);
+    final json = resultPtr.toDartString();
+    final decoded = jsonDecode(json);
+    if (decoded is List) {
+      return decoded.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    }
+    return [];
+  } finally {
+    calloc.free(pathPtr);
+    if (resultPtr != null) {
+      bindings.freeString(resultPtr);
+    }
+  }
+}
+
+bool _deleteStudent(String studentId, String rosterDbPath) {
+  final bindings = ClassroomBindings();
+  final idPtr = studentId.toNativeUtf8();
+  final pathPtr = rosterDbPath.toNativeUtf8();
+  try {
+    final status = bindings.deleteStudent(idPtr, pathPtr);
+    return status == 1;
+  } finally {
+    calloc.free(idPtr);
+    calloc.free(pathPtr);
   }
 }

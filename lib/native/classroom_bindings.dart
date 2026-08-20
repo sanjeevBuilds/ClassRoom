@@ -19,6 +19,10 @@ class ClassroomBindings {
         _GetLastErrorDart>('ClassroomGetLastError');
     freeString =
         _lib.lookupFunction<_FreeStringNative, _FreeStringDart>('ClassroomFreeString');
+    getEnrolledStudents = _lib.lookupFunction<_GetEnrolledNative,
+        _GetEnrolledDart>('ClassroomGetEnrolledStudents');
+    deleteStudent = _lib.lookupFunction<_DeleteStudentNative,
+        _DeleteStudentDart>('ClassroomDeleteStudent');
   }
 
   factory ClassroomBindings() => ClassroomBindings._(DynamicLibrary.process());
@@ -42,6 +46,11 @@ class ClassroomBindings {
       Pointer<Utf8> yunetModelPath,
       Pointer<Utf8> arcfaceModelPath,
       Pointer<Utf8> rosterDbPath) enrollStudentFromPhoto;
+
+  late final Pointer<Utf8> Function(Pointer<Utf8> rosterDbPath) getEnrolledStudents;
+
+  late final int Function(
+      Pointer<Utf8> studentId, Pointer<Utf8> rosterDbPath) deleteStudent;
 
   late final Pointer<Utf8> Function() getLastError;
 
@@ -84,6 +93,14 @@ typedef _EnrollDart = int Function(
 
 typedef _GetLastErrorNative = Pointer<Utf8> Function();
 typedef _GetLastErrorDart = Pointer<Utf8> Function();
+
+typedef _GetEnrolledNative = Pointer<Utf8> Function(Pointer<Utf8> rosterDbPath);
+typedef _GetEnrolledDart = Pointer<Utf8> Function(Pointer<Utf8> rosterDbPath);
+
+typedef _DeleteStudentNative = Int32 Function(
+    Pointer<Utf8> studentId, Pointer<Utf8> rosterDbPath);
+typedef _DeleteStudentDart = int Function(
+    Pointer<Utf8> studentId, Pointer<Utf8> rosterDbPath);
 
 typedef _FreeStringNative = Void Function(Pointer<Utf8>);
 typedef _FreeStringDart = void Function(Pointer<Utf8>);

@@ -22,11 +22,20 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
   CameraController? _controller;
   bool _isProcessing = false;
   String? _error;
+  List<Map<String, dynamic>> _enrolledStudents = [];
 
   @override
   void initState() {
     super.initState();
     _initCamera();
+    _loadEnrolledStudents();
+  }
+
+  Future<void> _loadEnrolledStudents() async {
+    try {
+      final list = await widget.engine.getEnrolledStudents();
+      if (mounted) setState(() => _enrolledStudents = list);
+    } catch (_) {}
   }
 
   Future<void> _initCamera() async {
@@ -57,6 +66,17 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
     final name = _nameController.text.trim();
     if (controller == null || name.isEmpty) return;
 
+    // Restrict duplicate names (case-insensitive)
+    final isDuplicate = _enrolledStudents.any(
+      (s) => (s['name'] as String? ?? '').trim().toLowerCase() == name.toLowerCase(),
+    );
+    if (isDuplicate) {
+      setState(() {
+        _error = 'Student "$name" is already enrolled. Please use a unique name.';
+      });
+      return;
+    }
+
     setState(() {
       _isProcessing = true;
       _error = null;
@@ -77,6 +97,7 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
         return;
       }
 
+      await _loadEnrolledStudents();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Enrolled $name.')));
       _nameController.clear();
@@ -87,14 +108,123 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
     }
   }
 
+  Future<void> _deleteIndividualStudent(String studentId, String name) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Remove $name?'),
+        content: Text('Delete $name and their face data from the roster?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      await widget.engine.deleteStudent(studentId);
+      await _loadEnrolledStudents();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Removed $name from roster.')),
+        );
+      }
+    }
+  }
+
+  void _showEnrolledListModal() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (modalCtx, setModalState) {
+            return Container(
+              padding: const EdgeInsets.all(20),
+              height: MediaQuery.of(context).size.height * 0.65,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Enrolled Students (${_enrolledStudents.length})',
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close_rounded),
+                        onPressed: () => Navigator.pop(modalCtx),
+                      ),
+                    ],
+                  ),
+                  const Divider(),
+                  if (_enrolledStudents.isEmpty)
+                    const Expanded(
+                      child: Center(
+                        child: Text('No students enrolled yet.', style: TextStyle(color: Colors.grey)),
+                      ),
+                    )
+                  else
+                    Expanded(
+                      child: ListView.separated(
+                        itemCount: _enrolledStudents.length,
+                        separatorBuilder: (_, __) => const Divider(height: 1),
+                        itemBuilder: (_, i) {
+                          final s = _enrolledStudents[i];
+                          final id = s['student_id'] as String? ?? '';
+                          final sName = s['name'] as String? ?? 'Unknown';
+                          return ListTile(
+                            leading: CircleAvatar(
+                              child: Text(sName.isNotEmpty ? sName[0].toUpperCase() : '?'),
+                            ),
+                            title: Text(sName, style: const TextStyle(fontWeight: FontWeight.w600)),
+                            subtitle: Text('ID: $id'),
+                            trailing: IconButton(
+                              icon: const Icon(Icons.delete_outline_rounded, color: Colors.red),
+                              tooltip: 'Delete $sName',
+                              onPressed: () async {
+                                await _deleteIndividualStudent(id, sName);
+                                setModalState(() {});
+                              },
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Enroll Student'),
         actions: [
+          Badge(
+            label: Text('${_enrolledStudents.length}'),
+            isLabelVisible: _enrolledStudents.isNotEmpty,
+            child: IconButton(
+              icon: const Icon(Icons.people_alt_rounded),
+              tooltip: 'View Enrolled Students',
+              onPressed: _showEnrolledListModal,
+            ),
+          ),
           IconButton(
-            icon: const Icon(Icons.delete_outline_rounded),
+            icon: const Icon(Icons.delete_sweep_rounded),
             tooltip: 'Clear All Enrolled Faces',
             onPressed: () async {
               final confirm = await showDialog<bool>(
@@ -118,6 +248,7 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
               );
               if (confirm == true) {
                 await widget.engine.clearRoster();
+                await _loadEnrolledStudents();
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('All enrolled faces cleared. Roster is fresh!')),
@@ -135,6 +266,9 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
             TextField(
               controller: _nameController,
               decoration: const InputDecoration(labelText: 'Student name', border: OutlineInputBorder()),
+              onChanged: (_) {
+                if (_error != null) setState(() => _error = null);
+              },
             ),
             const SizedBox(height: 16),
             Expanded(child: _buildCameraPreview()),
