@@ -28,6 +28,8 @@ data/annotations/*
 *.png
 !docs/**/*.png
 !assets/**/*.png
+!ios/Runner/Assets.xcassets/**/*.png
+!android/app/src/main/res/**/*.png
 
 # Model weights & native third-party binaries (downloaded, not committed to git)
 assets/models/*.onnx
