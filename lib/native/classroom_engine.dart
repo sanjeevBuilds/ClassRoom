@@ -82,6 +82,14 @@ class ClassroomEngine {
           rosterDbPath: rosterDbPath,
         )));
   }
+
+  /// Clears all enrolled student records from the local SQLite roster DB.
+  Future<void> clearRoster() async {
+    final file = File(rosterDbPath);
+    if (await file.exists()) {
+      await file.delete();
+    }
+  }
 }
 
 class _EnrollArgs {

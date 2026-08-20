@@ -90,7 +90,44 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Enroll Student')),
+      appBar: AppBar(
+        title: const Text('Enroll Student'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.delete_outline_rounded),
+            tooltip: 'Clear All Enrolled Faces',
+            onPressed: () async {
+              final confirm = await showDialog<bool>(
+                context: context,
+                builder: (ctx) => AlertDialog(
+                  title: const Text('Clear All Enrolled Faces?'),
+                  content: const Text(
+                      'This will delete all previously enrolled student records so you can start completely fresh.'),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(ctx, false),
+                      child: const Text('Cancel'),
+                    ),
+                    FilledButton(
+                      style: FilledButton.styleFrom(backgroundColor: Colors.red),
+                      onPressed: () => Navigator.pop(ctx, true),
+                      child: const Text('Clear All'),
+                    ),
+                  ],
+                ),
+              );
+              if (confirm == true) {
+                await widget.engine.clearRoster();
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('All enrolled faces cleared. Roster is fresh!')),
+                  );
+                }
+              }
+            },
+          ),
+        ],
+      ),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
