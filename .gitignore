@@ -29,12 +29,13 @@ data/annotations/*
 !docs/**/*.png
 !assets/**/*.png
 
-# Model weights (large binaries — download via setup script, not git)
+# Model weights & native third-party binaries (downloaded, not committed to git)
 assets/models/*.onnx
 assets/models/*.tflite
 *.onnx
 *.pt
 *.pth
+native/third_party/
 
 # OS / editor
 .DS_Store

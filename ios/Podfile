@@ -1,0 +1,96 @@
+platform :ios, '16.0'
+
+# CocoaPods analytics sends network stats synchronously affecting flutter build latency.
+ENV['COCOAPODS_DISABLE_STATS'] = 'true'
+
+project 'Runner', {
+  'Debug' => :debug,
+  'Profile' => :release,
+  'Release' => :release,
+}
+
+def flutter_root
+  generated_xcode_build_settings_path = File.expand_path(File.join('..', 'Flutter', 'Generated.xcconfig'), __FILE__)
+  unless File.exist?(generated_xcode_build_settings_path)
+    raise "#{generated_xcode_build_settings_path} must exist. If you're running pod install manually, make sure flutter pub get is executed first"
+  end
+
+  File.foreach(generated_xcode_build_settings_path) do |line|
+    matches = line.match(/FLUTTER_ROOT\=(.*)/)
+    return matches[1].strip if matches
+  end
+  raise "FLUTTER_ROOT not found in #{generated_xcode_build_settings_path}. Try deleting Generated.xcconfig, then run flutter pub get"
+end
+
+require File.expand_path(File.join('packages', 'flutter_tools', 'bin', 'podhelper'), flutter_root)
+
+flutter_ios_podfile_setup
+
+target 'Runner' do
+  # :static forces every pod (including our own classroom_engine and
+  # onnxruntime-c) into static libraries merged directly into the Runner
+  # binary at the final link step, instead of separate embedded dynamic
+  # .framework bundles. Dart's DynamicLibrary.process() looks up FFI
+  # symbols in the running process's own image, so the C++ engine's
+  # extern "C" API needs to actually live inside Runner itself.
+  use_frameworks! :linkage => :static
+
+  # Our hand-rolled C++ engine (native/), consumed as a local pod rather
+  # than hand-edited Xcode project files — pod install regenerates the
+  # Xcode project safely; a manually-edited project.pbxproj would not be.
+  pod 'classroom_engine', :path => '../native'
+
+  flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
+  target 'RunnerTests' do
+    inherit! :search_paths
+  end
+end
+
+post_install do |installer|
+  installer.pods_project.targets.each do |target|
+    flutter_additional_ios_build_settings(target)
+  end
+
+  # The classroom_engine pod's extern "C" FFI symbols
+  # (ClassroomProcessSweepVideo, etc.) are only called by Dart via dlsym —
+  # nothing in ObjC/Swift references them, so the linker would normally
+  # dead-strip them. We swap the regular `-framework "classroom_engine"`
+  # link (which only pulls in referenced .o files) for a `-force_load`
+  # (which unconditionally loads every .o), ensuring the FFI symbols
+  # survive into the Runner binary.
+  #
+  # We must do this as a text replacement on the generated xcconfig files
+  # rather than *adding* -force_load alongside the existing -framework,
+  # because having both causes the PodsDummy_classroom_engine ObjC class
+  # to be loaded twice (once via -ObjC + -framework, once via -force_load),
+  # resulting in a "2 duplicate symbols" linker error.
+  force_load_flag = '-force_load "${PODS_CONFIGURATION_BUILD_DIR}/classroom_engine/classroom_engine.framework/classroom_engine"'
+  %w[debug release profile].each do |config_name|
+    xcconfig_path = File.join(
+      installer.sandbox.root,
+      'Target Support Files', 'Pods-Runner',
+      "Pods-Runner.#{config_name}.xcconfig"
+    )
+    next unless File.exist?(xcconfig_path)
+    content = File.read(xcconfig_path)
+    content.gsub!('-framework "classroom_engine"', force_load_flag)
+    File.write(xcconfig_path, content)
+  end
+
+  # Clean up any stale -Wl,-u or -force_load flags from Runner's pbxproj
+  # that were injected by prior post_install hooks — the xcconfig rewrite
+  # above is the sole mechanism now.
+  installer.aggregate_targets.each do |aggregate_target|
+    aggregate_target.user_project.native_targets.each do |t|
+      next unless t.name == 'Runner'
+      t.build_configurations.each do |config|
+        existing = config.build_settings['OTHER_LDFLAGS']
+        next if existing.nil?
+        existing = Array(existing)
+        existing.reject! { |f| f.include?('-Wl,-u,_Classroom') || f.include?('-force_load') }
+        config.build_settings['OTHER_LDFLAGS'] = existing
+      end
+    end
+    aggregate_target.user_project.save
+  end
+end

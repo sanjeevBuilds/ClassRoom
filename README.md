@@ -31,78 +31,44 @@ zero cloud, and zero cost.
 
 | Layer | Technology |
 | :--- | :--- |
-| **Framework** | Flutter (Dart) — single codebase for Android + iOS |
-| **Camera** | `camera` package |
-| **Image Processing** | `opencv_dart` (blur filter, ORB features, homography) |
-| **Face Detection** | `flutter_onnxruntime` + YuNet ONNX (INT8 quantized) |
-| **Face Embedding** | `flutter_onnxruntime` + ArcFace MobileFaceNet ONNX |
-| **YOLO Benchmark** | `tflite_flutter` + YOLOv8n-face TFLite (INT8) |
-| **NPU Acceleration** | NNAPI (Android) / CoreML (iOS) via runtime delegates |
-| **Clustering** | Custom Dart HAC implementation |
-| **Roster DB** | `sqflite` (encrypted local SQLite) |
-| **CSV Export** | `csv` + `share_plus` packages |
-| **UI** | Material 3 with adaptive theming |
+| **App Framework** | Flutter (Dart) — UI, camera capture, isolate management |
+| **Native Engine** | C++17 (`native/src/*.cpp`) — full 7-stage processing pipeline |
+| **FFI Bridge** | `dart:ffi` + `DynamicLibrary.process()` with `-force_load` static linking |
+| **Image Processing** | OpenCV 4.14.0 C++ (frame sampling, Laplacian blur filter, image warping) |
+| **Face Detection** | OpenCV `cv::FaceDetectorYN` + YuNet INT8 ONNX model |
+| **Face Embedding** | ONNX Runtime C API (1.23.0) + ArcFace MobileFaceNet ONNX model |
+| **Clustering** | Custom C++ Agglomerative Hierarchical Clustering (HAC, average linkage) |
+| **Roster Database** | SQLite3 C API (`sqlite3_stmt` RAII wrappers) |
+| **Camera Capture** | `camera` package (1080p video recording & photo enrollment) |
 
 ## Project Structure
 
 ```
 ClassRoom/
 ├── README.md
-├── pubspec.yaml                         # Flutter dependencies
+├── pubspec.yaml                         # Flutter configuration & camera/ffi dependencies
+├── native/                              # Native C++ engine
+│   ├── classroom_engine.podspec         # CocoaPods spec for static linking
+│   ├── include/classroom/               # Public headers (pipeline.h, detection.h, etc.)
+│   └── src/                             # C++ implementation files (*.cpp)
 ├── lib/
 │   ├── main.dart                        # App entry point
-│   ├── app.dart                         # MaterialApp + routing
-│   ├── models/                          # Data classes
-│   │   ├── detection.dart               # Face detection result
-│   │   ├── embedding.dart               # ArcFace embedding
-│   │   ├── identity_cluster.dart        # HAC cluster output
-│   │   ├── roster_entry.dart            # Enrolled student
-│   │   └── attendance_result.dart       # Final attendance record
-│   ├── modules/                         # Core pipeline (5 modules)
-│   │   ├── video_ingestion/             # Teammate 1: frame sampling
-│   │   │   └── frame_sampler.dart
-│   │   ├── blur_motion/                 # Teammate 2: blur + homography
-│   │   │   ├── blur_filter.dart
-│   │   │   └── homography.dart
-│   │   ├── face_detection/              # Teammate 3: YuNet + YOLO
-│   │   │   ├── detector_base.dart
-│   │   │   ├── yunet_detector.dart
-│   │   │   └── yolo_detector.dart
-│   │   ├── embedding_clustering/        # Teammate 4: ArcFace + HAC
-│   │   │   ├── arcface_embedder.dart
-│   │   │   └── clustering.dart
-│   │   └── roster_matching/             # Teammate 5: matching + eval
-│   │       ├── roster_db.dart
-│   │       ├── cosine_matcher.dart
-│   │       └── evaluator.dart
-│   ├── screens/                         # UI screens
-│   │   ├── home_screen.dart
-│   │   ├── capture_screen.dart
-│   │   ├── enrollment_screen.dart
-│   │   ├── processing_screen.dart
-│   │   └── results_screen.dart
-│   ├── services/                        # Platform services
-│   │   ├── camera_service.dart
-│   │   ├── database_service.dart
-│   │   └── export_service.dart
-│   └── utils/                           # Shared utilities
-│       ├── image_utils.dart
-│       └── math_utils.dart
-├── assets/
-│   └── models/                          # ONNX/TFLite model weights
-│       ├── yunet_int8.onnx
-│       ├── arcface_mobilefacenet_int8.onnx
-│       └── yolov8n_face_int8.tflite
-├── docs/
-│   ├── interface_contract.md            # Shared data schema between modules
-│   └── legacy/                          # Original Python-era reference docs
-├── data/                                # NOT committed (gitignored)
-│   ├── raw_videos/
-│   ├── roster/
-│   └── annotations/
-├── test/                                # Dart unit tests
-├── research_implementation_plan.md      # Full research pipeline design
-└── project_roadmap_and_team_assignment.md
+│   ├── app.dart                         # MaterialApp & theme configuration
+│   ├── models/                          # Data models
+│   │   └── attendance_result.dart       # Attendance result JSON model
+│   ├── native/                          # FFI Layer
+│   │   ├── classroom_bindings.dart      # Raw C FFI bindings
+│   │   └── classroom_engine.dart        # High-level engine wrapper & Isolate runner
+│   └── screens/                         # UI screens
+│       ├── home_screen.dart             # Main navigation & engine lifecycle
+│       ├── capture_screen.dart          # Video sweep recording
+│       ├── enrollment_screen.dart       # Student photo enrollment
+│       ├── processing_screen.dart       # Async pipeline progress view
+│       └── results_screen.dart          # Roll-call attendance results
+├── assets/models/                       # ONNX model weights (YuNet & ArcFace)
+└── docs/
+    ├── CPP_ENGINE_IMPLEMENTATION.md     # Detailed C++ engine & FFI technical summary
+    └── interface_contract.md            # Data schema specification
 ```
 
 ## Setup

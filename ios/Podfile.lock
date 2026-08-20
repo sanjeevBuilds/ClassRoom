@@ -1,0 +1,28 @@
+PODS:
+  - classroom_engine (0.0.1):
+    - onnxruntime-c (= 1.23.0)
+  - Flutter (1.0.0)
+  - onnxruntime-c (1.23.0)
+
+DEPENDENCIES:
+  - classroom_engine (from `../native`)
+  - Flutter (from `Flutter`)
+
+SPEC REPOS:
+  trunk:
+    - onnxruntime-c
+
+EXTERNAL SOURCES:
+  classroom_engine:
+    :path: "../native"
+  Flutter:
+    :path: Flutter
+
+SPEC CHECKSUMS:
+  classroom_engine: a4651415e5132d3978621315eeb697d05c4140fc
+  Flutter: 71a624a5bc0c04062bf19101d501e466baf2fb47
+  onnxruntime-c: 3174c63a963d9abbc2bf9627e3d622819c0ed5f7
+
+PODFILE CHECKSUM: 8f6bb24031927a9d0c89d6d4af2d7b74d1f3ff18
+
+COCOAPODS: 1.17.0
