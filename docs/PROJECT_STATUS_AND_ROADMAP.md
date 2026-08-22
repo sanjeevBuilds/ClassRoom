@@ -2,101 +2,46 @@
 
 **Project**: Automated On-Device Classroom Attendance System  
 **Current Branch**: `cpp-engine-final`  
-**Deployment Target**: iOS (Physical Device Deployment) & Android  
+**Deployment Target**: iOS (Primary) & Android (Secondary)  
 
 ---
 
-## 1. What Has Been Completed (Keyword Summary)
+## 1. What Has Been Implemented (Frontend & UI)
 
-* **C++ Native Engine**: Full 7-stage pipeline (`FrameSampler`, `BlurFilter`, `YuNetDetector`, `ArcFaceEmbedder`, `IdentityClusterer`, `RosterDB`, `CosineMatcher`).
-* **Dart FFI Bridge**: Low-overhead C-to-Dart bridge via `dart:ffi`.
-* **Isolate Backgrounding**: Multi-threaded execution preventing UI lag and frame drops.
-* **iOS Static Linking**: `-force_load` fix ensuring FFI symbols survive linker dead-stripping.
-* **Asset Extraction**: Auto-unpacking `.onnx` models from assets to app support disk on first run.
-* **Aspect-Ratio Preservation**: Proportional auto-scaling preventing mobile portrait video from squashing.
-* **Pipeline Calibration**: Tuned `tau_blur = 15.0`, `tau_match = 0.40`, `score_threshold = 0.45`.
-* **Codebase Cleanup**: Purged 7 unused pubspec packages (22 transitive libraries) and old pure-Dart modules.
-* **Master Documentation**: Authored `CPP_AND_FLUTTER_IMPLEMENTATION_REPORT.md` and updated `README.md`.
-* **Git Synchronization**: Committed and pushed branch [`cpp-engine-final`](https://github.com/sanjeevBuilds/ClassRoom/tree/cpp-engine-final).
+The Flutter Frontend has been completely upgraded to a **Premium Glassmorphism Dark Theme**, successfully mapping out all of our core features and UX flows without relying on native ML execution yet.
 
----
-
-## 2. Detailed Breakdown of Completed Work
-
-### A. Native C++ Core Engine (`native/`)
-1. **Video Ingestion & Frame Sampling (`src/frame_sampler.cpp`)**:
-   - OpenCV `cv::VideoCapture` decoding.
-   - 4 FPS temporal subsampling (86.7% compute reduction).
-   - Proportional aspect-ratio scaling (long dimension 640, short dimension scaled without distortion).
-2. **Sharpness Quality Control (`src/blur_filter.cpp`)**:
-   - Laplacian variance (`cv::Laplacian` + `cv::meanStdDev`).
-   - Calibrated `tau_blur = 15.0` for handheld phone movement.
-3. **Face Detection (`src/yunet_detector.cpp`)**:
-   - OpenCV DNN `cv::FaceDetectorYN` with quantized INT8 YuNet.
-   - 5-point facial landmark extraction (eyes, nose, mouth corners).
-   - Dynamic thresholding (`score_threshold = 0.45`).
-   - Automatic re-projection to 1080p full-resolution coordinates.
-4. **Face Embedding (`src/arcface_embedder.cpp`)**:
-   - Direct integration with **ONNX Runtime C API (1.23.0)** running `arcface_mobilefacenet.onnx`.
-   - 5-point affine transformation alignment (`NormCrop` via `cv::warpAffine`).
-   - L2-normalized 512-dimensional output vectors.
-5. **Identity Clustering (`src/identity_clusterer.cpp`)**:
-   - Hierarchical Agglomerative Clustering (HAC, average linkage) over pairwise cosine distances (`tau_cluster = 0.35`).
-   - Centroid calculation for multi-frame identity consolidation.
-6. **Roster Database (`src/roster_db.cpp`)**:
-   - Native SQLite3 storage with RAII statement handles.
-   - Schema for student identities and reference embeddings.
-7. **Cosine Matcher (`src/cosine_matcher.cpp`)**:
-   - Asymmetric cosine similarity matching against roster (`tau_match = 0.40`).
-   - Classification into `present`, `absent`, and `unknown_guest`.
-8. **C API & Exception Safety (`src/pipeline.cpp`, `include/classroom/pipeline.h`)**:
-   - `CLASSROOM_EXPORT` extern `"C"` boundary with exception shielding (JSON error formatting).
-   - Diagnostic telemetry string (`__pipeline_debug__`) reporting stage counts.
+* **Premium UI Transformation**: Completely redesigned `HomeScreen`, `ResultsScreen`, and `CaptureScreen` using vibrant colors (#3629B6 Primary, #FF4267 Accent), blurred backdrops, and glowing orb gradients.
+* **Multi-Classroom Support**: Implemented a dynamic class registry (`classes.json`) allowing teachers to create new classes on the fly. The UI seamlessly switches the underlying native C++ SQLite database (`roster_CS101.db`, `roster_Math202.db`) whenever a class is selected.
+* **Timetable Auto-Select**: Added logic to auto-select the active classroom based on the current hour of the day.
+* **Dynamic Roster UI**: A beautiful `ListView` on the Home Screen live-fetches enrolled students from the C++ SQLite engine, allowing immediate deletion of students.
+* **Manual Correction (Teacher-in-the-Loop)**: The `ResultsScreen` contains an interactive list with toggle switches, allowing the teacher to manually flip a student's attendance from "Absent" to "Present" with dynamic live-counting at the top of the screen.
+* **Sweep Guidance Overlay**: The `CaptureScreen` actively listens to the device gyroscope and displays a massive "SLOW DOWN" warning if the teacher pans the camera too quickly.
+* **Fault-Tolerant Engine Init**: Added a try-catch safeguard around the `ClassroomEngine` bootloader so the app successfully loads on Android/iOS even if the `assets/models/` ONNX binaries are missing.
+* **iOS Build Configurations**: Validated that `ios/Podfile` properly statically links the C++ engine to survive Apple's dead-code stripping.
 
 ---
 
-### B. Flutter & FFI Application Layer (`lib/`)
-1. **FFI Bindings (`lib/native/classroom_bindings.dart`)**:
-   - Process symbol lookup (`DynamicLibrary.process()`).
-2. **Engine Service (`lib/native/classroom_engine.dart`)**:
-   - Asset manager copying `.onnx` models to disk once on launch.
-   - Background Isolate offloading (`Isolate.run()`) maintaining 60 FPS UI.
-3. **UI Screens (`lib/screens/`)**:
-   - `HomeScreen`: Singleton engine lifecycle management.
-   - `EnrollmentScreen`: Camera photo capture + C++ single-face enrollment.
-   - `CaptureScreen`: 1080p back-camera sweep video recording.
-   - `ProcessingScreen`: Asynchronous progress view during C++ execution.
-   - `ResultsScreen`: Roll-call summary with status chips and confidence scores.
-4. **Dependency Optimization**:
-   - Removed 7 unused dependencies from `pubspec.yaml` (`video_player`, `csv`, `share_plus`, `provider`, `uuid`, `collection`, `intl`), shedding 22 transitive packages.
+## 2. Engine Optimizations (As Per Research Paper)
+
+Our pipeline was explicitly designed in the research paper to operate **100% on commodity CPU hardware** (no GPU required) under real, uncontrolled classroom conditions (panning blur, rear-row distance gradients). To achieve this, the C++ engine implements the following pipeline optimizations:
+
+1. **4-FPS Temporal Subsampling**: By extracting only every 7th frame from the video, CPU workload is immediately reduced by 86%.
+2. **Variance-of-Laplacian Blur Rejection**: Panning a handheld device causes severe motion blur. By computing the sharpness threshold early on, we discard blurry frames entirely before wasting compute on face detection.
+3. **Dual-Resolution Architecture**: Face Detection (YuNet) runs on extremely fast *downscaled* frames, but the ArcFace embeddings are extracted using bounding boxes mapped back to the *full 1080p source frame*. This is the key optimization that preserves the ultra-fine facial details of small, rear-row students.
+4. **Homography Motion Compensation**: Because the camera is moving (handheld sweep), we use ORB keypoints to map bounding box coordinates into a global coordinate system (Frame 0 reference), keeping track of where students are in the physical room.
+5. **Trackless Agglomerative Clustering**: Instead of expensive frame-by-frame object tracking (which fails on CPUs), we dump all embeddings into a massive pool and run hierarchical clustering to consolidate identical student faces together based on cosine distance.
+6. **Asymmetric Decision Thresholds**: We tune the matching thresholds strictly to minimize "False Absences" (an AI missing a student is worse than falsely marking them present), providing a practical and resource-efficient attendance system.
 
 ---
 
-### C. iOS Build System & Podspec (`ios/`, `native/`)
-1. **Local CocoaPod (`native/classroom_engine.podspec`)**:
-   - Static framework pod definition vendoring OpenCV 4.14.0, ONNX Runtime C 1.23.0, and SQLite3.
-2. **Linker Force-Load Configuration (`ios/Podfile`)**:
-   - `post_install` hook injecting `-force_load` into `Pods-Runner.*.xcconfig` to prevent Apple linker dead-stripping.
-3. **Binary Verification**:
-   - Verified via `nm` and deployed live to physical iPhone (`iOS 26.6`).
+## 3. What is Left to Implement (Final MVP Hand-off)
 
----
+The UI is completely finished. The remaining work belongs strictly to the **Native C++ & ML Integration** team.
 
-## 3. What is Left to Complete (Future Roadmap)
-
-| Task | Priority | Description | Benefit |
-| :--- | :--- | :--- | :--- |
-| **1. Multi-Student Sweep Validation** | High | Test with 5–30 students sitting in classroom rows. | Benchmark rear-row small face detection recall and cluster purity. |
-| **2. Multi-Photo Enrollment** | Medium | Support capturing 2–3 photos per student (different angles/lighting). | Increases match confidence and reduces lighting sensitivity. |
-| **3. Attendance CSV Export** | Medium | Wire a "Share / Export CSV" button on `ResultsScreen`. | Allows teachers to share spreadsheets to Excel, Google Sheets, or Email. |
-| **4. ONNX Session Caching** | Low | Persist `Ort::Session` in memory across video sweeps in C++. | Eliminates model reload overhead, speeding up repeated sweep processing. |
-| **5. Android NDK Testing** | Low | Verify CMake / JNI compilation for Android devices. | Enables cross-platform deployment on Android phones and tablets. |
-
----
-
-## 4. Quick Verification Reference
-
-* **Branch**: `cpp-engine-final`
-* **Commit**: `fcf4e6e` / latest
-* **GitHub Repository**: [https://github.com/sanjeevBuilds/ClassRoom/tree/cpp-engine-final](https://github.com/sanjeevBuilds/ClassRoom/tree/cpp-engine-final)
-* **Master Documentation**: [docs/CPP_AND_FLUTTER_IMPLEMENTATION_REPORT.md](file:///Users/sanjeev/Documents/ClassRoom/docs/CPP_AND_FLUTTER_IMPLEMENTATION_REPORT.md)
+| Task | Assignee | Description |
+| :--- | :--- | :--- |
+| **1. Commit ONNX Models** | ML Team | Upload `yunet_int8.onnx` and `arcface_mobilefacenet.onnx` via Git LFS into the `assets/models/` directory so the app stops logging "Missing Asset" warnings on boot. |
+| **2. Android NDK CMake Setup** | C++ Team | The `native/CMakeLists.txt` is currently hardcoded for iOS `opencv2.framework`. It must be updated to include Android NDK flags, and `android/app/build.gradle.kts` needs an `externalNativeBuild` block added to link it. (Currently, Android crashes on `DynamicLibrary.lookup` because the FFI symbols aren't compiled into the APK). |
+| **3. Wire Capture Video to FFI** | ML Team | Update `home_screen.dart` to push `CaptureScreen` instead of the mock UI. Then inside `CaptureScreen.dart`, pass the recorded `videoPath` directly into `ClassroomEngine.processSweepVideo()`. |
+| **4. Implement Real Enrollment** | ML Team | Wire the "Create Student" photo capture process into the `ClassroomEngine.enrollStudentFromPhoto(photoPath, studentId, name)` FFI binding. |
+| **5. Roster Matching Integration** | C++ Team | Finish testing the C++ Cosine Matcher that compares the Sweep Video clusters against the active `roster_XXX.db` SQLite database. |

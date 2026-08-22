@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:ffi';
 import 'dart:io';
 import 'dart:isolate';
+import 'dart:typed_data';
 
 import 'package:ffi/ffi.dart';
 import 'package:flutter/services.dart' show rootBundle;
@@ -26,20 +27,52 @@ import 'classroom_bindings.dart';
 /// event loop for its whole duration, which would freeze the UI if run on
 /// the main isolate.
 class ClassroomEngine {
-  ClassroomEngine._(this.yunetModelPath, this.arcfaceModelPath, this.rosterDbPath);
+  ClassroomEngine._(this.yunetModelPath, this.arcfaceModelPath, this._baseDir) {
+    switchClass('CS101'); // Default fallback
+  }
+
+  static late final ClassroomEngine instance;
 
   final String yunetModelPath;
   final String arcfaceModelPath;
-  final String rosterDbPath;
+  final String _baseDir;
+  
+  late String rosterDbPath;
+
+  void switchClass(String classId) {
+    rosterDbPath = p.join(_baseDir, 'roster_$classId.db');
+  }
+
+  Future<List<String>> getClasses() async {
+    final file = File(p.join(_baseDir, 'classes.json'));
+    if (!await file.exists()) {
+      return ['CS101', 'Math202', 'Phy101'];
+    }
+    final content = await file.readAsString();
+    return List<String>.from(jsonDecode(content));
+  }
+
+  Future<void> addClass(String classId) async {
+    final classes = await getClasses();
+    if (!classes.contains(classId)) {
+      classes.add(classId);
+      final file = File(p.join(_baseDir, 'classes.json'));
+      await file.writeAsString(jsonEncode(classes));
+    }
+  }
 
   static Future<ClassroomEngine> init() async {
     final dir = await getApplicationSupportDirectory();
-    final yunet = await _extractAsset(
-        'assets/models/yunet_int8.onnx', p.join(dir.path, 'yunet_int8.onnx'));
-    final arcface = await _extractAsset('assets/models/arcface_mobilefacenet.onnx',
-        p.join(dir.path, 'arcface_mobilefacenet.onnx'));
-    final rosterDbPath = p.join(dir.path, 'roster.db');
-    return ClassroomEngine._(yunet, arcface, rosterDbPath);
+    String yunet = '';
+    String arcface = '';
+    try {
+      yunet = await _extractAsset('assets/models/yunet_int8.onnx', p.join(dir.path, 'yunet_int8.onnx'));
+      arcface = await _extractAsset('assets/models/arcface_mobilefacenet.onnx', p.join(dir.path, 'arcface_mobilefacenet.onnx'));
+    } catch (e) {
+      print('WARNING: ONNX models missing from assets/models/. ML pipelines will fail if called: $e');
+    }
+    
+    return ClassroomEngine._(yunet, arcface, dir.path);
   }
 
   static Future<String> _extractAsset(String assetKey, String destPath) async {

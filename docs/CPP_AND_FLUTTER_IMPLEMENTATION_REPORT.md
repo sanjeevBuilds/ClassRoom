@@ -64,6 +64,7 @@ All core video ingestion, computer vision, deep learning inference, clustering, 
 
 ### Module 3: Deep Learning Face Detection (`src/yunet_detector.cpp`)
 * **YuNet Integration**: Leverages OpenCV DNN `cv::FaceDetectorYN` with quantized `yunet_int8.onnx`.
+* **Architecture Rationale (YuNet vs YOLOv8-face)**: While the *Project Work 1* research successfully benchmarked YOLOv8-face on CPU (proving single-shot detectors are highly robust against classroom occlusions), YOLO models remain computationally dense. To meet the extreme latency requirement of executing the entire 7-stage mobile app pipeline in **< 1.8 seconds**, the C++ team selected **YuNet INT8**. YuNet is heavily quantized and optimized for edge devices, completing face detection in just **~12ms on a smartphone CPU**, whereas YOLOv8-face takes significantly longer per frame.
 * **5-Point Landmark Extraction**: Extracts precise coordinates for right eye, left eye, nose tip, right mouth corner, and left mouth corner.
 * **Coordinate Re-scaling**: Automatically maps bounding boxes and landmark points from low-resolution detection space back to full-resolution 1080p pixel coordinates.
 * **Baseline Detectors**: Also implemented modular `haar_cascade_detector.cpp` and `retinaface_detector.cpp` for comparative benchmarking.

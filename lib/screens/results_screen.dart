@@ -1,126 +1,228 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../models/attendance_result.dart';
 
-/// Results screen — shows the attendance roll-call from a processed sweep.
-///
-/// Owner: Teammate 5 (Module 5)
-class ResultsScreen extends StatelessWidget {
-  final List<AttendanceResult> results;
+class ResultsScreen extends StatefulWidget {
+  final List<AttendanceResult> initialResults;
 
-  const ResultsScreen({super.key, required this.results});
+  const ResultsScreen({super.key, required this.initialResults});
+
+  @override
+  State<ResultsScreen> createState() => _ResultsScreenState();
+}
+
+class _ResultsScreenState extends State<ResultsScreen> {
+  // Track manual overrides (Student ID -> isPresent)
+  final Map<String, bool> _overrides = {};
+
+  int get presentCount {
+    int count = 0;
+    for (var r in widget.initialResults) {
+      if (r.studentId == null) continue;
+      bool isPresent = _overrides[r.studentId!] ?? (r.status == AttendanceStatus.present);
+      if (isPresent) count++;
+    }
+    return count;
+  }
 
   @override
   Widget build(BuildContext context) {
-    final debugEntry = results.where((r) => r.studentId == '__pipeline_debug__').firstOrNull;
-    final displayResults = results.where((r) => r.studentId != '__pipeline_debug__').toList();
-
-    final present = displayResults.where((r) => r.status == AttendanceStatus.present).toList();
-    final absent = displayResults.where((r) => r.status == AttendanceStatus.absent).toList();
-    final guests = displayResults.where((r) => r.status == AttendanceStatus.unknownGuest).toList();
+    final theme = Theme.of(context);
+    final primaryColor = theme.colorScheme.primary;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Attendance Result')),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
+      backgroundColor: theme.scaffoldBackgroundColor,
+      appBar: AppBar(
+        title: const Text('Attendance Results'),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+      ),
+      body: Stack(
         children: [
-          _SummaryRow(present: present.length, absent: absent.length, guests: guests.length),
-          const SizedBox(height: 24),
-          if (present.isNotEmpty) ...[
-            Text('Present (${present.length})', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
-            ...present.map((r) => _ResultTile(result: r)),
-            const SizedBox(height: 16),
-          ],
-          if (absent.isNotEmpty) ...[
-            Text('Absent (${absent.length})', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
-            ...absent.map((r) => _ResultTile(result: r)),
-            const SizedBox(height: 16),
-          ],
-          if (guests.isNotEmpty) ...[
-            Text('Unrecognized / Guests (${guests.length})', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
-            ...guests.map((r) => _ResultTile(result: r)),
-            const SizedBox(height: 16),
-          ],
-          if (debugEntry != null) ...[
-            const Divider(),
-            ExpansionTile(
-              leading: const Icon(Icons.analytics_outlined, size: 20),
-              title: const Text('Pipeline Telemetry', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-              children: [
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  child: Text(
-                    debugEntry.name ?? '',
-                    style: const TextStyle(fontSize: 12, fontFamily: 'monospace', color: Colors.grey),
+          // Background Glows
+          Positioned(
+            top: -50,
+            right: -50,
+            child: Container(
+              width: 250,
+              height: 250,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: theme.colorScheme.secondary.withOpacity(0.15),
+              ),
+            ).blurred(),
+          ),
+          
+          Column(
+            children: [
+              // Summary Header
+              Padding(
+                padding: const EdgeInsets.all(24.0),
+                child: Container(
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.surface.withOpacity(0.6),
+                    borderRadius: BorderRadius.circular(30),
+                    border: Border.all(color: Colors.white.withOpacity(0.1)),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.2),
+                        blurRadius: 30,
+                        offset: const Offset(0, 10),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: [
+                      _buildStatColumn('Present', presentCount.toString(), primaryColor),
+                      Container(width: 1, height: 40, color: Colors.white.withOpacity(0.2)),
+                      _buildStatColumn('Absent', (results.length - presentCount).toString(), theme.colorScheme.error),
+                    ],
                   ),
                 ),
-              ],
-            ),
-          ],
+              ),
+              
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 24.0),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Manual Overrides',
+                    style: TextStyle(
+                      color: Colors.grey,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 1.2,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Student List
+              Expanded(
+                child: ListView.builder(
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+                  itemCount: widget.initialResults.length,
+                  itemBuilder: (context, index) {
+                    final result = widget.initialResults[index];
+                    if (result.studentId == null || result.name == null) return const SizedBox.shrink();
+                    
+                    final isPresent = _overrides[result.studentId!] ?? (result.status == AttendanceStatus.present);
+
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 16),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.surface,
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.1),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: ListTile(
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                        leading: CircleAvatar(
+                          backgroundColor: primaryColor.withOpacity(0.2),
+                          child: Text(
+                            result.name!.substring(0, 1).toUpperCase(),
+                            style: TextStyle(color: primaryColor, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                        title: Text(
+                          result.name!,
+                          style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.white),
+                        ),
+                        subtitle: Text(
+                          result.studentId!,
+                          style: TextStyle(color: Colors.white.withOpacity(0.5)),
+                        ),
+                        trailing: Switch(
+                          value: isPresent,
+                          activeColor: primaryColor,
+                          inactiveTrackColor: theme.colorScheme.surface,
+                          inactiveThumbColor: Colors.grey,
+                          onChanged: (value) {
+                            setState(() {
+                              _overrides[result.studentId!] = value;
+                            });
+                          },
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+
+              // Export Button
+              Padding(
+                padding: const EdgeInsets.all(24.0),
+                child: SizedBox(
+                  width: double.infinity,
+                  height: 56,
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      // Navigate back or Export to CSV
+                      Navigator.pop(context);
+                    },
+                    icon: const Icon(Icons.check_circle_outline),
+                    label: const Text('Confirm & Save', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                    style: ElevatedButton.styleFrom(
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ],
       ),
     );
   }
-}
 
-class _SummaryRow extends StatelessWidget {
-  final int present, absent, guests;
-  const _SummaryRow({required this.present, required this.absent, required this.guests});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-      children: [
-        _SummaryChip(label: 'Present', count: present, color: Colors.green),
-        _SummaryChip(label: 'Absent', count: absent, color: Colors.red),
-        _SummaryChip(label: 'Guests', count: guests, color: Colors.orange),
-      ],
-    );
-  }
-}
-
-class _SummaryChip extends StatelessWidget {
-  final String label;
-  final int count;
-  final Color color;
-  const _SummaryChip({required this.label, required this.count, required this.color});
-
-  @override
-  Widget build(BuildContext context) {
+  Widget _buildStatColumn(String label, String value, Color color) {
     return Column(
       children: [
-        Text('$count', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: color)),
-        Text(label),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 32,
+            fontWeight: FontWeight.bold,
+            color: color,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          label,
+          style: TextStyle(
+            color: Colors.white.withOpacity(0.7),
+            fontWeight: FontWeight.w500,
+          ),
+        ),
       ],
     );
   }
 }
 
-class _ResultTile extends StatelessWidget {
-  final AttendanceResult result;
-  const _ResultTile({required this.result});
+extension BlurExtension on Widget {
+  Widget blurred({double sigma = 40.0}) {
+    return ImageFilterWidget(sigma: sigma, child: this);
+  }
+}
+
+class ImageFilterWidget extends StatelessWidget {
+  final Widget child;
+  final double sigma;
+  const ImageFilterWidget({super.key, required this.child, required this.sigma});
 
   @override
   Widget build(BuildContext context) {
-    return ListTile(
-      leading: Icon(
-        switch (result.status) {
-          AttendanceStatus.present => Icons.check_circle,
-          AttendanceStatus.absent => Icons.cancel,
-          AttendanceStatus.unknownGuest => Icons.person_search,
-        },
-        color: switch (result.status) {
-          AttendanceStatus.present => Colors.green,
-          AttendanceStatus.absent => Colors.red,
-          AttendanceStatus.unknownGuest => Colors.orange,
-        },
-      ),
-      title: Text(result.name ?? 'Unrecognized face'),
-      subtitle: Text(
-        result.status == AttendanceStatus.present
-            ? 'Match Confidence: ${(result.similarityScore.clamp(0.0, 1.0) * 100).toStringAsFixed(1)}%'
-            : 'Similarity: ${(result.similarityScore.clamp(0.0, 1.0) * 100).toStringAsFixed(1)}%',
-      ),
+    return BackdropFilter(
+      filter: ImageFilter.blur(sigmaX: sigma, sigmaY: sigma),
+      child: child,
     );
   }
 }

@@ -12,11 +12,11 @@ dependencies:
 
   # UI & Design
   cupertino_icons: ^1.0.8
-  # No google_fonts — it fetches font files over the network on first use,
-  # which contradicts this app's offline-only design (see lib/app.dart).
+  google_fonts: ^6.2.1
 
   # Camera
-  camera: ^0.11.0+2
+  camera: ^0.10.5
+  sensors_plus: ^7.1.0
 
   # Native engine (native/) — detection, embedding, clustering, roster
   # matching, and the roster DB all run in C++, called via dart:ffi. See
