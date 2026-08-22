@@ -31,13 +31,14 @@ data/annotations/*
 !ios/Runner/Assets.xcassets/**/*.png
 !android/app/src/main/res/**/*.png
 
-# Model weights & native third-party binaries (downloaded, not committed to git)
-assets/models/*.onnx
+# Native third-party binaries (downloaded, not committed to git)
 assets/models/*.tflite
-*.onnx
 *.pt
 *.pth
 native/third_party/
+
+# ONNX model weights ARE committed, via Git LFS (see .gitattributes) —
+# assets/models/*.onnx is tracked so the app works after a fresh clone.
 
 # OS / editor
 .DS_Store
