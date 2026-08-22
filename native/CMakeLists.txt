@@ -57,6 +57,7 @@ set(SOURCES
   src/cosine_matcher.cpp
   src/arcface_embedder.cpp
   src/retinaface_detector.cpp
+  src/pipeline.cpp
 )
 
 find_library(SQLITE3_LIBRARY sqlite3 REQUIRED)
@@ -91,6 +92,30 @@ target_link_libraries(classroom_engine PUBLIC
   ${ONNXRUNTIME_LIBRARY}
 )
 
-# --- Tests (Phase 1 smoke tests, not yet wired to a test runner) ---
+# --- Tests ---
+enable_testing()
+
 add_executable(classroom_engine_smoketest test/smoketest.cpp)
 target_link_libraries(classroom_engine_smoketest PRIVATE classroom_engine)
+
+add_executable(classroom_engine_clustering_test test/clustering_test.cpp)
+target_link_libraries(classroom_engine_clustering_test PRIVATE classroom_engine)
+
+add_executable(classroom_engine_roster_test test/roster_test.cpp)
+target_link_libraries(classroom_engine_roster_test PRIVATE classroom_engine)
+
+# Self-contained — no CLI args or external fixtures needed — so these run
+# directly under ctest.
+add_test(NAME clustering_test COMMAND classroom_engine_clustering_test)
+add_test(NAME roster_test COMMAND classroom_engine_roster_test)
+
+# integration_test and pipeline_c_api_test need real model files (and, for
+# integration_test, a real photo/video with a face) passed as CLI args — see
+# each file's "Usage:" message. Built here so they're compile-checked on
+# every run, but not auto-registered with ctest since there's no committed
+# fixture image/video to point them at yet.
+add_executable(classroom_engine_integration_test test/integration_test.cpp)
+target_link_libraries(classroom_engine_integration_test PRIVATE classroom_engine)
+
+add_executable(classroom_engine_pipeline_c_api_test test/pipeline_c_api_test.cpp)
+target_link_libraries(classroom_engine_pipeline_c_api_test PRIVATE classroom_engine)

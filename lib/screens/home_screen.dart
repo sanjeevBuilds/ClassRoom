@@ -1,8 +1,10 @@
 import 'dart:ui';
+import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import '../native/classroom_engine.dart';
-import '../models/attendance_result.dart';
-import 'results_screen.dart';
+import 'capture_screen.dart';
+import 'enrollment_screen.dart';
+import 'results_screen.dart' show BlurExtension;
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -340,15 +342,20 @@ class _HomeScreenState extends State<HomeScreen> {
                             title: 'Take Attendance',
                             icon: Icons.camera_alt_rounded,
                             color: primaryColor,
-                            onTap: () {
-                              // Push mock ResultsScreen for UI testing
-                              Navigator.push(context, MaterialPageRoute(builder: (_) => const ResultsScreen(
-                                initialResults: [
-                                  AttendanceResult(studentId: '123', name: 'Alice Smith', status: AttendanceStatus.present, confidence: 0.98),
-                                  AttendanceResult(studentId: '456', name: 'Bob Jones', status: AttendanceStatus.absent, confidence: 0.12),
-                                  AttendanceResult(studentId: '789', name: 'Charlie Brown', status: AttendanceStatus.present, confidence: 0.88),
-                                ],
-                              )));
+                            onTap: () async {
+                              final cameras = await availableCameras();
+                              if (cameras.isEmpty) {
+                                if (mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('No camera found on this device.')),
+                                  );
+                                }
+                                return;
+                              }
+                              if (!context.mounted) return;
+                              await Navigator.push(context, MaterialPageRoute(
+                                builder: (_) => CaptureScreen(cameras: cameras, engine: ClassroomEngine.instance),
+                              ));
                             },
                           ),
                         ),
@@ -359,8 +366,11 @@ class _HomeScreenState extends State<HomeScreen> {
                             title: 'Enroll Students',
                             icon: Icons.person_add_rounded,
                             color: theme.colorScheme.secondary,
-                            onTap: () {
-                              // TODO: Push CaptureScreen(isEnrollment: true)
+                            onTap: () async {
+                              await Navigator.push(context, MaterialPageRoute(
+                                builder: (_) => EnrollmentScreen(engine: ClassroomEngine.instance),
+                              ));
+                              _loadStudents();
                             },
                           ),
                         ),
@@ -477,26 +487,6 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
       ),
-    );
-  }
-}
-
-extension BlurExtension on Widget {
-  Widget blurred({double sigma = 40.0}) {
-    return ImageFilterWidget(sigma: sigma, child: this);
-  }
-}
-
-class ImageFilterWidget extends StatelessWidget {
-  final Widget child;
-  final double sigma;
-  const ImageFilterWidget({super.key, required this.child, required this.sigma});
-
-  @override
-  Widget build(BuildContext context) {
-    return BackdropFilter(
-      filter: ImageFilter.blur(sigmaX: sigma, sigmaY: sigma),
-      child: child,
     );
   }
 }

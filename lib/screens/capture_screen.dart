@@ -4,11 +4,14 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import 'package:sensors_plus/sensors_plus.dart';
+import '../native/classroom_engine.dart';
+import 'processing_screen.dart';
 
 class CaptureScreen extends StatefulWidget {
   final List<CameraDescription> cameras;
-  
-  const CaptureScreen({super.key, required this.cameras});
+  final ClassroomEngine engine;
+
+  const CaptureScreen({super.key, required this.cameras, required this.engine});
 
   @override
   State<CaptureScreen> createState() => _CaptureScreenState();
@@ -75,10 +78,11 @@ class _CaptureScreenState extends State<CaptureScreen> {
     if (_isRecording) {
       final file = await _controller!.stopVideoRecording();
       setState(() => _isRecording = false);
-      // Navigate to processing screen with file
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Saved to: ${file.path}')),
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (_) => ProcessingScreen(videoPath: file.path, engine: widget.engine),
+          ),
         );
       }
     } else {

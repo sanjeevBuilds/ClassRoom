@@ -1,5 +1,9 @@
+import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 import '../models/attendance_result.dart';
 
 class ResultsScreen extends StatefulWidget {
@@ -14,15 +18,49 @@ class ResultsScreen extends StatefulWidget {
 class _ResultsScreenState extends State<ResultsScreen> {
   // Track manual overrides (Student ID -> isPresent)
   final Map<String, bool> _overrides = {};
+  String _searchQuery = '';
+
+  AttendanceResult? get _debugEntry => widget.initialResults
+      .where((r) => r.studentId == '__pipeline_debug__')
+      .firstOrNull;
+
+  List<AttendanceResult> get _knownResults => widget.initialResults
+      .where((r) => r.studentId != null && r.name != null && r.studentId != '__pipeline_debug__')
+      .toList();
+
+  List<AttendanceResult> get _filteredResults {
+    final query = _searchQuery.trim().toLowerCase();
+    if (query.isEmpty) return _knownResults;
+    return _knownResults
+        .where((r) =>
+            r.name!.toLowerCase().contains(query) ||
+            r.studentId!.toLowerCase().contains(query))
+        .toList();
+  }
 
   int get presentCount {
     int count = 0;
-    for (var r in widget.initialResults) {
-      if (r.studentId == null) continue;
+    for (var r in _knownResults) {
       bool isPresent = _overrides[r.studentId!] ?? (r.status == AttendanceStatus.present);
       if (isPresent) count++;
     }
     return count;
+  }
+
+  Future<void> _exportCsv() async {
+    final buffer = StringBuffer('Student ID,Name,Status,Similarity Score\n');
+    for (final r in _knownResults) {
+      final isPresent = _overrides[r.studentId!] ?? (r.status == AttendanceStatus.present);
+      final status = isPresent ? 'present' : 'absent';
+      buffer.writeln('${r.studentId},${r.name},$status,${r.similarityScore.toStringAsFixed(4)}');
+    }
+
+    final dir = await getTemporaryDirectory();
+    final file = File(p.join(dir.path, 'attendance_${DateTime.now().millisecondsSinceEpoch}.csv'));
+    await file.writeAsString(buffer.toString());
+
+    if (!mounted) return;
+    await Share.shareXFiles([XFile(file.path)], text: 'Attendance results');
   }
 
   @override
@@ -36,6 +74,13 @@ class _ResultsScreenState extends State<ResultsScreen> {
         title: const Text('Attendance Results'),
         backgroundColor: Colors.transparent,
         elevation: 0,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.ios_share_rounded),
+            tooltip: 'Export as CSV',
+            onPressed: _exportCsv,
+          ),
+        ],
       ),
       body: Stack(
         children: [
@@ -77,7 +122,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
                     children: [
                       _buildStatColumn('Present', presentCount.toString(), primaryColor),
                       Container(width: 1, height: 40, color: Colors.white.withOpacity(0.2)),
-                      _buildStatColumn('Absent', (results.length - presentCount).toString(), theme.colorScheme.error),
+                      _buildStatColumn('Absent', (_knownResults.length - presentCount).toString(), theme.colorScheme.error),
                     ],
                   ),
                 ),
@@ -97,17 +142,45 @@ class _ResultsScreenState extends State<ResultsScreen> {
                   ),
                 ),
               ),
+              const SizedBox(height: 12),
+
+              // Search Panel
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                child: TextField(
+                  onChanged: (value) => setState(() => _searchQuery = value),
+                  style: const TextStyle(color: Colors.white),
+                  decoration: InputDecoration(
+                    hintText: 'Search students…',
+                    hintStyle: TextStyle(color: Colors.white.withOpacity(0.4)),
+                    prefixIcon: Icon(Icons.search, color: Colors.white.withOpacity(0.6)),
+                    filled: true,
+                    fillColor: theme.colorScheme.surface.withOpacity(0.5),
+                    contentPadding: const EdgeInsets.symmetric(vertical: 0),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
+                ),
+              ),
               const SizedBox(height: 16),
 
               // Student List
               Expanded(
-                child: ListView.builder(
+                child: _filteredResults.isEmpty
+                    ? Center(
+                        child: Text(
+                          _searchQuery.isEmpty ? 'No students enrolled in this class.' : 'No students match "$_searchQuery".',
+                          style: TextStyle(color: Colors.white.withOpacity(0.5)),
+                        ),
+                      )
+                    : ListView.builder(
                   padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-                  itemCount: widget.initialResults.length,
+                  itemCount: _filteredResults.length,
                   itemBuilder: (context, index) {
-                    final result = widget.initialResults[index];
-                    if (result.studentId == null || result.name == null) return const SizedBox.shrink();
-                    
+                    final result = _filteredResults[index];
+
                     final isPresent = _overrides[result.studentId!] ?? (result.status == AttendanceStatus.present);
 
                     return Container(
@@ -156,6 +229,39 @@ class _ResultsScreenState extends State<ResultsScreen> {
                   },
                 ),
               ),
+
+              if (_debugEntry != null)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                  child: Theme(
+                    data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                    child: ExpansionTile(
+                      tilePadding: EdgeInsets.zero,
+                      collapsedIconColor: Colors.white.withOpacity(0.5),
+                      iconColor: Colors.white.withOpacity(0.5),
+                      leading: Icon(Icons.analytics_outlined, size: 18, color: Colors.white.withOpacity(0.5)),
+                      title: Text(
+                        'Pipeline Telemetry',
+                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.white.withOpacity(0.5)),
+                      ),
+                      children: [
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(12),
+                          margin: const EdgeInsets.only(bottom: 8),
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.surface.withOpacity(0.5),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            _debugEntry!.name ?? '',
+                            style: TextStyle(fontSize: 12, fontFamily: 'monospace', color: Colors.white.withOpacity(0.6)),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
 
               // Export Button
               Padding(

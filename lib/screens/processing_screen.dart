@@ -35,7 +35,7 @@ class _ProcessingScreenState extends State<ProcessingScreen> {
       final results = await widget.engine.processSweepVideo(widget.videoPath);
       if (!mounted) return;
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => ResultsScreen(results: results)),
+        MaterialPageRoute(builder: (_) => ResultsScreen(initialResults: results)),
       );
     } catch (e) {
       if (mounted) setState(() => _error = '$e');

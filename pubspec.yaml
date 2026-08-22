@@ -27,6 +27,7 @@ dependencies:
 
   # Utilities
   permission_handler: ^11.3.1     # Camera permissions
+  share_plus: ^10.1.4              # Export attendance results as CSV
 
 dev_dependencies:
   flutter_test:
