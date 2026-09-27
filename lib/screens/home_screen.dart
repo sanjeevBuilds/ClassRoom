@@ -228,59 +228,63 @@ class _HomeScreenState extends State<HomeScreen> {
                 children: [
                   // App Bar / Header
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      GestureDetector(
-                        onTap: _showClassSelector,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                          decoration: BoxDecoration(
-                            color: theme.colorScheme.surface.withOpacity(0.5),
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(color: Colors.white.withOpacity(0.1)),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              CircleAvatar(
-                                radius: 14,
-                                backgroundColor: primaryColor.withOpacity(0.2),
-                                child: Icon(Icons.class_, size: 14, color: primaryColor),
-                              ),
-                              const SizedBox(width: 12),
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Active Classroom',
-                                    style: TextStyle(fontSize: 10, color: Colors.white.withOpacity(0.5), fontWeight: FontWeight.w600),
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: _showClassSelector,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: theme.colorScheme.surface.withOpacity(0.5),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(color: Colors.white.withOpacity(0.1)),
+                            ),
+                            child: Row(
+                              children: [
+                                CircleAvatar(
+                                  radius: 14,
+                                  backgroundColor: primaryColor.withOpacity(0.2),
+                                  child: Icon(Icons.class_, size: 14, color: primaryColor),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        'Active Classroom',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(fontSize: 10, color: Colors.white.withOpacity(0.5), fontWeight: FontWeight.w600),
+                                      ),
+                                      Text(
+                                        selectedClass,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.white),
+                                      ),
+                                    ],
                                   ),
-                                  Text(
-                                    selectedClass,
-                                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(width: 12),
-                              Icon(Icons.keyboard_arrow_down_rounded, color: Colors.white.withOpacity(0.5)),
-                            ],
+                                ),
+                                const SizedBox(width: 4),
+                                Icon(Icons.keyboard_arrow_down_rounded, color: Colors.white.withOpacity(0.5), size: 18),
+                              ],
+                            ),
                           ),
                         ),
                       ),
-                      Row(
-                        children: [
-                          IconButton(
-                            icon: Icon(Icons.delete_sweep_rounded, color: theme.colorScheme.error.withOpacity(0.8)),
-                            onPressed: _clearDatabase,
-                            tooltip: 'Clear Database',
-                          ),
-                          const SizedBox(width: 8),
-                          CircleAvatar(
-                            radius: 20,
-                            backgroundColor: theme.colorScheme.surface,
-                            child: const Icon(Icons.school, color: Colors.white, size: 20),
-                          ),
-                        ],
+                      const SizedBox(width: 4),
+                      IconButton(
+                        icon: Icon(Icons.delete_sweep_rounded, color: theme.colorScheme.error.withOpacity(0.8)),
+                        onPressed: _clearDatabase,
+                        tooltip: 'Clear Database',
+                        visualDensity: VisualDensity.compact,
+                      ),
+                      CircleAvatar(
+                        radius: 18,
+                        backgroundColor: theme.colorScheme.surface,
+                        child: const Icon(Icons.school, color: Colors.white, size: 18),
                       ),
                     ],
                   ),
