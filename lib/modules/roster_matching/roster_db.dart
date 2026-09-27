@@ -92,6 +92,32 @@ class RosterDB {
     return entries;
   }
 
+  /// Exports all enrolled students and their reference embeddings into a serializable Map.
+  Future<Map<String, dynamic>> exportRoster(String classId, [String? dbPath]) async {
+    final entries = await getAllEntries(dbPath);
+    return {
+      'class_id': classId,
+      'exported_at': DateTime.now().toIso8601String(),
+      'version': '1.0',
+      'student_count': entries.length,
+      'students': entries.map((e) => e.toJson()).toList(),
+    };
+  }
+
+  /// Imports students and embeddings from a roster map into the database.
+  Future<int> importRoster(Map<String, dynamic> data, [String? dbPath]) async {
+    final studentsList = (data['students'] as List?) ?? [];
+    int count = 0;
+    for (final item in studentsList) {
+      if (item is Map) {
+        final entry = RosterEntry.fromJson(Map<String, dynamic>.from(item));
+        await enrollStudent(entry, dbPath);
+        count++;
+      }
+    }
+    return count;
+  }
+
   /// Progressive Roster Learning: Updates or augments a student's stored reference
   /// embeddings using an Exponential Moving Average (EMA) when matched with high confidence.
   Future<void> updateStudentProgressiveEmbedding(

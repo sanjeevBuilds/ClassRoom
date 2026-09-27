@@ -1,5 +1,6 @@
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../native/classroom_engine.dart';
 
@@ -136,6 +137,91 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
     }
   }
 
+  Future<void> _exportRoster() async {
+    if (_enrolledStudents.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No students to export! Enroll students first.')),
+      );
+      return;
+    }
+    try {
+      final file = await widget.engine.exportClassroomRoster();
+      await Share.shareXFiles(
+        [XFile(file.path)],
+        text: 'Classroom Roster Export: ${widget.engine.currentClassId} (${_enrolledStudents.length} Students with 512-d Face Embeddings)',
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Exported ${_enrolledStudents.length} students from ${widget.engine.currentClassId}!')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Export failed: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _showImportDialog() async {
+    final textController = TextEditingController();
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Import Classroom Roster'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Paste the exported classroom JSON package below to import all students and face embeddings:',
+              style: TextStyle(fontSize: 13, color: Colors.grey),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: textController,
+              maxLines: 6,
+              decoration: const InputDecoration(
+                hintText: '{"class_id": "CS101", "students": [...]}',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton.icon(
+            icon: const Icon(Icons.file_download_done_rounded),
+            label: const Text('Import'),
+            onPressed: () => Navigator.pop(ctx, true),
+          ),
+        ],
+      ),
+    );
+
+    if (result == true && textController.text.trim().isNotEmpty) {
+      try {
+        final count = await widget.engine.importClassroomRoster(textController.text.trim());
+        await _loadEnrolledStudents();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Successfully imported $count students into ${widget.engine.currentClassId}!')),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Import failed: Invalid roster format ($e)')),
+          );
+        }
+      }
+    }
+  }
+
   void _showEnrolledListModal() {
     showModalBottomSheet(
       context: context,
@@ -214,6 +300,16 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
       appBar: AppBar(
         title: const Text('Enroll Student'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.ios_share_rounded),
+            tooltip: 'Export Classroom Roster',
+            onPressed: _exportRoster,
+          ),
+          IconButton(
+            icon: const Icon(Icons.file_download_rounded),
+            tooltip: 'Import Classroom Roster',
+            onPressed: _showImportDialog,
+          ),
           Badge(
             label: Text('${_enrolledStudents.length}'),
             isLabelVisible: _enrolledStudents.isNotEmpty,

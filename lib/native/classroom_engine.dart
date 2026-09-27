@@ -46,12 +46,14 @@ class ClassroomEngine {
   final String _baseDir;
 
   late String rosterDbPath;
+  String currentClassId = 'CS101';
 
   RosterDB? _rosterDb;
   YuNetDetector? _yunetDetector;
   ArcFaceEmbedder? _arcfaceEmbedder;
 
   void switchClass(String classId) {
+    currentClassId = classId;
     rosterDbPath = p.join(_baseDir, 'roster_$classId.db');
     _rosterDb?.init(rosterDbPath);
   }
@@ -466,5 +468,37 @@ class ClassroomEngine {
     if (_rosterDb != null) {
       await _rosterDb!.init(rosterDbPath);
     }
+  }
+
+  /// Exports the entire classroom roster (students + face embeddings) to a portable JSON file.
+  Future<File> exportClassroomRoster([String? classId]) async {
+    final targetClass = classId ?? currentClassId;
+    if (_rosterDb == null) {
+      await _initPipeline();
+    }
+    final dbPath = p.join(_baseDir, 'roster_$targetClass.db');
+    final data = await _rosterDb!.exportRoster(targetClass, dbPath);
+    final jsonStr = const JsonEncoder.withIndent('  ').convert(data);
+
+    final tempDir = await getTemporaryDirectory();
+    final exportFile = File(p.join(tempDir.path, 'classroom_roster_${targetClass}.json'));
+    await exportFile.writeAsString(jsonStr);
+    return exportFile;
+  }
+
+  /// Imports a classroom roster from a JSON string into SQLite.
+  /// Automatically registers the classId and enrolls all student embeddings.
+  Future<int> importClassroomRoster(String jsonString) async {
+    if (_rosterDb == null) {
+      await _initPipeline();
+    }
+    final data = jsonDecode(jsonString) as Map<String, dynamic>;
+    final importedClass = (data['class_id'] as String?)?.trim() ?? 'ImportedClass';
+
+    await addClass(importedClass);
+    switchClass(importedClass);
+
+    final count = await _rosterDb!.importRoster(data, rosterDbPath);
+    return count;
   }
 }

@@ -1,6 +1,7 @@
 import 'dart:ui';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
+import 'package:share_plus/share_plus.dart';
 import '../native/classroom_engine.dart';
 import 'capture_screen.dart';
 import 'enrollment_screen.dart';
@@ -147,10 +148,48 @@ class _HomeScreenState extends State<HomeScreen> {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Theme.of(context).colorScheme.secondary,
                   foregroundColor: Colors.white,
-                  minimumSize: const Size(double.infinity, 56),
+                  minimumSize: const Size(double.infinity, 50),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                   elevation: 8,
                 ),
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        _exportCurrentRoster();
+                      },
+                      icon: const Icon(Icons.share_rounded, size: 16),
+                      label: const Text('Export Roster', style: TextStyle(fontSize: 12)),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.white,
+                        side: BorderSide(color: Colors.white.withOpacity(0.2)),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        _importRosterDialog();
+                      },
+                      icon: const Icon(Icons.download_rounded, size: 16),
+                      label: const Text('Import Roster', style: TextStyle(fontSize: 12)),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.white,
+                        side: BorderSide(color: Colors.white.withOpacity(0.2)),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 16),
             ],
@@ -183,6 +222,94 @@ class _HomeScreenState extends State<HomeScreen> {
     if (confirm == true) {
       await ClassroomEngine.instance.clearRoster();
       await _loadStudents();
+    }
+  }
+
+  Future<void> _exportCurrentRoster() async {
+    if (enrolledStudents.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No students in $selectedClass to export!')),
+      );
+      return;
+    }
+    try {
+      final file = await ClassroomEngine.instance.exportClassroomRoster(selectedClass);
+      await Share.shareXFiles(
+        [XFile(file.path)],
+        text: 'Classroom Roster: $selectedClass (${enrolledStudents.length} Students)',
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Export failed: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _importRosterDialog() async {
+    final textController = TextEditingController();
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Theme.of(context).colorScheme.surface,
+        title: const Text('Import Classroom Roster', style: TextStyle(color: Colors.white)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Paste the exported classroom JSON package to import all student profiles and face embeddings:',
+              style: TextStyle(fontSize: 13, color: Colors.white70),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: textController,
+              maxLines: 6,
+              style: const TextStyle(color: Colors.white, fontSize: 12),
+              decoration: InputDecoration(
+                hintText: '{"class_id": "CS101", "students": [...]}',
+                hintStyle: const TextStyle(color: Colors.white38),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel', style: TextStyle(color: Colors.white70)),
+          ),
+          FilledButton.icon(
+            icon: const Icon(Icons.file_download_done_rounded),
+            label: const Text('Import'),
+            onPressed: () => Navigator.pop(ctx, true),
+          ),
+        ],
+      ),
+    );
+
+    if (result == true && textController.text.trim().isNotEmpty) {
+      try {
+        final count = await ClassroomEngine.instance.importClassroomRoster(textController.text.trim());
+        final updatedClasses = await ClassroomEngine.instance.getClasses();
+        setState(() {
+          classes = updatedClasses;
+          selectedClass = ClassroomEngine.instance.currentClassId;
+        });
+        await _loadStudents();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Imported $count students into $selectedClass!')),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Import failed: $e')),
+          );
+        }
+      }
     }
   }
 
@@ -275,6 +402,18 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       ),
                       const SizedBox(width: 4),
+                      IconButton(
+                        icon: const Icon(Icons.share_rounded, color: Colors.white70, size: 20),
+                        onPressed: _exportCurrentRoster,
+                        tooltip: 'Export Classroom Roster',
+                        visualDensity: VisualDensity.compact,
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.file_download_rounded, color: Colors.white70, size: 20),
+                        onPressed: _importRosterDialog,
+                        tooltip: 'Import Classroom Roster',
+                        visualDensity: VisualDensity.compact,
+                      ),
                       IconButton(
                         icon: Icon(Icons.delete_sweep_rounded, color: theme.colorScheme.error.withOpacity(0.8)),
                         onPressed: _clearDatabase,
