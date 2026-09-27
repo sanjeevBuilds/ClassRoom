@@ -1,31 +1,33 @@
 import 'dart:convert';
-import 'dart:ffi';
 import 'dart:io';
-import 'dart:isolate';
 import 'dart:typed_data';
 
-import 'package:ffi/ffi.dart';
 import 'package:flutter/services.dart' show rootBundle;
+import 'package:opencv_dart/opencv_dart.dart' as cv;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import '../models/attendance_result.dart';
-import 'classroom_bindings.dart';
+import '../models/embedding.dart';
+import '../models/roster_entry.dart';
+import '../modules/blur_motion/blur_filter.dart';
+import '../modules/embedding_clustering/arcface_embedder.dart';
+import '../modules/embedding_clustering/clustering.dart';
+import '../modules/face_detection/yunet_detector.dart';
+import '../modules/roster_matching/cosine_matcher.dart';
+import '../modules/roster_matching/roster_db.dart';
+import '../modules/video_ingestion/frame_sampler.dart';
 
-/// Dart-side entry point to the C++ pipeline (native/), which runs the
-/// entire sample -> blur -> detect -> embed -> cluster -> match sequence
-/// natively and hands back only a JSON result — see
-/// native/include/classroom/pipeline.h for the design rationale.
+/// Dart/Flutter-native ClassroomEngine implementation for Android.
 ///
-/// Owns the extracted model/DB file paths: the C++ side opens real files by
-/// path (cv::imread, Ort::Session, sqlite3_open), not Flutter asset-bundle
-/// keys, so the .onnx assets are copied out of the asset bundle to disk
-/// once, on first launch.
-///
-/// Each pipeline call runs on a background Isolate — ClassroomProcessSweepVideo
-/// can take several seconds, and an FFI call blocks the calling isolate's
-/// event loop for its whole duration, which would freeze the UI if run on
-/// the main isolate.
+/// Executes the entire 7-stage vision & ML pipeline:
+/// 1. Frame sampling (4 FPS)
+/// 2. Variance-of-Laplacian blur filtering (tauBlur = 15.0)
+/// 3. YuNet face detection with 5-point landmarks
+/// 4. ArcFace MobileFaceNet embedding with landmark alignment
+/// 5. Hierarchical Agglomerative Clustering (tauCluster = 0.35)
+/// 6. SQLite multi-class roster storage
+/// 7. Asymmetric cosine similarity matching (tauMatch = 0.40)
 class ClassroomEngine {
   ClassroomEngine._(this.yunetModelPath, this.arcfaceModelPath, this._baseDir) {
     switchClass('CS101'); // Default fallback
@@ -36,11 +38,16 @@ class ClassroomEngine {
   final String yunetModelPath;
   final String arcfaceModelPath;
   final String _baseDir;
-  
+
   late String rosterDbPath;
+
+  RosterDB? _rosterDb;
+  YuNetDetector? _yunetDetector;
+  ArcFaceEmbedder? _arcfaceEmbedder;
 
   void switchClass(String classId) {
     rosterDbPath = p.join(_baseDir, 'roster_$classId.db');
+    _rosterDb?.init(rosterDbPath);
   }
 
   Future<List<String>> getClasses() async {
@@ -66,13 +73,32 @@ class ClassroomEngine {
     String yunet = '';
     String arcface = '';
     try {
-      yunet = await _extractAsset('assets/models/yunet_int8.onnx', p.join(dir.path, 'yunet_int8.onnx'));
-      arcface = await _extractAsset('assets/models/arcface_mobilefacenet.onnx', p.join(dir.path, 'arcface_mobilefacenet.onnx'));
+      yunet = await _extractAsset(
+        'assets/models/yunet_int8.onnx',
+        p.join(dir.path, 'yunet_int8.onnx'),
+      );
+      arcface = await _extractAsset(
+        'assets/models/arcface_mobilefacenet.onnx',
+        p.join(dir.path, 'arcface_mobilefacenet.onnx'),
+      );
     } catch (e) {
-      print('WARNING: ONNX models missing from assets/models/. ML pipelines will fail if called: $e');
+      print('WARNING: ONNX models missing from assets/models/: $e');
     }
-    
-    return ClassroomEngine._(yunet, arcface, dir.path);
+
+    final engine = ClassroomEngine._(yunet, arcface, dir.path);
+    await engine._initPipeline();
+    return engine;
+  }
+
+  Future<void> _initPipeline() async {
+    _rosterDb = RosterDB();
+    await _rosterDb!.init(rosterDbPath);
+
+    _yunetDetector = YuNetDetector();
+    await _yunetDetector!.init('assets/models/yunet_int8.onnx');
+
+    _arcfaceEmbedder = ArcFaceEmbedder();
+    await _arcfaceEmbedder!.init('assets/models/arcface_mobilefacenet.onnx');
   }
 
   static Future<String> _extractAsset(String assetKey, String destPath) async {
@@ -88,42 +114,149 @@ class ClassroomEngine {
   }
 
   /// Detects the largest face in [photoPath], embeds it, and saves it to
-  /// the roster DB under [studentId]/[name]. Returns false (not an error)
-  /// if no face was found in the photo.
+  /// the roster DB under [studentId]/[name]. Returns false if no face was found.
   Future<bool> enrollStudentFromPhoto({
     required String photoPath,
     required String studentId,
     required String name,
-  }) {
-    return Isolate.run(() => _enrollStudentFromPhoto(_EnrollArgs(
-          photoPath: photoPath,
-          studentId: studentId,
-          name: name,
-          yunetModelPath: yunetModelPath,
-          arcfaceModelPath: arcfaceModelPath,
-          rosterDbPath: rosterDbPath,
-        )));
+  }) async {
+    if (_yunetDetector == null || _arcfaceEmbedder == null || _rosterDb == null) {
+      await _initPipeline();
+    }
+
+    final frame = cv.imread(photoPath);
+    if (frame.isEmpty) {
+      frame.release();
+      throw StateError('Could not read photo at $photoPath');
+    }
+
+    try {
+      final detections = await _yunetDetector!.detect(
+        frame,
+        frameId: 0,
+        timestampSec: 0.0,
+      );
+
+      if (detections.isEmpty) {
+        return false;
+      }
+
+      // Pick detection with the largest bounding box area
+      detections.sort((a, b) {
+        final areaA = (a.bbox[2] - a.bbox[0]) * (a.bbox[3] - a.bbox[1]);
+        final areaB = (b.bbox[2] - b.bbox[0]) * (b.bbox[3] - b.bbox[1]);
+        return areaB.compareTo(areaA);
+      });
+
+      final bestDet = detections.first;
+      final embedding = await _arcfaceEmbedder!.extractEmbedding(frame, bestDet);
+
+      await _rosterDb!.enrollStudent(RosterEntry(
+        studentId: studentId,
+        name: name,
+        referenceEmbeddings: [embedding.vector],
+      ));
+
+      return true;
+    } finally {
+      frame.release();
+    }
   }
 
   /// Runs the full pipeline on a recorded sweep video and returns the
   /// attendance results.
-  Future<List<AttendanceResult>> processSweepVideo(String videoPath) {
-    return Isolate.run(() => _processSweepVideo(_SweepArgs(
-          videoPath: videoPath,
-          yunetModelPath: yunetModelPath,
-          arcfaceModelPath: arcfaceModelPath,
-          rosterDbPath: rosterDbPath,
-        )));
+  Future<List<AttendanceResult>> processSweepVideo(String videoPath) async {
+    if (_yunetDetector == null || _arcfaceEmbedder == null || _rosterDb == null) {
+      await _initPipeline();
+    }
+
+    // 1. Frame sampling at 4 FPS
+    final sampler = FrameSampler(targetFps: 4.0);
+    final sampledFrames = await sampler.sampleFrames(videoPath);
+    final totalSampled = sampledFrames.length;
+
+    // 2. Blur filtering (tauBlur: 15.0)
+    final blurFilter = BlurFilter(tauBlur: 15.0);
+    final sharpFrames = blurFilter.filterBlurryFrames(sampledFrames);
+    final totalSharp = sharpFrames.length;
+
+    int totalDets = 0;
+    final allEmbeddings = <Embedding>[];
+
+    // 3. Face detection & 4. Embedding extraction
+    for (final frameData in sharpFrames) {
+      final lowres = frameData['frame_lowres'] as cv.Mat;
+      final fullFrame = frameData['frame'] as cv.Mat;
+      final frameId = frameData['frame_id'] as int;
+      final ts = frameData['timestamp_sec'] as double;
+
+      final scaleX = fullFrame.cols / lowres.cols;
+      final scaleY = fullFrame.rows / lowres.rows;
+
+      final detections = await _yunetDetector!.detect(
+        lowres,
+        frameId: frameId,
+        timestampSec: ts,
+        scaleX: scaleX,
+        scaleY: scaleY,
+      );
+
+      totalDets += detections.length;
+
+      for (final det in detections) {
+        try {
+          final emb = await _arcfaceEmbedder!.extractEmbedding(fullFrame, det);
+          allEmbeddings.add(emb);
+        } catch (_) {
+          // Ignore invalid crops or alignment failures
+        }
+      }
+
+      lowres.release();
+      fullFrame.release();
+    }
+
+    // 5. Hierarchical Agglomerative Clustering
+    final clusterer = IdentityClusterer(tauCluster: 0.35);
+    final clusters = clusterer.consolidateIdentities(allEmbeddings);
+
+    // 6. Roster database lookup & 7. Cosine similarity matching
+    final rosterEntries = await _rosterDb!.getAllEntries();
+    final matcher = CosineMatcher(tauMatch: 0.40);
+    final results = matcher.matchClustersToRoster(clusters, rosterEntries);
+
+    // Append telemetry debug entry for UI expandable footer
+    results.add(AttendanceResult(
+      studentId: '__pipeline_debug__',
+      name: 'Sampled: $totalSampled | Sharp: $totalSharp | Dets: $totalDets | Embeds: ${allEmbeddings.length} | Clusters: ${clusters.length} | Roster: ${rosterEntries.length}',
+      status: AttendanceStatus.unknownGuest,
+      similarityScore: 0.0,
+    ));
+
+    return results;
   }
 
   /// Returns a list of all currently enrolled students: [{'student_id': '...', 'name': '...'}]
-  Future<List<Map<String, dynamic>>> getEnrolledStudents() {
-    return Isolate.run(() => _getEnrolledStudents(rosterDbPath));
+  Future<List<Map<String, dynamic>>> getEnrolledStudents() async {
+    if (_rosterDb == null) {
+      _rosterDb = RosterDB();
+      await _rosterDb!.init(rosterDbPath);
+    }
+    final entries = await _rosterDb!.getAllEntries();
+    return entries.map((e) => {
+      'student_id': e.studentId,
+      'name': e.name,
+    }).toList();
   }
 
   /// Deletes an individual enrolled student and their face embeddings by studentId.
-  Future<bool> deleteStudent(String studentId) {
-    return Isolate.run(() => _deleteStudent(studentId, rosterDbPath));
+  Future<bool> deleteStudent(String studentId) async {
+    if (_rosterDb == null) {
+      _rosterDb = RosterDB();
+      await _rosterDb!.init(rosterDbPath);
+    }
+    await _rosterDb!.deleteStudent(studentId);
+    return true;
   }
 
   /// Clears all enrolled student records from the local SQLite roster DB.
@@ -132,137 +265,8 @@ class ClassroomEngine {
     if (await file.exists()) {
       await file.delete();
     }
-  }
-}
-
-class _EnrollArgs {
-  const _EnrollArgs({
-    required this.photoPath,
-    required this.studentId,
-    required this.name,
-    required this.yunetModelPath,
-    required this.arcfaceModelPath,
-    required this.rosterDbPath,
-  });
-
-  final String photoPath;
-  final String studentId;
-  final String name;
-  final String yunetModelPath;
-  final String arcfaceModelPath;
-  final String rosterDbPath;
-}
-
-class _SweepArgs {
-  const _SweepArgs({
-    required this.videoPath,
-    required this.yunetModelPath,
-    required this.arcfaceModelPath,
-    required this.rosterDbPath,
-  });
-
-  final String videoPath;
-  final String yunetModelPath;
-  final String arcfaceModelPath;
-  final String rosterDbPath;
-}
-
-// --- Isolate entry points ---
-//
-// Each of these constructs its own ClassroomBindings (fresh DynamicLibrary
-// lookup) because it runs on a separate Isolate from the one that
-// constructed ClassroomEngine — Pointer/DynamicLibrary handles aren't safe
-// to share across isolates, but re-resolving them by name is cheap.
-
-bool _enrollStudentFromPhoto(_EnrollArgs args) {
-  final bindings = ClassroomBindings();
-  final photoPath = args.photoPath.toNativeUtf8();
-  final studentId = args.studentId.toNativeUtf8();
-  final name = args.name.toNativeUtf8();
-  final yunet = args.yunetModelPath.toNativeUtf8();
-  final arcface = args.arcfaceModelPath.toNativeUtf8();
-  final rosterDb = args.rosterDbPath.toNativeUtf8();
-  try {
-    final result =
-        bindings.enrollStudentFromPhoto(photoPath, studentId, name, yunet, arcface, rosterDb);
-    if (result == -1) {
-      final err = bindings.getLastError().toDartString();
-      throw StateError('Enrollment failed: $err');
+    if (_rosterDb != null) {
+      await _rosterDb!.init(rosterDbPath);
     }
-    return result == 1;
-  } finally {
-    for (final ptr in [photoPath, studentId, name, yunet, arcface, rosterDb]) {
-      calloc.free(ptr);
-    }
-  }
-}
-
-List<AttendanceResult> _processSweepVideo(_SweepArgs args) {
-  final bindings = ClassroomBindings();
-  final videoPath = args.videoPath.toNativeUtf8();
-  final yunet = args.yunetModelPath.toNativeUtf8();
-  final arcface = args.arcfaceModelPath.toNativeUtf8();
-  final rosterDb = args.rosterDbPath.toNativeUtf8();
-  Pointer<Utf8>? resultPtr;
-  try {
-    resultPtr = bindings.processSweepVideo(
-      videoPath,
-      yunet,
-      arcface,
-      rosterDb,
-      4.0, // target_fps
-      15.0, // tau_blur — lowered from 100.0; handheld phone video is much
-            // shakier than tripod footage, 100.0 drops nearly every frame.
-      0.35, // tau_cluster
-      0.40, // tau_match — slightly more lenient for single-photo enrollment
-    );
-    final json = resultPtr.toDartString();
-    final decoded = jsonDecode(json);
-    if (decoded is Map && decoded.containsKey('error')) {
-      throw StateError('Pipeline failed: ${decoded['error']}');
-    }
-    return (decoded as List)
-        .map((e) => AttendanceResult.fromJson(e as Map<String, dynamic>))
-        .toList();
-  } finally {
-    for (final ptr in [videoPath, yunet, arcface, rosterDb]) {
-      calloc.free(ptr);
-    }
-    if (resultPtr != null) {
-      bindings.freeString(resultPtr);
-    }
-  }
-}
-
-List<Map<String, dynamic>> _getEnrolledStudents(String rosterDbPath) {
-  final bindings = ClassroomBindings();
-  final pathPtr = rosterDbPath.toNativeUtf8();
-  Pointer<Utf8>? resultPtr;
-  try {
-    resultPtr = bindings.getEnrolledStudents(pathPtr);
-    final json = resultPtr.toDartString();
-    final decoded = jsonDecode(json);
-    if (decoded is List) {
-      return decoded.map((e) => Map<String, dynamic>.from(e as Map)).toList();
-    }
-    return [];
-  } finally {
-    calloc.free(pathPtr);
-    if (resultPtr != null) {
-      bindings.freeString(resultPtr);
-    }
-  }
-}
-
-bool _deleteStudent(String studentId, String rosterDbPath) {
-  final bindings = ClassroomBindings();
-  final idPtr = studentId.toNativeUtf8();
-  final pathPtr = rosterDbPath.toNativeUtf8();
-  try {
-    final status = bindings.deleteStudent(idPtr, pathPtr);
-    return status == 1;
-  } finally {
-    calloc.free(idPtr);
-    calloc.free(pathPtr);
   }
 }
