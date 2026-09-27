@@ -67,13 +67,15 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
       _cameraIndex = index;
     } else {
       // Default to BACK camera for high-resolution 6-axis pose modeling
-      final backIdx = _cameras.indexWhere((c) => c.lensDirection == CameraLensDirection.back);
+      final backIdx = _cameras
+          .indexWhere((c) => c.lensDirection == CameraLensDirection.back);
       _cameraIndex = (backIdx != -1) ? backIdx : 0;
     }
 
     await _controller?.dispose();
     final selectedCamera = _cameras[_cameraIndex];
-    final controller = CameraController(selectedCamera, ResolutionPreset.high, enableAudio: false);
+    final controller = CameraController(selectedCamera, ResolutionPreset.high,
+        enableAudio: false);
     await controller.initialize();
     if (!mounted) return;
     setState(() => _controller = controller);
@@ -96,17 +98,20 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
     final controller = _controller;
     final name = _nameController.text.trim();
     if (controller == null || name.isEmpty) {
-      setState(() => _error = 'Please enter a student name first.');
+      setState(() => _error = 'Please enter student roll no / name first.');
       return;
     }
 
     // Restrict duplicate names (case-insensitive)
     final isDuplicate = _enrolledStudents.any(
-      (s) => (s['name'] as String? ?? '').trim().toLowerCase() == name.toLowerCase(),
+      (s) =>
+          (s['name'] as String? ?? '').trim().toLowerCase() ==
+          name.toLowerCase(),
     );
     if (isDuplicate) {
       setState(() {
-        _error = 'Student "$name" is already enrolled. Please use a unique name.';
+        _error =
+            'Student "$name" is already enrolled. Please use a unique name.';
       });
       return;
     }
@@ -126,7 +131,8 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
 
       if (!found) {
         setState(() {
-          _error = 'No face detected in the photo — try again with better lighting/framing.';
+          _error =
+              'No face detected in the photo — try again with better lighting/framing.';
         });
         return;
       }
@@ -156,13 +162,15 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
     final controller = _controller;
     final name = _nameController.text.trim();
     if (controller == null || name.isEmpty) {
-      setState(() => _error = 'Please enter a student name first.');
+      setState(() => _error = 'Please enter student roll no / name first.');
       return;
     }
 
     if (_faceIdStep == 0) {
       final isDuplicate = _enrolledStudents.any(
-        (s) => (s['name'] as String? ?? '').trim().toLowerCase() == name.toLowerCase(),
+        (s) =>
+            (s['name'] as String? ?? '').trim().toLowerCase() ==
+            name.toLowerCase(),
       );
       if (isDuplicate) {
         setState(() => _error = 'Student "$name" is already enrolled.');
@@ -181,14 +189,21 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
 
       if (embedding == null) {
         setState(() {
-          _error = 'No face detected! Center face in the Face ID ring and try again.';
+          _error =
+              'No face detected! Center face in the Face ID ring and try again.';
         });
         return;
       }
 
       final pose = widget.engine.lastEnrollmentPose ??
           const FacePoseEstimator().estimatePose(
-            Detection(frameId: 0, timestampSec: 0, bbox: [0, 0, 100, 100], confidence: 0.9, detector: 'yunet', detIndex: 0),
+            Detection(
+                frameId: 0,
+                timestampSec: 0,
+                bbox: [0, 0, 100, 100],
+                confidence: 0.9,
+                detector: 'yunet',
+                detIndex: 0),
           );
 
       _faceIdEmbeddings.add(embedding.vector);
@@ -215,7 +230,8 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
           SnackBar(
             content: Row(
               children: [
-                const Icon(Icons.check_circle_rounded, color: Colors.greenAccent),
+                const Icon(Icons.check_circle_rounded,
+                    color: Colors.greenAccent),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
@@ -260,7 +276,9 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
         title: Text('Remove $name?'),
         content: Text('Delete $name and their face data from the roster?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: Colors.red),
             onPressed: () => Navigator.pop(ctx, true),
@@ -284,7 +302,8 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
   Future<void> _exportRoster() async {
     if (_enrolledStudents.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No students to export! Enroll students first.')),
+        const SnackBar(
+            content: Text('No students to export! Enroll students first.')),
       );
       return;
     }
@@ -292,11 +311,14 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
       final file = await widget.engine.exportClassroomRoster();
       await Share.shareXFiles(
         [XFile(file.path)],
-        text: 'Classroom Roster Export: ${widget.engine.currentClassId} (${_enrolledStudents.length} Students with 512-d Face Embeddings)',
+        text:
+            'Classroom Roster Export: ${widget.engine.currentClassId} (${_enrolledStudents.length} Students with 512-d Face Embeddings)',
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Exported ${_enrolledStudents.length} students from ${widget.engine.currentClassId}!')),
+          SnackBar(
+              content: Text(
+                  'Exported ${_enrolledStudents.length} students from ${widget.engine.currentClassId}!')),
         );
       }
     } catch (e) {
@@ -349,17 +371,21 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
 
     if (result == true && textController.text.trim().isNotEmpty) {
       try {
-        final count = await widget.engine.importClassroomRoster(textController.text.trim());
+        final count = await widget.engine
+            .importClassroomRoster(textController.text.trim());
         await _loadEnrolledStudents();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Successfully imported $count students into ${widget.engine.currentClassId}!')),
+            SnackBar(
+                content: Text(
+                    'Successfully imported $count students into ${widget.engine.currentClassId}!')),
           );
         }
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Import failed: Invalid roster format ($e)')),
+            SnackBar(
+                content: Text('Import failed: Invalid roster format ($e)')),
           );
         }
       }
@@ -387,7 +413,10 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
                     children: [
                       Text(
                         'Enrolled Students (${_enrolledStudents.length})',
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                        style: Theme.of(context)
+                            .textTheme
+                            .titleLarge
+                            ?.copyWith(fontWeight: FontWeight.bold),
                       ),
                       IconButton(
                         icon: const Icon(Icons.close_rounded),
@@ -399,7 +428,8 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
                   if (_enrolledStudents.isEmpty)
                     const Expanded(
                       child: Center(
-                        child: Text('No students enrolled yet.', style: TextStyle(color: Colors.grey)),
+                        child: Text('No students enrolled yet.',
+                            style: TextStyle(color: Colors.grey)),
                       ),
                     )
                   else
@@ -413,12 +443,17 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
                           final sName = s['name'] as String? ?? 'Unknown';
                           return ListTile(
                             leading: CircleAvatar(
-                              child: Text(sName.isNotEmpty ? sName[0].toUpperCase() : '?'),
+                              child: Text(sName.isNotEmpty
+                                  ? sName[0].toUpperCase()
+                                  : '?'),
                             ),
-                            title: Text(sName, style: const TextStyle(fontWeight: FontWeight.w600)),
+                            title: Text(sName,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w600)),
                             subtitle: Text('ID: $id'),
                             trailing: IconButton(
-                              icon: const Icon(Icons.delete_outline_rounded, color: Colors.red),
+                              icon: const Icon(Icons.delete_outline_rounded,
+                                  color: Colors.red),
                               tooltip: 'Delete $sName',
                               onPressed: () async {
                                 await _deleteIndividualStudent(id, sName);
@@ -463,7 +498,8 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
       await _loadEnrolledStudents();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('All enrolled faces cleared. Roster is fresh!')),
+          const SnackBar(
+              content: Text('All enrolled faces cleared. Roster is fresh!')),
         );
       }
     }
@@ -526,9 +562,11 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
                 value: 'clear',
                 child: Row(
                   children: [
-                    Icon(Icons.delete_sweep_rounded, size: 20, color: Colors.redAccent),
+                    Icon(Icons.delete_sweep_rounded,
+                        size: 20, color: Colors.redAccent),
                     SizedBox(width: 12),
-                    Text('Clear All Faces', style: TextStyle(color: Colors.redAccent)),
+                    Text('Clear All Faces',
+                        style: TextStyle(color: Colors.redAccent)),
                   ],
                 ),
               ),
@@ -546,25 +584,32 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
                 children: [
                   // Student Name Input in GlassCard
                   GlassCard(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
                     borderRadius: 18,
                     child: TextField(
                       controller: _nameController,
                       style: TextStyle(
                         fontWeight: FontWeight.w600,
-                        color: isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary,
+                        color: isDark
+                            ? AppTheme.darkTextPrimary
+                            : AppTheme.lightTextPrimary,
                       ),
                       decoration: InputDecoration(
-                        labelText: 'Student Name',
-                        labelStyle: TextStyle(
-                          color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
-                        ),
-                        hintText: 'e.g. Athish Pranav',
+                        hintText: 'Student Roll No (e.g. 23Z...)',
                         hintStyle: TextStyle(
-                          color: isDark ? AppTheme.darkTextSecondary.withOpacity(0.5) : AppTheme.lightTextSecondary.withOpacity(0.5),
+                          color: isDark
+                              ? AppTheme.darkTextSecondary
+                                  .withValues(alpha: 0.6)
+                              : AppTheme.lightTextSecondary
+                                  .withValues(alpha: 0.6),
+                          fontSize: 15,
                         ),
-                        prefixIcon: const Icon(Icons.person_rounded, color: AppTheme.discordPurple),
+                        prefixIcon: const Icon(Icons.badge_rounded,
+                            color: AppTheme.discordPurple),
                         border: InputBorder.none,
+                        contentPadding:
+                            const EdgeInsets.symmetric(vertical: 14),
                       ),
                       onChanged: (_) {
                         if (_error != null) setState(() => _error = null);
@@ -585,12 +630,15 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
                             child: Container(
                               padding: const EdgeInsets.symmetric(vertical: 8),
                               decoration: BoxDecoration(
-                                color: _isFaceIdMode ? AppTheme.discordPurple : Colors.transparent,
+                                color: _isFaceIdMode
+                                    ? AppTheme.discordPurple
+                                    : Colors.transparent,
                                 borderRadius: BorderRadius.circular(10),
                                 boxShadow: _isFaceIdMode
                                     ? [
                                         BoxShadow(
-                                          color: AppTheme.discordPurple.withOpacity(0.4),
+                                          color: AppTheme.discordPurple
+                                              .withOpacity(0.4),
                                           blurRadius: 10,
                                           offset: const Offset(0, 2),
                                         )
@@ -605,7 +653,11 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
                                     Icon(
                                       Icons.face_retouching_natural_rounded,
                                       size: 16,
-                                      color: _isFaceIdMode ? Colors.white : (isDark ? Colors.white60 : Colors.black54),
+                                      color: _isFaceIdMode
+                                          ? Colors.white
+                                          : (isDark
+                                              ? Colors.white60
+                                              : Colors.black54),
                                     ),
                                     const SizedBox(width: 6),
                                     Text(
@@ -613,7 +665,11 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
                                       style: TextStyle(
                                         fontSize: 12,
                                         fontWeight: FontWeight.bold,
-                                        color: _isFaceIdMode ? Colors.white : (isDark ? Colors.white70 : Colors.black87),
+                                        color: _isFaceIdMode
+                                            ? Colors.white
+                                            : (isDark
+                                                ? Colors.white70
+                                                : Colors.black87),
                                       ),
                                     ),
                                   ],
@@ -628,12 +684,15 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
                             child: Container(
                               padding: const EdgeInsets.symmetric(vertical: 8),
                               decoration: BoxDecoration(
-                                color: !_isFaceIdMode ? AppTheme.discordPurple : Colors.transparent,
+                                color: !_isFaceIdMode
+                                    ? AppTheme.discordPurple
+                                    : Colors.transparent,
                                 borderRadius: BorderRadius.circular(10),
                                 boxShadow: !_isFaceIdMode
                                     ? [
                                         BoxShadow(
-                                          color: AppTheme.discordPurple.withOpacity(0.4),
+                                          color: AppTheme.discordPurple
+                                              .withOpacity(0.4),
                                           blurRadius: 10,
                                           offset: const Offset(0, 2),
                                         )
@@ -648,7 +707,11 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
                                     Icon(
                                       Icons.camera_alt_rounded,
                                       size: 16,
-                                      color: !_isFaceIdMode ? Colors.white : (isDark ? Colors.white60 : Colors.black54),
+                                      color: !_isFaceIdMode
+                                          ? Colors.white
+                                          : (isDark
+                                              ? Colors.white60
+                                              : Colors.black54),
                                     ),
                                     const SizedBox(width: 6),
                                     Text(
@@ -656,7 +719,11 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
                                       style: TextStyle(
                                         fontSize: 12,
                                         fontWeight: FontWeight.bold,
-                                        color: !_isFaceIdMode ? Colors.white : (isDark ? Colors.white70 : Colors.black87),
+                                        color: !_isFaceIdMode
+                                            ? Colors.white
+                                            : (isDark
+                                                ? Colors.white70
+                                                : Colors.black87),
                                       ),
                                     ),
                                   ],
@@ -681,20 +748,24 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
                   if (_error != null) ...[
                     const SizedBox(height: 10),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 8),
                       decoration: BoxDecoration(
                         color: AppTheme.discordRed.withOpacity(0.15),
                         borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: AppTheme.discordRed.withOpacity(0.4)),
+                        border: Border.all(
+                            color: AppTheme.discordRed.withOpacity(0.4)),
                       ),
                       child: Row(
                         children: [
-                          const Icon(Icons.error_outline_rounded, color: AppTheme.discordRed, size: 18),
+                          const Icon(Icons.error_outline_rounded,
+                              color: AppTheme.discordRed, size: 18),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
                               _error!,
-                              style: const TextStyle(color: AppTheme.discordRed, fontSize: 12),
+                              style: const TextStyle(
+                                  color: AppTheme.discordRed, fontSize: 12),
                             ),
                           ),
                         ],
@@ -709,19 +780,31 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
                       children: [
                         FilledButton.icon(
                           style: FilledButton.styleFrom(
-                            backgroundColor: _faceIdStep == 2 ? AppTheme.discordGreen : AppTheme.discordPurple,
+                            backgroundColor: _faceIdStep == 2
+                                ? AppTheme.discordGreen
+                                : AppTheme.discordPurple,
                             foregroundColor: Colors.white,
                             minimumSize: const Size(double.infinity, 52),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16)),
                             elevation: 6,
-                            shadowColor: (_faceIdStep == 2 ? AppTheme.discordGreen : AppTheme.discordPurple).withOpacity(0.4),
+                            shadowColor: (_faceIdStep == 2
+                                    ? AppTheme.discordGreen
+                                    : AppTheme.discordPurple)
+                                .withOpacity(0.4),
                           ),
                           onPressed: _isProcessing ? null : _captureFaceIdPose,
                           icon: _isProcessing
-                              ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                      strokeWidth: 2, color: Colors.white))
                               : Icon(_faceIdStep == 0
                                   ? Icons.filter_center_focus_rounded
-                                  : (_faceIdStep == 1 ? Icons.arrow_back_rounded : Icons.arrow_forward_rounded)),
+                                  : (_faceIdStep == 1
+                                      ? Icons.arrow_back_rounded
+                                      : Icons.arrow_forward_rounded)),
                           label: Text(
                             _isProcessing
                                 ? 'Processing Angle…'
@@ -730,14 +813,19 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
                                     : (_faceIdStep == 1
                                         ? 'Capture Pose 2: Turn Left'
                                         : 'Capture Pose 3: Turn Right & Finish')),
-                            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                            style: const TextStyle(
+                                fontSize: 15, fontWeight: FontWeight.bold),
                           ),
                         ),
                         if (_faceIdStep > 0)
                           TextButton.icon(
                             onPressed: _isProcessing ? null : _resetFaceId,
-                            icon: const Icon(Icons.restart_alt_rounded, size: 16, color: AppTheme.discordPurple),
-                            label: const Text('Restart Face ID Scan', style: TextStyle(fontSize: 12, color: AppTheme.discordPurple)),
+                            icon: const Icon(Icons.restart_alt_rounded,
+                                size: 16, color: AppTheme.discordPurple),
+                            label: const Text('Restart Face ID Scan',
+                                style: TextStyle(
+                                    fontSize: 12,
+                                    color: AppTheme.discordPurple)),
                           ),
                       ],
                     )
@@ -747,15 +835,20 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
                         backgroundColor: AppTheme.discordPurple,
                         foregroundColor: Colors.white,
                         minimumSize: const Size(double.infinity, 52),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16)),
                         elevation: 6,
                         shadowColor: AppTheme.discordPurple.withOpacity(0.4),
                       ),
                       onPressed: _isProcessing ? null : _captureAndEnroll,
                       icon: _isProcessing
-                          ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2))
                           : const Icon(Icons.camera_alt_rounded),
-                      label: Text(_isProcessing ? 'Processing…' : 'Capture & Enroll'),
+                      label: Text(
+                          _isProcessing ? 'Processing…' : 'Capture & Enroll'),
                     ),
                 ],
               );
@@ -780,14 +873,16 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
             children: [
               CircularProgressIndicator(),
               SizedBox(height: 12),
-              Text('Starting camera...', style: TextStyle(color: Colors.white70, fontSize: 13)),
+              Text('Starting camera...',
+                  style: TextStyle(color: Colors.white70, fontSize: 13)),
             ],
           ),
         ),
       );
     }
 
-    final isBack = _cameras.isNotEmpty && _cameras[_cameraIndex].lensDirection == CameraLensDirection.back;
+    final isBack = _cameras.isNotEmpty &&
+        _cameras[_cameraIndex].lensDirection == CameraLensDirection.back;
     final stepPrompts = [
       'Look straight into the circle',
       'Turn your head slightly to the LEFT (~15°)',
@@ -809,22 +904,30 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
                 color: (isDark ? Colors.black : Colors.white).withOpacity(0.55),
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(
-                  color: isDark ? Colors.white.withOpacity(0.15) : AppTheme.discordPurple.withOpacity(0.2),
+                  color: isDark
+                      ? Colors.white.withOpacity(0.15)
+                      : AppTheme.discordPurple.withOpacity(0.2),
                 ),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(
-                    isBack ? Icons.camera_rear_rounded : Icons.camera_front_rounded,
-                    color: isBack ? AppTheme.discordPurple : AppTheme.discordYellow,
+                    isBack
+                        ? Icons.camera_rear_rounded
+                        : Icons.camera_front_rounded,
+                    color: isBack
+                        ? AppTheme.discordPurple
+                        : AppTheme.discordYellow,
                     size: 14,
                   ),
                   const SizedBox(width: 6),
                   Text(
                     isBack ? 'BACK CAMERA (HD)' : 'FRONT CAMERA',
                     style: TextStyle(
-                      color: isBack ? AppTheme.discordPurple : AppTheme.discordYellow,
+                      color: isBack
+                          ? AppTheme.discordPurple
+                          : AppTheme.discordYellow,
                       fontSize: 10,
                       fontWeight: FontWeight.bold,
                     ),
@@ -872,7 +975,10 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
             children: [
               Text(
                 'Step ${_faceIdStep + 1}/3: ',
-                style: const TextStyle(color: AppTheme.discordPurple, fontWeight: FontWeight.bold, fontSize: 11),
+                style: const TextStyle(
+                    color: AppTheme.discordPurple,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 11),
               ),
               Flexible(
                 child: Text(
@@ -928,11 +1034,14 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            _buildPoseBadge('1. Frontal', _faceIdEmbeddings.isNotEmpty, _faceIdStep == 0),
+            _buildPoseBadge(
+                '1. Frontal', _faceIdEmbeddings.isNotEmpty, _faceIdStep == 0),
             const SizedBox(width: 6),
-            _buildPoseBadge('2. Left 15°', _faceIdEmbeddings.length >= 2, _faceIdStep == 1),
+            _buildPoseBadge(
+                '2. Left 15°', _faceIdEmbeddings.length >= 2, _faceIdStep == 1),
             const SizedBox(width: 6),
-            _buildPoseBadge('3. Right 15°', _faceIdEmbeddings.length >= 3, _faceIdStep == 2),
+            _buildPoseBadge('3. Right 15°', _faceIdEmbeddings.length >= 3,
+                _faceIdStep == 2),
           ],
         ),
       ],
@@ -945,7 +1054,9 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
       decoration: BoxDecoration(
         color: isDone
             ? AppTheme.discordGreen.withOpacity(0.2)
-            : (isActive ? AppTheme.discordPurple.withOpacity(0.2) : Colors.black.withOpacity(0.3)),
+            : (isActive
+                ? AppTheme.discordPurple.withOpacity(0.2)
+                : Colors.black.withOpacity(0.3)),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: isDone
@@ -958,16 +1069,21 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
         mainAxisSize: MainAxisSize.min,
         children: [
           if (isDone)
-            const Icon(Icons.check_circle_rounded, color: AppTheme.discordGreen, size: 12)
+            const Icon(Icons.check_circle_rounded,
+                color: AppTheme.discordGreen, size: 12)
           else if (isActive)
-            const Icon(Icons.radio_button_checked_rounded, color: AppTheme.discordPurple, size: 12)
+            const Icon(Icons.radio_button_checked_rounded,
+                color: AppTheme.discordPurple, size: 12)
           else
-            const Icon(Icons.radio_button_unchecked_rounded, color: Colors.white38, size: 12),
+            const Icon(Icons.radio_button_unchecked_rounded,
+                color: Colors.white38, size: 12),
           const SizedBox(width: 4),
           Text(
             label,
             style: TextStyle(
-              color: isDone ? AppTheme.discordGreen : (isActive ? AppTheme.discordPurple : Colors.white54),
+              color: isDone
+                  ? AppTheme.discordGreen
+                  : (isActive ? AppTheme.discordPurple : Colors.white54),
               fontSize: 10,
               fontWeight: FontWeight.bold,
             ),
@@ -986,7 +1102,8 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
       return const Center(child: CircularProgressIndicator());
     }
 
-    final isBack = _cameras.isNotEmpty && _cameras[_cameraIndex].lensDirection == CameraLensDirection.back;
+    final isBack = _cameras.isNotEmpty &&
+        _cameras[_cameraIndex].lensDirection == CameraLensDirection.back;
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(16),
@@ -1002,7 +1119,8 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
               height: 250,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(100),
-                border: Border.all(color: Colors.white.withOpacity(0.5), width: 2),
+                border:
+                    Border.all(color: Colors.white.withOpacity(0.5), width: 2),
               ),
             ),
           ),
@@ -1016,7 +1134,8 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
                     color: Colors.black.withOpacity(0.6),
                     borderRadius: BorderRadius.circular(20),
@@ -1026,15 +1145,21 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(
-                        isBack ? Icons.camera_rear_rounded : Icons.camera_front_rounded,
-                        color: isBack ? AppTheme.discordPurple : AppTheme.discordYellow,
+                        isBack
+                            ? Icons.camera_rear_rounded
+                            : Icons.camera_front_rounded,
+                        color: isBack
+                            ? AppTheme.discordPurple
+                            : AppTheme.discordYellow,
                         size: 14,
                       ),
                       const SizedBox(width: 6),
                       Text(
                         isBack ? 'BACK CAMERA (HD)' : 'FRONT CAMERA',
                         style: TextStyle(
-                          color: isBack ? AppTheme.discordPurple : AppTheme.discordYellow,
+                          color: isBack
+                              ? AppTheme.discordPurple
+                              : AppTheme.discordYellow,
                           fontSize: 10,
                           fontWeight: FontWeight.bold,
                         ),
@@ -1051,7 +1176,8 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
                       shape: BoxShape.circle,
                       border: Border.all(color: Colors.white.withOpacity(0.3)),
                     ),
-                    child: const Icon(Icons.cameraswitch_rounded, color: Colors.white, size: 18),
+                    child: const Icon(Icons.cameraswitch_rounded,
+                        color: Colors.white, size: 18),
                   ),
                 ),
               ],
@@ -1094,8 +1220,10 @@ class FaceIdRingPainter extends CustomPainter {
 
     for (int i = 0; i < totalTicks; i++) {
       final angle = (i * 2 * pi / totalTicks) - (pi / 2);
-      final tickStart = Offset(center.dx + (radius - 12) * cos(angle), center.dy + (radius - 12) * sin(angle));
-      final tickEnd = Offset(center.dx + radius * cos(angle), center.dy + radius * sin(angle));
+      final tickStart = Offset(center.dx + (radius - 12) * cos(angle),
+          center.dy + (radius - 12) * sin(angle));
+      final tickEnd = Offset(
+          center.dx + radius * cos(angle), center.dy + radius * sin(angle));
 
       // 12 ticks per sector (0..11: Frontal, 12..23: Left, 24..35: Right)
       final sector = i ~/ 12;
@@ -1114,5 +1242,6 @@ class FaceIdRingPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(FaceIdRingPainter oldDelegate) =>
-      oldDelegate.completedPoses != completedPoses || oldDelegate.currentStep != currentStep;
+      oldDelegate.completedPoses != completedPoses ||
+      oldDelegate.currentStep != currentStep;
 }
