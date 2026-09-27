@@ -47,6 +47,7 @@ class ClassroomEngine {
 
   late String rosterDbPath;
   String currentClassId = 'CS101';
+  FacePose? lastEnrollmentPose;
 
   RosterDB? _rosterDb;
   YuNetDetector? _yunetDetector;
@@ -253,6 +254,7 @@ class ClassroomEngine {
       });
 
       final bestDet = scaledDetections.first;
+      lastEnrollmentPose = const FacePoseEstimator().estimatePose(bestDet);
       final embedding = await _arcfaceEmbedder!.extractEmbedding(frame, bestDet);
 
       await _rosterDb!.enrollStudent(RosterEntry(

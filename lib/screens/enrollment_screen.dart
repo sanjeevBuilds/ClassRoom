@@ -2,6 +2,7 @@ import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../modules/pose_estimation/face_pose.dart';
 import '../native/classroom_engine.dart';
 
 /// Enrollment screen — adds a student to the local roster from a captured
@@ -21,9 +22,12 @@ class EnrollmentScreen extends StatefulWidget {
 class _EnrollmentScreenState extends State<EnrollmentScreen> {
   final _nameController = TextEditingController();
   CameraController? _controller;
+  List<CameraDescription> _cameras = [];
+  int _cameraIndex = 0;
   bool _isProcessing = false;
   String? _error;
   List<Map<String, dynamic>> _enrolledStudents = [];
+  FacePose? _lastPose;
 
   @override
   void initState() {
@@ -39,20 +43,34 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
     } catch (_) {}
   }
 
-  Future<void> _initCamera() async {
+  Future<void> _initCamera([int? index]) async {
     final cameras = await availableCameras();
     if (cameras.isEmpty) {
       setState(() => _error = 'No camera found on this device.');
       return;
     }
-    final front = cameras.firstWhere(
-      (c) => c.lensDirection == CameraLensDirection.front,
-      orElse: () => cameras.first,
-    );
-    final controller = CameraController(front, ResolutionPreset.high, enableAudio: false);
+    _cameras = cameras;
+
+    if (index != null && index >= 0 && index < _cameras.length) {
+      _cameraIndex = index;
+    } else {
+      // Default to BACK camera for high-resolution 6-axis pose modeling
+      final backIdx = _cameras.indexWhere((c) => c.lensDirection == CameraLensDirection.back);
+      _cameraIndex = (backIdx != -1) ? backIdx : 0;
+    }
+
+    await _controller?.dispose();
+    final selectedCamera = _cameras[_cameraIndex];
+    final controller = CameraController(selectedCamera, ResolutionPreset.high, enableAudio: false);
     await controller.initialize();
     if (!mounted) return;
     setState(() => _controller = controller);
+  }
+
+  Future<void> _toggleCamera() async {
+    if (_cameras.length <= 1) return;
+    final nextIdx = (_cameraIndex + 1) % _cameras.length;
+    await _initCamera(nextIdx);
   }
 
   @override
@@ -98,9 +116,19 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
         return;
       }
 
+      _lastPose = widget.engine.lastEnrollmentPose;
       await _loadEnrolledStudents();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Enrolled $name.')));
+
+      final poseText = _lastPose != null
+          ? ' | Pose: Yaw ${_lastPose!.yaw.toStringAsFixed(0)}°, Pitch ${_lastPose!.pitch.toStringAsFixed(0)}°, Frontality: ${(_lastPose!.frontalityScore * 100).toStringAsFixed(0)}%'
+          : '';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Enrolled $name$poseText'),
+          backgroundColor: Colors.green.shade700,
+        ),
+      );
       _nameController.clear();
     } catch (e) {
       setState(() => _error = 'Enrollment failed: $e');
@@ -395,9 +423,129 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
     if (controller == null || !controller.value.isInitialized) {
       return const Center(child: CircularProgressIndicator());
     }
+
+    final isBack = _cameras.isNotEmpty && _cameras[_cameraIndex].lensDirection == CameraLensDirection.back;
+
     return ClipRRect(
-      borderRadius: BorderRadius.circular(12),
-      child: CameraPreview(controller),
+      borderRadius: BorderRadius.circular(16),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          CameraPreview(controller),
+
+          // Face Alignment Oval Guideline
+          Center(
+            child: Container(
+              width: 220,
+              height: 280,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(110),
+                border: Border.all(
+                  color: Colors.white.withOpacity(0.5),
+                  width: 2,
+                ),
+              ),
+            ),
+          ),
+
+          // Top Controls Overlay: Camera Badge & Flip Button
+          Positioned(
+            top: 12,
+            left: 12,
+            right: 12,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.6),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: Colors.white.withOpacity(0.2)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        isBack ? Icons.camera_rear_rounded : Icons.camera_front_rounded,
+                        color: isBack ? Colors.cyanAccent : Colors.orangeAccent,
+                        size: 14,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        isBack ? 'BACK CAMERA (6-AXIS HD)' : 'FRONT CAMERA',
+                        style: TextStyle(
+                          color: isBack ? Colors.cyanAccent : Colors.orangeAccent,
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                GestureDetector(
+                  onTap: _toggleCamera,
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.6),
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white.withOpacity(0.3)),
+                    ),
+                    child: const Icon(
+                      Icons.cameraswitch_rounded,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // 6-Axis Pose Telemetry Banner (if available)
+          if (_lastPose != null)
+            Positioned(
+              bottom: 12,
+              left: 12,
+              right: 12,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.75),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.cyanAccent.withOpacity(0.3)),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    Text(
+                      'Pitch: ${_lastPose!.pitch.toStringAsFixed(1)}°',
+                      style: const TextStyle(color: Colors.white70, fontSize: 11),
+                    ),
+                    Text(
+                      'Yaw: ${_lastPose!.yaw.toStringAsFixed(1)}°',
+                      style: const TextStyle(color: Colors.white70, fontSize: 11),
+                    ),
+                    Text(
+                      'Roll: ${_lastPose!.roll.toStringAsFixed(1)}°',
+                      style: const TextStyle(color: Colors.white70, fontSize: 11),
+                    ),
+                    Text(
+                      'Frontality: ${(_lastPose!.frontalityScore * 100).toStringAsFixed(0)}%',
+                      style: const TextStyle(
+                        color: Colors.cyanAccent,
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }
