@@ -435,22 +435,47 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
     );
   }
 
+  Future<void> _confirmClearRoster() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Clear All Enrolled Faces?'),
+        content: const Text(
+            'This will delete all previously enrolled student records so you can start completely fresh.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Clear All'),
+          ),
+        ],
+      ),
+    );
+    if (confirm == true) {
+      await widget.engine.clearRoster();
+      await _loadEnrolledStudents();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('All enrolled faces cleared. Roster is fresh!')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Enroll Student'),
+        titleSpacing: 0,
+        title: const Text(
+          'Enroll Student',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.ios_share_rounded),
-            tooltip: 'Export Classroom Roster',
-            onPressed: _exportRoster,
-          ),
-          IconButton(
-            icon: const Icon(Icons.file_download_rounded),
-            tooltip: 'Import Classroom Roster',
-            onPressed: _showImportDialog,
-          ),
           Badge(
             label: Text('${_enrolledStudents.length}'),
             isLabelVisible: _enrolledStudents.isNotEmpty,
@@ -460,39 +485,51 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
               onPressed: _showEnrolledListModal,
             ),
           ),
-          IconButton(
-            icon: const Icon(Icons.delete_sweep_rounded),
-            tooltip: 'Clear All Enrolled Faces',
-            onPressed: () async {
-              final confirm = await showDialog<bool>(
-                context: context,
-                builder: (ctx) => AlertDialog(
-                  title: const Text('Clear All Enrolled Faces?'),
-                  content: const Text(
-                      'This will delete all previously enrolled student records so you can start completely fresh.'),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(ctx, false),
-                      child: const Text('Cancel'),
-                    ),
-                    FilledButton(
-                      style: FilledButton.styleFrom(backgroundColor: Colors.red),
-                      onPressed: () => Navigator.pop(ctx, true),
-                      child: const Text('Clear All'),
-                    ),
-                  ],
-                ),
-              );
-              if (confirm == true) {
-                await widget.engine.clearRoster();
-                await _loadEnrolledStudents();
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('All enrolled faces cleared. Roster is fresh!')),
-                  );
-                }
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert_rounded),
+            tooltip: 'Roster Options',
+            onSelected: (action) {
+              if (action == 'export') {
+                _exportRoster();
+              } else if (action == 'import') {
+                _showImportDialog();
+              } else if (action == 'clear') {
+                _confirmClearRoster();
               }
             },
+            itemBuilder: (ctx) => [
+              const PopupMenuItem(
+                value: 'export',
+                child: Row(
+                  children: [
+                    Icon(Icons.ios_share_rounded, size: 20),
+                    SizedBox(width: 12),
+                    Text('Export Roster (JSON)'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'import',
+                child: Row(
+                  children: [
+                    Icon(Icons.file_download_rounded, size: 20),
+                    SizedBox(width: 12),
+                    Text('Import Roster'),
+                  ],
+                ),
+              ),
+              const PopupMenuDivider(),
+              const PopupMenuItem(
+                value: 'clear',
+                child: Row(
+                  children: [
+                    Icon(Icons.delete_sweep_rounded, size: 20, color: Colors.redAccent),
+                    SizedBox(width: 12),
+                    Text('Clear All Faces', style: TextStyle(color: Colors.redAccent)),
+                  ],
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -539,12 +576,13 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
                           ),
                           child: Center(
                             child: Row(
+                              mainAxisSize: MainAxisSize.min,
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
                                 Icon(Icons.face_retouching_natural_rounded, size: 16, color: _isFaceIdMode ? Colors.white : Colors.white60),
                                 const SizedBox(width: 6),
                                 Text(
-                                  '3D Face ID (3 Poses)',
+                                  '3D Face ID',
                                   style: TextStyle(
                                     fontSize: 12,
                                     fontWeight: FontWeight.bold,
@@ -568,6 +606,7 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
                           ),
                           child: Center(
                             child: Row(
+                              mainAxisSize: MainAxisSize.min,
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
                                 Icon(Icons.camera_alt_rounded, size: 16, color: !_isFaceIdMode ? Colors.white : Colors.white60),
@@ -592,10 +631,12 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
               const SizedBox(height: 16),
 
               // Camera Viewfinder (Face ID Circular Ring vs Standard Preview)
-              SizedBox(
-                height: 340,
-                child: _isFaceIdMode ? _buildFaceIdViewfinder() : _buildStandardCameraPreview(),
-              ),
+              _isFaceIdMode
+                  ? _buildFaceIdViewfinder()
+                  : SizedBox(
+                      height: 320,
+                      child: _buildStandardCameraPreview(),
+                    ),
 
               if (_error != null) ...[
                 const SizedBox(height: 10),
@@ -682,7 +723,19 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
       return Center(child: Text(_error!));
     }
     if (controller == null || !controller.value.isInitialized) {
-      return const Center(child: CircularProgressIndicator());
+      return const SizedBox(
+        height: 280,
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 12),
+              Text('Starting camera...', style: TextStyle(color: Colors.white70, fontSize: 13)),
+            ],
+          ),
+        ),
+      );
     }
 
     final isBack = _cameras.isNotEmpty && _cameras[_cameraIndex].lensDirection == CameraLensDirection.back;
@@ -692,35 +745,107 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
       'Turn your head slightly to the RIGHT (~15°)',
     ];
 
-    return Stack(
-      alignment: Alignment.center,
+    return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        // Camera Viewfinder masked in Circular Face ID Aperture
+        // Camera Lens Mode Indicator & Switch Camera
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.5),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: Colors.white.withOpacity(0.2)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    isBack ? Icons.camera_rear_rounded : Icons.camera_front_rounded,
+                    color: isBack ? Colors.cyanAccent : Colors.orangeAccent,
+                    size: 14,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    isBack ? 'BACK CAMERA (HD)' : 'FRONT CAMERA',
+                    style: TextStyle(
+                      color: isBack ? Colors.cyanAccent : Colors.orangeAccent,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Material(
+              color: Colors.black.withOpacity(0.5),
+              shape: const CircleBorder(),
+              child: InkWell(
+                customBorder: const CircleBorder(),
+                onTap: _toggleCamera,
+                child: const Padding(
+                  padding: EdgeInsets.all(8),
+                  child: Icon(Icons.cameraswitch_rounded, color: Colors.white, size: 18),
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+
+        // Guidance Prompt Pill (Separated, no overlap on ticks!)
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+          decoration: BoxDecoration(
+            color: Colors.black.withOpacity(0.65),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.cyanAccent.withOpacity(0.4)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Step ${_faceIdStep + 1}/3: ',
+                style: const TextStyle(color: Colors.cyanAccent, fontWeight: FontWeight.bold, fontSize: 11),
+              ),
+              Flexible(
+                child: Text(
+                  stepPrompts[_faceIdStep],
+                  style: const TextStyle(color: Colors.white, fontSize: 11),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // Apple Face ID Circular Aperture & 36-Tick Radial Ring
         Center(
           child: SizedBox(
-            width: 250,
-            height: 250,
+            width: 230,
+            height: 230,
             child: Stack(
               alignment: Alignment.center,
               children: [
                 ClipOval(
                   child: SizedBox(
-                    width: 210,
-                    height: 210,
+                    width: 194,
+                    height: 194,
                     child: FittedBox(
                       fit: BoxFit.cover,
                       child: SizedBox(
-                        width: controller.value.previewSize?.height ?? 210,
-                        height: controller.value.previewSize?.width ?? 210,
+                        width: controller.value.previewSize?.height ?? 194,
+                        height: controller.value.previewSize?.width ?? 194,
                         child: CameraPreview(controller),
                       ),
                     ),
                   ),
                 ),
-
-                // Apple Face ID 36-Tick Ring Painter
                 CustomPaint(
-                  size: const Size(246, 246),
+                  size: const Size(230, 230),
                   painter: FaceIdRingPainter(
                     completedPoses: _faceIdEmbeddings.length,
                     currentStep: _faceIdStep,
@@ -730,97 +855,18 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
             ),
           ),
         ),
+        const SizedBox(height: 14),
 
-        // Floating Camera Badge & Flip Toggle
-        Positioned(
-          top: 0,
-          left: 4,
-          right: 4,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.6),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: Colors.white.withOpacity(0.2)),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      isBack ? Icons.camera_rear_rounded : Icons.camera_front_rounded,
-                      color: isBack ? Colors.cyanAccent : Colors.orangeAccent,
-                      size: 14,
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      isBack ? 'BACK CAMERA (HD)' : 'FRONT CAMERA',
-                      style: TextStyle(
-                        color: isBack ? Colors.cyanAccent : Colors.orangeAccent,
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              GestureDetector(
-                onTap: _toggleCamera,
-                child: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.6),
-                    shape: BoxShape.circle,
-                    border: Border.all(color: Colors.white.withOpacity(0.3)),
-                  ),
-                  child: const Icon(Icons.cameraswitch_rounded, color: Colors.white, size: 18),
-                ),
-              ),
-            ],
-          ),
-        ),
-
-        // Guidance Prompt Pill at Top
-        Positioned(
-          top: 44,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-            decoration: BoxDecoration(
-              color: Colors.black.withOpacity(0.75),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.cyanAccent.withOpacity(0.4)),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'Step ${_faceIdStep + 1}/3: ',
-                  style: const TextStyle(color: Colors.cyanAccent, fontWeight: FontWeight.bold, fontSize: 11),
-                ),
-                Text(
-                  stepPrompts[_faceIdStep],
-                  style: const TextStyle(color: Colors.white, fontSize: 11),
-                ),
-              ],
-            ),
-          ),
-        ),
-
-        // Angle Pills at Bottom of Circle
-        Positioned(
-          bottom: 4,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _buildPoseBadge('1. Frontal', _faceIdEmbeddings.isNotEmpty, _faceIdStep == 0),
-              const SizedBox(width: 8),
-              _buildPoseBadge('2. Left 15°', _faceIdEmbeddings.length >= 2, _faceIdStep == 1),
-              const SizedBox(width: 8),
-              _buildPoseBadge('3. Right 15°', _faceIdEmbeddings.length >= 3, _faceIdStep == 2),
-            ],
-          ),
+        // Pose Status Badges
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            _buildPoseBadge('1. Frontal', _faceIdEmbeddings.isNotEmpty, _faceIdStep == 0),
+            const SizedBox(width: 6),
+            _buildPoseBadge('2. Left 15°', _faceIdEmbeddings.length >= 2, _faceIdStep == 1),
+            const SizedBox(width: 6),
+            _buildPoseBadge('3. Right 15°', _faceIdEmbeddings.length >= 3, _faceIdStep == 2),
+          ],
         ),
       ],
     );
@@ -828,7 +874,7 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
 
   Widget _buildPoseBadge(String label, bool isDone, bool isActive) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
         color: isDone
             ? const Color(0xFF10B981).withOpacity(0.2)
