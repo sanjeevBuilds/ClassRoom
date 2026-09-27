@@ -27,7 +27,13 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
-	<string>ClassRoom needs camera access to record a classroom sweep video for attendance. The video is processed entirely on this device and never leaves it.</string>
+	<string>ClassRoom needs camera access to record a classroom sweep video and enroll student faces. The video is processed entirely on this device and never leaves it.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>ClassRoom needs photo library access to export and save attendance CSV reports.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>ClassRoom needs permission to save exported attendance records to your photos.</string>
+	<key>NSMotionUsageDescription</key>
+	<string>ClassRoom uses the gyroscope to guide camera sweep speed and prevent motion blur.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
