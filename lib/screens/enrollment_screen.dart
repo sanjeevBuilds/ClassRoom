@@ -393,78 +393,139 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
   }
 
   void _showEnrolledListModal() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      backgroundColor: isDark ? AppTheme.darkSurface : AppTheme.lightSurface,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
       builder: (ctx) {
         return StatefulBuilder(
           builder: (modalCtx, setModalState) {
-            return Container(
-              padding: const EdgeInsets.all(20),
-              height: MediaQuery.of(context).size.height * 0.65,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'Enrolled Students (${_enrolledStudents.length})',
-                        style: Theme.of(context)
-                            .textTheme
-                            .titleLarge
-                            ?.copyWith(fontWeight: FontWeight.bold),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.close_rounded),
-                        onPressed: () => Navigator.pop(modalCtx),
-                      ),
-                    ],
-                  ),
-                  const Divider(),
-                  if (_enrolledStudents.isEmpty)
-                    const Expanded(
-                      child: Center(
-                        child: Text('No students enrolled yet.',
-                            style: TextStyle(color: Colors.grey)),
-                      ),
-                    )
-                  else
-                    Expanded(
-                      child: ListView.separated(
-                        itemCount: _enrolledStudents.length,
-                        separatorBuilder: (_, __) => const Divider(height: 1),
-                        itemBuilder: (_, i) {
-                          final s = _enrolledStudents[i];
-                          final id = s['student_id'] as String? ?? '';
-                          final sName = s['name'] as String? ?? 'Unknown';
-                          return ListTile(
-                            leading: CircleAvatar(
-                              child: Text(sName.isNotEmpty
-                                  ? sName[0].toUpperCase()
-                                  : '?'),
-                            ),
-                            title: Text(sName,
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.w600)),
-                            subtitle: Text('ID: $id'),
-                            trailing: IconButton(
-                              icon: const Icon(Icons.delete_outline_rounded,
-                                  color: Colors.red),
-                              tooltip: 'Delete $sName',
-                              onPressed: () async {
-                                await _deleteIndividualStudent(id, sName);
-                                setModalState(() {});
-                              },
-                            ),
-                          );
-                        },
+            return SafeArea(
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+                height: MediaQuery.of(context).size.height * 0.70,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: isDark ? Colors.white24 : Colors.black12,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
                       ),
                     ),
-                ],
+                    const SizedBox(height: 16),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Enrolled Students (${_enrolledStudents.length})',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary,
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close_rounded),
+                          color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                          onPressed: () => Navigator.pop(modalCtx),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    if (_enrolledStudents.isEmpty)
+                      Expanded(
+                        child: Center(
+                          child: Text(
+                            'No students enrolled yet.',
+                            style: TextStyle(
+                              color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                            ),
+                          ),
+                        ),
+                      )
+                    else
+                      Expanded(
+                        child: ListView.separated(
+                          itemCount: _enrolledStudents.length,
+                          separatorBuilder: (_, __) => const SizedBox(height: 8),
+                          itemBuilder: (_, i) {
+                            final s = _enrolledStudents[i];
+                            final id = s['student_id'] as String? ?? '';
+                            final sName = s['name'] as String? ?? 'Unknown';
+                            return GlassCard(
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                              borderRadius: 16,
+                              child: Row(
+                                children: [
+                                  CircleAvatar(
+                                    radius: 18,
+                                    backgroundColor: AppTheme.discordPurple.withValues(alpha: 0.18),
+                                    child: Text(
+                                      sName.isNotEmpty ? sName[0].toUpperCase() : '?',
+                                      style: const TextStyle(
+                                        color: AppTheme.discordPurple,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          sName,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.w600,
+                                            fontSize: 14,
+                                            color: isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          'ID: $id',
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(
+                                      Icons.delete_outline_rounded,
+                                      color: AppTheme.discordRed,
+                                      size: 20,
+                                    ),
+                                    tooltip: 'Delete $sName',
+                                    onPressed: () async {
+                                      await _deleteIndividualStudent(id, sName);
+                                      setModalState(() {});
+                                    },
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                  ],
+                ),
               ),
             );
           },

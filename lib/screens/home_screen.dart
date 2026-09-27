@@ -447,7 +447,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           
           SafeArea(
-            child: Padding(
+            child: SingleChildScrollView(
               padding: const EdgeInsets.symmetric(horizontal: 22.0, vertical: 12.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -743,83 +743,155 @@ class _HomeScreenState extends State<HomeScreen> {
                   const SizedBox(height: 22),
 
                   // Enrolled List Header
-                  Text(
-                    'Enrolled Students',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary,
-                    ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Enrolled Students',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary,
+                        ),
+                      ),
+                      if (enrolledStudents.isNotEmpty)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: AppTheme.discordPurple.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            '${enrolledStudents.length} Active',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: AppTheme.discordPurple,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                   const SizedBox(height: 12),
 
-                  // Dynamic List View with GlassCards
-                  Expanded(
-                    child: isLoading
-                        ? const Center(child: CircularProgressIndicator(color: AppTheme.discordPurple))
-                        : enrolledStudents.isEmpty
-                            ? Center(
+                  // Dynamic List View with GlassCards (Zero Overflow)
+                  if (isLoading)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 32),
+                      child: Center(child: CircularProgressIndicator(color: AppTheme.discordPurple)),
+                    )
+                  else if (enrolledStudents.isEmpty)
+                    GlassCard(
+                      padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 20),
+                      borderRadius: 18,
+                      child: Center(
+                        child: Text(
+                          'No students enrolled in $selectedClass yet.\nTap "Enroll Students" to add.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                            height: 1.4,
+                          ),
+                        ),
+                      ),
+                    )
+                  else
+                    ListView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      padding: EdgeInsets.zero,
+                      itemCount: enrolledStudents.length,
+                      itemBuilder: (context, index) {
+                        final s = enrolledStudents[index];
+                        final sName = s['name'] as String? ?? 'Unknown';
+                        final sId = s['student_id'] as String? ?? '';
+                        return GlassCard(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                          borderRadius: 18,
+                          margin: const EdgeInsets.only(bottom: 10),
+                          child: Row(
+                            children: [
+                              CircleAvatar(
+                                radius: 20,
+                                backgroundColor: AppTheme.discordPurple.withValues(alpha: 0.18),
                                 child: Text(
-                                  'No students enrolled in $selectedClass yet.',
-                                  style: TextStyle(
-                                    color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                                  sName.isNotEmpty ? sName[0].toUpperCase() : '?',
+                                  style: const TextStyle(
+                                    color: AppTheme.discordPurple,
+                                    fontWeight: FontWeight.bold,
                                   ),
                                 ),
-                              )
-                            : ListView.builder(
-                                padding: const EdgeInsets.only(bottom: 24),
-                                itemCount: enrolledStudents.length,
-                                itemBuilder: (context, index) {
-                                  final s = enrolledStudents[index];
-                                  final sName = s['name'] as String? ?? 'Unknown';
-                                  final sId = s['student_id'] as String? ?? '';
-                                  return GlassCard(
-                                    padding: EdgeInsets.zero,
-                                    borderRadius: 18,
-                                    margin: const EdgeInsets.only(bottom: 10),
-                                    child: ListTile(
-                                      leading: CircleAvatar(
-                                        backgroundColor: AppTheme.discordPurple.withOpacity(0.18),
-                                        child: Text(
-                                          sName.isNotEmpty ? sName[0].toUpperCase() : '?',
-                                          style: const TextStyle(
-                                            color: AppTheme.discordPurple,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                      ),
-                                      title: Text(
-                                        sName,
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.w600,
-                                          color: isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary,
-                                        ),
-                                      ),
-                                      subtitle: Text(
-                                        sId,
-                                        style: TextStyle(
-                                          color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
-                                          fontSize: 12,
-                                        ),
-                                      ),
-                                      trailing: IconButton(
-                                        icon: const Icon(
-                                          Icons.remove_circle_outline_rounded,
-                                          color: AppTheme.discordRed,
-                                          size: 20,
-                                        ),
-                                        onPressed: () async {
-                                          if (s['student_id'] != null) {
-                                            await ClassroomEngine.instance.deleteStudent(s['student_id']);
-                                            _loadStudents();
-                                          }
-                                        },
+                              ),
+                              const SizedBox(width: 14),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      sName,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 15,
+                                        color: isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary,
                                       ),
                                     ),
-                                  );
+                                    const SizedBox(height: 3),
+                                    Row(
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: AppTheme.discordPurple.withValues(alpha: 0.12),
+                                            borderRadius: BorderRadius.circular(6),
+                                          ),
+                                          child: const Text(
+                                            'Active Roster',
+                                            style: TextStyle(
+                                              color: AppTheme.discordPurple,
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Text(
+                                            'ID: $sId',
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(
+                                              color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                                              fontSize: 11,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              IconButton(
+                                icon: const Icon(
+                                  Icons.remove_circle_outline_rounded,
+                                  color: AppTheme.discordRed,
+                                  size: 20,
+                                ),
+                                tooltip: 'Remove Student',
+                                onPressed: () async {
+                                  if (s['student_id'] != null) {
+                                    await ClassroomEngine.instance.deleteStudent(s['student_id']);
+                                    _loadStudents();
+                                  }
                                 },
                               ),
-                  ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  const SizedBox(height: 36),
                 ],
               ),
             ),
