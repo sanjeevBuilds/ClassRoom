@@ -1,40 +1,45 @@
 import 'package:opencv_dart/opencv_dart.dart' as cv;
 
-/// Module 2: Homography Compensation (ORB + RANSAC)
+/// Module 2: Homography & Inter-Frame Camera Motion Estimation
 ///
-/// Owner: Teammate 2
-///
-/// Estimates inter-frame camera motion via feature point matching to map
-/// bounding boxes into a global (first-frame) reference coordinate system.
-/// Falls back to embedding-only clustering when RANSAC inlier count is too low.
+/// Estimates global camera panning motion between consecutive sweep video frames.
+/// Uses Phase Correlation (Fourier Shift Theorem) to compute sub-pixel
+/// inter-frame translational displacement (dx, dy).
 class HomographyEstimator {
-  final int minInliers;
+  final double minCorrelation;
 
-  HomographyEstimator({this.minInliers = 15});
+  HomographyEstimator({this.minCorrelation = 0.15});
 
-  /// Estimate homography H between two consecutive grayscale frames.
+  /// Estimates inter-frame camera displacement (dx, dy) between two consecutive frames.
   ///
-  /// Returns a record of (H_matrix, isValid).
-  /// When RANSAC inliers < [minInliers], returns (identity, false) —
-  /// downstream clustering falls back to embedding-only HAC.
-  ///
-  /// Implementation:
-  /// 1. ORB feature detection on both frames (nFeatures=500)
-  /// 2. BFMatcher with Hamming distance
-  /// 3. cv.findHomography with RANSAC
-  /// 4. Count inliers from the mask
-  (cv.Mat, bool) estimateHomography(cv.Mat prevGray, cv.Mat currGray) {
-    // TODO: Implement using opencv_dart
-    // final orb = cv.ORB.create(nFeatures: 500);
-    // final (kp1, des1) = orb.detectAndCompute(prevGray);
-    // final (kp2, des2) = orb.detectAndCompute(currGray);
-    // ... BFMatcher, findHomography, inlier check ...
-    throw UnimplementedError('Module 2: homography not yet implemented');
+  /// Returns (dx, dy, isValid).
+  /// If correlation confidence is below [minCorrelation], returns (0.0, 0.0, false).
+  (double, double, bool) estimateDisplacement(cv.Mat prevFrame, cv.Mat currFrame) {
+    try {
+      final prevGray = cv.cvtColor(prevFrame, cv.COLOR_BGR2GRAY);
+      final currGray = cv.cvtColor(currFrame, cv.COLOR_BGR2GRAY);
+
+      final prevF32 = prevGray.convertTo(cv.MatType.CV_32FC1);
+      final currF32 = currGray.convertTo(cv.MatType.CV_32FC1);
+
+      final (point, response) = cv.phaseCorrelate(prevF32, currF32);
+
+      prevGray.release();
+      currGray.release();
+      prevF32.release();
+      currF32.release();
+
+      if (response >= minCorrelation) {
+        return (point.x.toDouble(), point.y.toDouble(), true);
+      }
+      return (0.0, 0.0, false);
+    } catch (_) {
+      return (0.0, 0.0, false);
+    }
   }
 
-  /// Map a [x1, y1, x2, y2] bbox through homography H to global coords.
-  List<double> alignBboxToGlobal(List<double> bbox, cv.Mat h) {
-    // TODO: Implement perspective transform of bbox corners
-    throw UnimplementedError('Module 2: bbox alignment not yet implemented');
+  /// Maps a [x1, y1, x2, y2] bounding box by displacement (dx, dy).
+  List<double> warpBbox(List<double> bbox, double dx, double dy) {
+    return [bbox[0] + dx, bbox[1] + dy, bbox[2] + dx, bbox[3] + dy];
   }
 }

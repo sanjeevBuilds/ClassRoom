@@ -48,7 +48,17 @@ class FrameSampler {
         }
 
         if (nativeFrameIndex % step == 0) {
-          final lowres = cv.resize(mat, lowResSize);
+          int targetW, targetH;
+          if (mat.cols >= mat.rows) {
+            targetW = 640;
+            targetH = (640 * mat.rows / mat.cols).round();
+          } else {
+            targetH = 640;
+            targetW = (640 * mat.cols / mat.rows).round();
+          }
+          targetW = (targetW ~/ 2) * 2;
+          targetH = (targetH ~/ 2) * 2;
+          final lowres = cv.resize(mat, (targetW, targetH));
           frames.add({
             'frame_id': sampledFrameId,
             'timestamp_sec': nativeFps > 0 ? nativeFrameIndex / nativeFps : 0.0,

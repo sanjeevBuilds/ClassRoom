@@ -23,6 +23,7 @@ class Detection {
 
   /// Unique ID for this detection, e.g. "frame42_det0"
   String get detectionId => 'frame${frameId}_det$_detIndex';
+  int get detIndex => _detIndex;
   final int _detIndex;
 
   Detection({

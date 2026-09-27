@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'dart:typed_data';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
@@ -89,6 +90,80 @@ class RosterDB {
       ));
     }
     return entries;
+  }
+
+  /// Progressive Roster Learning: Updates or augments a student's stored reference
+  /// embeddings using an Exponential Moving Average (EMA) when matched with high confidence.
+  Future<void> updateStudentProgressiveEmbedding(
+    String studentId,
+    Float32List sweepEmbedding, {
+    double alpha = 0.10,
+    double maxMultiPoseDistance = 0.15,
+    String? dbPath,
+  }) async {
+    final db = await _getDb(dbPath);
+    final rows = await db.query(
+      'embeddings',
+      where: 'student_id = ?',
+      whereArgs: [studentId],
+    );
+
+    if (rows.isEmpty) return;
+
+    final currentVectors = rows
+        .map((r) => _bytesToFloat32List(r['embedding'] as Uint8List))
+        .toList();
+
+    // 1. Update the closest existing exemplar via EMA
+    int closestIdx = 0;
+    double maxSim = -1.0;
+    for (var i = 0; i < currentVectors.length; i++) {
+      final sim = _cosineSimilarity(currentVectors[i], sweepEmbedding);
+      if (sim > maxSim) {
+        maxSim = sim;
+        closestIdx = i;
+      }
+    }
+
+    final target = currentVectors[closestIdx];
+    final updated = Float32List(target.length);
+    double normSq = 0.0;
+    for (var i = 0; i < target.length; i++) {
+      final val = (1.0 - alpha) * target[i] + alpha * sweepEmbedding[i];
+      updated[i] = val;
+      normSq += val * val;
+    }
+    // L2-normalize
+    final invNorm = 1.0 / sqrt(max(normSq, 1e-12));
+    for (var i = 0; i < updated.length; i++) {
+      updated[i] *= invNorm;
+    }
+
+    final rowId = rows[closestIdx]['id'] as int;
+    await db.update(
+      'embeddings',
+      {'embedding': _float32ListToBytes(updated)},
+      where: 'id = ?',
+      whereArgs: [rowId],
+    );
+
+    // 2. Multi-pose exemplar caching: If similarity is moderate (different angle/lighting)
+    // and fewer than 3 exemplars exist, store as additional reference pose
+    if (maxSim < 0.92 && currentVectors.length < 3) {
+      await db.insert('embeddings', {
+        'student_id': studentId,
+        'embedding': _float32ListToBytes(sweepEmbedding),
+      });
+    }
+  }
+
+  static double _cosineSimilarity(Float32List a, Float32List b) {
+    double dot = 0.0;
+    final len = min(a.length, b.length);
+    for (var i = 0; i < len; i++) {
+      dot += a[i] * b[i];
+    }
+    return dot;
   }
 
   /// Delete a student and all of their reference embeddings.
