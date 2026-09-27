@@ -1,10 +1,11 @@
 import 'dart:async';
 import 'dart:math';
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 import '../native/classroom_engine.dart';
+import '../theme/app_theme.dart';
+import '../widgets/glass_card.dart';
 import 'processing_screen.dart';
 
 class CaptureScreen extends StatefulWidget {
@@ -95,11 +96,12 @@ class _CaptureScreenState extends State<CaptureScreen> {
   Widget build(BuildContext context) {
     if (_controller == null || !_controller!.value.isInitialized) {
       return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
+        backgroundColor: Colors.black,
+        body: Center(
+          child: CircularProgressIndicator(color: AppTheme.discordPurple),
+        ),
       );
     }
-
-    final theme = Theme.of(context);
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -116,41 +118,31 @@ class _CaptureScreenState extends State<CaptureScreen> {
                 opacity: _isMovingTooFast ? 1.0 : 0.0,
                 duration: const Duration(milliseconds: 200),
                 child: Container(
-                  color: theme.colorScheme.error.withOpacity(0.3),
+                  color: AppTheme.discordRed.withValues(alpha: 0.3),
                   child: Center(
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(20),
-                      child: BackdropFilter(
-                        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
-                          decoration: BoxDecoration(
-                            color: theme.colorScheme.error.withOpacity(0.8),
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(color: Colors.white.withOpacity(0.5), width: 2),
+                    child: GlassCard(
+                      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+                      borderColor: AppTheme.discordRed.withValues(alpha: 0.6),
+                      child: const Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.warning_amber_rounded, size: 64, color: AppTheme.discordRed),
+                          SizedBox(height: 16),
+                          Text(
+                            'SLOW DOWN',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 2,
+                            ),
                           ),
-                          child: const Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.warning_amber_rounded, size: 64, color: Colors.white),
-                              SizedBox(height: 16),
-                              Text(
-                                'SLOW DOWN',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 24,
-                                  fontWeight: FontWeight.bold,
-                                  letterSpacing: 2,
-                                ),
-                              ),
-                              SizedBox(height: 8),
-                              Text(
-                                'Panning too fast causes motion blur',
-                                style: TextStyle(color: Colors.white70),
-                              ),
-                            ],
+                          SizedBox(height: 8),
+                          Text(
+                            'Panning too fast causes motion blur',
+                            style: TextStyle(color: Colors.white70),
                           ),
-                        ),
+                        ],
                       ),
                     ),
                   ),
@@ -158,33 +150,61 @@ class _CaptureScreenState extends State<CaptureScreen> {
               ),
             ),
 
-          // Top Bar
+          // Top Controls Header
           Positioned(
             top: 0,
             left: 0,
             right: 0,
             child: SafeArea(
               child: Padding(
-                padding: const EdgeInsets.all(16.0),
+                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
                 child: Row(
                   children: [
-                    IconButton(
-                      icon: const Icon(Icons.close, color: Colors.white, size: 32),
-                      onPressed: () => Navigator.pop(context),
+                    GlassCard(
+                      padding: const EdgeInsets.all(4),
+                      borderRadius: 14,
+                      child: IconButton(
+                        icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 20),
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    GlassCard(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      borderRadius: 14,
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.panorama_photosphere_outlined,
+                            size: 16,
+                            color: _isRecording ? AppTheme.discordRed : AppTheme.discordPurple,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            _isRecording ? 'Sweeping Classroom…' : 'Sweep across classroom',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                     const Spacer(),
                     if (_isRecording)
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.error,
-                          borderRadius: BorderRadius.circular(20),
-                        ),
+                      GlassCard(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                        borderColor: AppTheme.discordRed.withValues(alpha: 0.5),
+                        borderRadius: 14,
                         child: const Row(
                           children: [
-                            Icon(Icons.fiber_manual_record, color: Colors.white, size: 16),
-                            SizedBox(width: 8),
-                            Text('REC', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                            Icon(Icons.fiber_manual_record, color: AppTheme.discordRed, size: 14),
+                            SizedBox(width: 6),
+                            Text(
+                              'REC',
+                              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                            ),
                           ],
                         ),
                       ),
@@ -208,22 +228,35 @@ class _CaptureScreenState extends State<CaptureScreen> {
                     GestureDetector(
                       onTap: _toggleRecording,
                       child: Container(
-                        width: 80,
-                        height: 80,
+                        width: 84,
+                        height: 84,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           border: Border.all(
-                            color: _isRecording ? theme.colorScheme.error : Colors.white,
+                            color: _isRecording ? AppTheme.discordRed : AppTheme.discordPurple,
                             width: 4,
                           ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: (_isRecording ? AppTheme.discordRed : AppTheme.discordPurple).withValues(alpha: 0.4),
+                              blurRadius: 20,
+                              spreadRadius: 2,
+                            ),
+                          ],
                         ),
                         child: Center(
-                          child: Container(
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
                             width: _isRecording ? 32 : 64,
                             height: _isRecording ? 32 : 64,
                             decoration: BoxDecoration(
-                              color: _isRecording ? theme.colorScheme.error : Colors.white,
+                              color: _isRecording ? AppTheme.discordRed : AppTheme.discordPurple,
                               borderRadius: BorderRadius.circular(_isRecording ? 8 : 32),
+                            ),
+                            child: Icon(
+                              _isRecording ? Icons.stop_rounded : Icons.videocam_rounded,
+                              color: Colors.white,
+                              size: _isRecording ? 20 : 30,
                             ),
                           ),
                         ),
@@ -239,3 +272,4 @@ class _CaptureScreenState extends State<CaptureScreen> {
     );
   }
 }
+

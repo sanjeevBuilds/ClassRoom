@@ -1,10 +1,10 @@
-import 'dart:ui';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import '../native/classroom_engine.dart';
+import '../theme/app_theme.dart';
+import '../widgets/glass_card.dart';
 import 'capture_screen.dart';
 import 'enrollment_screen.dart';
-import 'results_screen.dart' show BlurExtension;
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -16,7 +16,6 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   String selectedClass = 'CS101';
   List<String> classes = [];
-  
   List<Map<String, dynamic>> enrolledStudents = [];
   bool isLoading = true;
 
@@ -41,10 +40,15 @@ class _HomeScreenState extends State<HomeScreen> {
   void _autoSelectClassBasedOnTime() {
     if (classes.isEmpty) return;
     final hour = DateTime.now().hour;
-    if (hour < 10 && classes.contains('CS101')) selectedClass = 'CS101';
-    else if (hour < 14 && classes.contains('Math202')) selectedClass = 'Math202';
-    else if (classes.contains('Phy101')) selectedClass = 'Phy101';
-    else selectedClass = classes.first;
+    if (hour < 10 && classes.contains('CS101')) {
+      selectedClass = 'CS101';
+    } else if (hour < 14 && classes.contains('Math202')) {
+      selectedClass = 'Math202';
+    } else if (classes.contains('Phy101')) {
+      selectedClass = 'Phy101';
+    } else {
+      selectedClass = classes.first;
+    }
     ClassroomEngine.instance.switchClass(selectedClass);
   }
 
@@ -59,26 +63,52 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _addNewClass() async {
     final controller = TextEditingController();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     final newClass = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: Theme.of(context).colorScheme.surface,
-        title: const Text('Add New Class', style: TextStyle(color: Colors.white)),
+        backgroundColor: isDark ? AppTheme.darkSurface : AppTheme.lightSurface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: Text(
+          'Add New Class',
+          style: TextStyle(
+            color: isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
         content: TextField(
           controller: controller,
-          style: const TextStyle(color: Colors.white),
-          decoration: const InputDecoration(
+          style: TextStyle(color: isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary),
+          decoration: InputDecoration(
             hintText: 'e.g. Bio101',
-            hintStyle: TextStyle(color: Colors.white54),
+            hintStyle: TextStyle(color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary),
+            filled: true,
+            fillColor: AppTheme.discordPurple.withValues(alpha: 0.08),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+              borderSide: BorderSide(color: AppTheme.discordPurple.withValues(alpha: 0.3)),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+              borderSide: const BorderSide(color: AppTheme.discordPurple, width: 2),
+            ),
           ),
           autofocus: true,
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            child: Text(
+              'Cancel',
+              style: TextStyle(color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary),
+            ),
           ),
-          TextButton(
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: AppTheme.discordPurple,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
             onPressed: () {
               final val = controller.text.trim();
               if (val.isNotEmpty) Navigator.pop(context, val);
@@ -102,79 +132,131 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _showClassSelector() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      builder: (context) => Container(
+      builder: (context) => GlassCard(
+        borderRadius: 32,
         padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface.withOpacity(0.9),
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
-          border: Border.all(color: Colors.white.withOpacity(0.1)),
-        ),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2))),
-              const SizedBox(height: 24),
-              const Text('Select Classroom', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
-              const SizedBox(height: 16),
-              if (classes.isEmpty)
-                const Padding(padding: EdgeInsets.all(16.0), child: Text('No classes found', style: TextStyle(color: Colors.white54))),
-              ...classes.map((c) => ListTile(
-                title: Text(c, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
-                trailing: selectedClass == c ? Icon(Icons.check_circle, color: Theme.of(context).colorScheme.primary) : null,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                tileColor: selectedClass == c ? Theme.of(context).colorScheme.primary.withOpacity(0.1) : Colors.transparent,
-                onTap: () {
-                  Navigator.pop(context);
-                  setState(() => selectedClass = c);
-                  ClassroomEngine.instance.switchClass(selectedClass);
-                  _loadStudents();
-                },
-              )),
-              const SizedBox(height: 24),
-              ElevatedButton.icon(
-                onPressed: () {
-                  Navigator.pop(context);
-                  _addNewClass();
-                },
-                icon: const Icon(Icons.add),
-                label: const Text('Create New Class'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Theme.of(context).colorScheme.secondary,
-                  foregroundColor: Colors.white,
-                  minimumSize: const Size(double.infinity, 56),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                  elevation: 8,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 44,
+              height: 5,
+              decoration: BoxDecoration(
+                color: isDark ? Colors.white24 : Colors.black12,
+                borderRadius: BorderRadius.circular(3),
+              ),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              'Select Classroom',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary,
+              ),
+            ),
+            const SizedBox(height: 16),
+            if (classes.isEmpty)
+              Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Text(
+                  'No classes found',
+                  style: TextStyle(color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary),
                 ),
               ),
-              const SizedBox(height: 16),
-            ],
-          ),
+            ...classes.map((c) {
+              final isSelected = selectedClass == c;
+              return Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                decoration: BoxDecoration(
+                  color: isSelected ? AppTheme.discordPurple.withValues(alpha: 0.15) : Colors.transparent,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: isSelected ? AppTheme.discordPurple : Colors.transparent,
+                    width: 1.5,
+                  ),
+                ),
+                child: ListTile(
+                  title: Text(
+                    c,
+                    style: TextStyle(
+                      color: isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary,
+                      fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+                    ),
+                  ),
+                  trailing: isSelected ? const Icon(Icons.check_circle_rounded, color: AppTheme.discordPurple) : null,
+                  onTap: () {
+                    Navigator.pop(context);
+                    setState(() => selectedClass = c);
+                    ClassroomEngine.instance.switchClass(selectedClass);
+                    _loadStudents();
+                  },
+                ),
+              );
+            }),
+            const SizedBox(height: 16),
+            ElevatedButton.icon(
+              onPressed: () {
+                Navigator.pop(context);
+                _addNewClass();
+              },
+              icon: const Icon(Icons.add_rounded, color: Colors.white),
+              label: const Text('Create New Class', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.discordPurple,
+                minimumSize: const Size(double.infinity, 54),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                elevation: 4,
+                shadowColor: AppTheme.discordPurple.withValues(alpha: 0.4),
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
         ),
       ),
     );
   }
 
   Future<void> _clearDatabase() async {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: Theme.of(context).colorScheme.surface,
-        title: const Text('Clear Roster?', style: TextStyle(color: Colors.white)),
-        content: const Text('This will delete all enrolled students in this class.', style: TextStyle(color: Colors.white70)),
+        backgroundColor: isDark ? AppTheme.darkSurface : AppTheme.lightSurface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text(
+          'Clear $selectedClass Roster?',
+          style: TextStyle(
+            color: isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        content: Text(
+          'This will permanently delete all enrolled student biometric data for $selectedClass.',
+          style: TextStyle(color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+            child: Text(
+              'Cancel',
+              style: TextStyle(color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary),
+            ),
           ),
-          TextButton(
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: AppTheme.discordRed,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
             onPressed: () => Navigator.pop(context, true),
-            child: Text('Clear', style: TextStyle(color: Theme.of(context).colorScheme.error)),
+            child: const Text('Clear All'),
           ),
         ],
       ),
@@ -188,120 +270,147 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final primaryColor = theme.colorScheme.primary;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
+      backgroundColor: isDark ? AppTheme.darkScaffoldBg : AppTheme.lightScaffoldBg,
       body: Stack(
         children: [
-          // Background glowing orbs
+          // Background ambient lighting orbs
           Positioned(
-            top: -100,
-            left: -50,
-            child: Container(
-              width: 300,
-              height: 300,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: theme.colorScheme.secondary.withOpacity(0.15),
+            top: -80,
+            left: -60,
+            child: IgnorePointer(
+              child: Container(
+                width: 280,
+                height: 280,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: AppTheme.discordPurple.withValues(alpha: isDark ? 0.20 : 0.12),
+                ),
               ),
-            ).blurred(),
+            ),
           ),
           Positioned(
-            bottom: -50,
-            right: -50,
-            child: Container(
-              width: 250,
-              height: 250,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: primaryColor.withOpacity(0.15),
+            bottom: -60,
+            right: -60,
+            child: IgnorePointer(
+              child: Container(
+                width: 260,
+                height: 260,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: AppTheme.discordGreen.withValues(alpha: isDark ? 0.12 : 0.08),
+                ),
               ),
-            ).blurred(),
+            ),
           ),
-          
+
           SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 12.0),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 12.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // App Bar / Header
+                  // Responsive Top Navigation Bar
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      GestureDetector(
-                        onTap: _showClassSelector,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                          decoration: BoxDecoration(
-                            color: theme.colorScheme.surface.withOpacity(0.5),
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(color: Colors.white.withOpacity(0.1)),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              CircleAvatar(
-                                radius: 14,
-                                backgroundColor: primaryColor.withOpacity(0.2),
-                                child: Icon(Icons.class_, size: 14, color: primaryColor),
-                              ),
-                              const SizedBox(width: 12),
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Active Classroom',
-                                    style: TextStyle(fontSize: 10, color: Colors.white.withOpacity(0.5), fontWeight: FontWeight.w600),
+                      // Active Classroom Selector Chip
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: _showClassSelector,
+                          child: GlassCard(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            borderRadius: 18,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                CircleAvatar(
+                                  radius: 14,
+                                  backgroundColor: AppTheme.discordPurple.withValues(alpha: 0.18),
+                                  child: const Icon(Icons.school_rounded, size: 15, color: AppTheme.discordPurple),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        'ACTIVE CLASSROOM',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          fontSize: 9,
+                                          fontWeight: FontWeight.w700,
+                                          letterSpacing: 0.8,
+                                          color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                                        ),
+                                      ),
+                                      Text(
+                                        selectedClass,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.bold,
+                                          color: isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary,
+                                        ),
+                                      ),
+                                    ],
                                   ),
-                                  Text(
-                                    selectedClass,
-                                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(width: 12),
-                              Icon(Icons.keyboard_arrow_down_rounded, color: Colors.white.withOpacity(0.5)),
-                            ],
+                                ),
+                                const SizedBox(width: 4),
+                                Icon(
+                                  Icons.keyboard_arrow_down_rounded,
+                                  size: 20,
+                                  color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
-                      Row(
-                        children: [
-                          IconButton(
-                            icon: Icon(Icons.delete_sweep_rounded, color: theme.colorScheme.error.withOpacity(0.8)),
-                            onPressed: _clearDatabase,
-                            tooltip: 'Clear Database',
+                      const SizedBox(width: 8),
+
+                      // Theme Mode Switcher
+                      GlassCard(
+                        padding: const EdgeInsets.all(4),
+                        borderRadius: 14,
+                        child: IconButton(
+                          icon: Icon(
+                            isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+                            size: 20,
+                            color: isDark ? AppTheme.discordYellow : AppTheme.discordPurple,
                           ),
-                          const SizedBox(width: 8),
-                          CircleAvatar(
-                            radius: 20,
-                            backgroundColor: theme.colorScheme.surface,
-                            child: const Icon(Icons.school, color: Colors.white, size: 20),
-                          ),
-                        ],
+                          tooltip: isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode',
+                          onPressed: () {
+                            appThemeModeNotifier.value = isDark ? ThemeMode.light : ThemeMode.dark;
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+
+                      // Clear Database Button
+                      GlassCard(
+                        padding: const EdgeInsets.all(4),
+                        borderRadius: 14,
+                        child: IconButton(
+                          icon: const Icon(Icons.delete_sweep_rounded, color: AppTheme.discordRed, size: 20),
+                          onPressed: _clearDatabase,
+                          tooltip: 'Clear Roster',
+                        ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 24),
-                  
-                  // Dashboard Stats Card
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(24),
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.surface.withOpacity(0.5),
-                      borderRadius: BorderRadius.circular(30),
-                      border: Border.all(color: Colors.white.withOpacity(0.1)),
-                      boxShadow: [
-                        BoxShadow(
-                          color: primaryColor.withOpacity(0.1),
-                          blurRadius: 30,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
+                  const SizedBox(height: 20),
+
+                  // Hero Attendance Dashboard Card
+                  GlassCard(
+                    hasGlow: true,
+                    glowColor: AppTheme.discordPurple,
+                    padding: const EdgeInsets.all(22),
+                    borderRadius: 24,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -309,183 +418,356 @@ class _HomeScreenState extends State<HomeScreen> {
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Text(
-                              'Total Enrolled',
-                              style: theme.textTheme.bodyMedium?.copyWith(
-                                color: Colors.grey,
-                                fontWeight: FontWeight.w600,
+                              'ENROLLED ROSTER',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 1.2,
+                                color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
                               ),
                             ),
-                            Icon(Icons.people_alt_rounded, color: theme.colorScheme.secondary),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: AppTheme.discordGreen.withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Container(
+                                    width: 7,
+                                    height: 7,
+                                    decoration: const BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: AppTheme.discordGreen,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  const Text(
+                                    '100% On-Device',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: AppTheme.discordGreen,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                           ],
                         ),
-                        const SizedBox(height: 8),
-                        Text(
-                          isLoading ? '...' : '${enrolledStudents.length} Students',
-                          style: theme.textTheme.headlineMedium?.copyWith(
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
+                        const SizedBox(height: 14),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.baseline,
+                          textBaseline: TextBaseline.alphabetic,
+                          children: [
+                            Text(
+                              isLoading ? '…' : '${enrolledStudents.length}',
+                              style: TextStyle(
+                                fontSize: 44,
+                                fontWeight: FontWeight.w900,
+                                color: isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Text(
+                              'Students Active in $selectedClass',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                                color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 18),
 
-                  // Actions Grid (Fixed height)
-                  SizedBox(
-                    height: 120,
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: _buildActionCard(
-                            context,
-                            title: 'Take Attendance',
-                            icon: Icons.camera_alt_rounded,
-                            color: primaryColor,
-                            onTap: () async {
-                              final cameras = await availableCameras();
-                              if (cameras.isEmpty) {
-                                if (mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(content: Text('No camera found on this device.')),
-                                  );
-                                }
-                                return;
+                  // Actions Grid
+                  Row(
+                    children: [
+                      // Take Attendance
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () async {
+                            final cameras = await availableCameras();
+                            if (cameras.isEmpty) {
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('No camera found on this device.')),
+                                );
                               }
-                              if (!context.mounted) return;
-                              await Navigator.push(context, MaterialPageRoute(
-                                builder: (_) => CaptureScreen(cameras: cameras, engine: ClassroomEngine.instance),
-                              ));
-                            },
+                              return;
+                            }
+                            if (!context.mounted) return;
+                            await Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => CaptureScreen(
+                                  cameras: cameras,
+                                  engine: ClassroomEngine.instance,
+                                ),
+                              ),
+                            );
+                          },
+                          child: GlassCard(
+                            padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+                            borderRadius: 20,
+                            child: Column(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.discordPurple.withValues(alpha: 0.18),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(
+                                    Icons.videocam_rounded,
+                                    size: 28,
+                                    color: AppTheme.discordPurple,
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                Text(
+                                  'Take Attendance',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                    color: isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary,
+                                  ),
+                                ),
+                                const SizedBox(height: 3),
+                                Text(
+                                  'Handheld sweep video',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: _buildActionCard(
-                            context,
-                            title: 'Enroll Students',
-                            icon: Icons.person_add_rounded,
-                            color: theme.colorScheme.secondary,
-                            onTap: () async {
-                              await Navigator.push(context, MaterialPageRoute(
+                      ),
+                      const SizedBox(width: 14),
+
+                      // Enroll Students
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () async {
+                            await Navigator.push(
+                              context,
+                              MaterialPageRoute(
                                 builder: (_) => EnrollmentScreen(engine: ClassroomEngine.instance),
-                              ));
-                              _loadStudents();
-                            },
+                              ),
+                            );
+                            _loadStudents();
+                          },
+                          child: GlassCard(
+                            padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+                            borderRadius: 20,
+                            child: Column(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.discordGreen.withValues(alpha: 0.18),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(
+                                    Icons.face_retouching_natural_rounded,
+                                    size: 28,
+                                    color: AppTheme.discordGreen,
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                Text(
+                                  'Enroll Students',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                    color: isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary,
+                                  ),
+                                ),
+                                const SizedBox(height: 3),
+                                Text(
+                                  'Apple 3D Face ID multi-pose',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 22),
 
                   // Enrolled List Header
-                  Text(
-                    'Enrolled Students',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Enrolled Students',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary,
+                        ),
+                      ),
+                      if (enrolledStudents.isNotEmpty)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: AppTheme.discordPurple.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            '${enrolledStudents.length} Active',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: AppTheme.discordPurple,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                   const SizedBox(height: 12),
 
-                  // Dynamic List View
-                  Expanded(
-                    child: isLoading
-                        ? const Center(child: CircularProgressIndicator())
-                        : enrolledStudents.isEmpty
-                            ? Center(
+                  // Dynamic List View with GlassCards (Zero Overflow)
+                  if (isLoading)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 32),
+                      child: Center(child: CircularProgressIndicator(color: AppTheme.discordPurple)),
+                    )
+                  else if (enrolledStudents.isEmpty)
+                    GlassCard(
+                      padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 20),
+                      borderRadius: 18,
+                      child: Center(
+                        child: Text(
+                          'No students enrolled in $selectedClass yet.\nTap "Enroll Students" to add.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                            height: 1.4,
+                          ),
+                        ),
+                      ),
+                    )
+                  else
+                    ListView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      padding: EdgeInsets.zero,
+                      itemCount: enrolledStudents.length,
+                      itemBuilder: (context, index) {
+                        final s = enrolledStudents[index];
+                        final sName = s['name'] as String? ?? 'Unknown';
+                        final sId = s['student_id'] as String? ?? '';
+                        return GlassCard(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                          borderRadius: 18,
+                          margin: const EdgeInsets.only(bottom: 10),
+                          child: Row(
+                            children: [
+                              CircleAvatar(
+                                radius: 20,
+                                backgroundColor: AppTheme.discordPurple.withValues(alpha: 0.18),
                                 child: Text(
-                                  'No students enrolled in $selectedClass yet.',
-                                  style: TextStyle(color: Colors.white.withOpacity(0.5)),
+                                  sName.isNotEmpty ? sName[0].toUpperCase() : '?',
+                                  style: const TextStyle(
+                                    color: AppTheme.discordPurple,
+                                    fontWeight: FontWeight.bold,
+                                  ),
                                 ),
-                              )
-                            : ListView.builder(
-                                padding: const EdgeInsets.only(bottom: 24),
-                                itemCount: enrolledStudents.length,
-                                itemBuilder: (context, index) {
-                                  final s = enrolledStudents[index];
-                                  return Container(
-                                    margin: const EdgeInsets.only(bottom: 12),
-                                    decoration: BoxDecoration(
-                                      color: theme.colorScheme.surface.withOpacity(0.7),
-                                      borderRadius: BorderRadius.circular(16),
-                                      border: Border.all(color: Colors.white.withOpacity(0.05)),
+                              ),
+                              const SizedBox(width: 14),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      sName,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 15,
+                                        color: isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary,
+                                      ),
                                     ),
-                                    child: ListTile(
-                                      leading: CircleAvatar(
-                                        backgroundColor: primaryColor.withOpacity(0.2),
-                                        child: Text(
-                                          s['name'] != null ? s['name'].toString().substring(0, 1).toUpperCase() : '?',
-                                          style: TextStyle(color: primaryColor, fontWeight: FontWeight.bold),
+                                    const SizedBox(height: 3),
+                                    Row(
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: AppTheme.discordPurple.withValues(alpha: 0.12),
+                                            borderRadius: BorderRadius.circular(6),
+                                          ),
+                                          child: const Text(
+                                            'Active Roster',
+                                            style: TextStyle(
+                                              color: AppTheme.discordPurple,
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
                                         ),
-                                      ),
-                                      title: Text(
-                                        s['name'] ?? 'Unknown',
-                                        style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.white),
-                                      ),
-                                      subtitle: Text(
-                                        s['student_id'] ?? '',
-                                        style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 12),
-                                      ),
-                                      trailing: IconButton(
-                                        icon: const Icon(Icons.remove_circle_outline, color: Colors.redAccent, size: 20),
-                                        onPressed: () async {
-                                          if (s['student_id'] != null) {
-                                            await ClassroomEngine.instance.deleteStudent(s['student_id']);
-                                            _loadStudents();
-                                          }
-                                        },
-                                      ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Text(
+                                            'ID: $sId',
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(
+                                              color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                                              fontSize: 11,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                                  );
+                                  ],
+                                ),
+                              ),
+                              IconButton(
+                                icon: const Icon(
+                                  Icons.remove_circle_outline_rounded,
+                                  color: AppTheme.discordRed,
+                                  size: 20,
+                                ),
+                                tooltip: 'Remove Student',
+                                onPressed: () async {
+                                  if (s['student_id'] != null) {
+                                    await ClassroomEngine.instance.deleteStudent(s['student_id']);
+                                    _loadStudents();
+                                  }
                                 },
                               ),
-                  ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  const SizedBox(height: 36),
                 ],
               ),
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildActionCard(BuildContext context, {required String title, required IconData icon, required Color color, required VoidCallback onTap}) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: Colors.white.withOpacity(0.05)),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.2),
-              blurRadius: 15,
-              offset: const Offset(0, 5),
-            ),
-          ],
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: color.withOpacity(0.2),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(icon, size: 28, color: color),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              title,
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.white, fontSize: 13),
-            ),
-          ],
-        ),
       ),
     );
   }
