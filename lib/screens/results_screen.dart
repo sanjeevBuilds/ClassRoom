@@ -1,10 +1,11 @@
 import 'dart:io';
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import '../models/attendance_result.dart';
+import '../theme/app_theme.dart';
+import '../widgets/glass_card.dart';
 
 class ResultsScreen extends StatefulWidget {
   final List<AttendanceResult> initialResults;
@@ -65,197 +66,250 @@ class _ResultsScreenState extends State<ResultsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final primaryColor = theme.colorScheme.primary;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryTextColor = isDark ? const Color(0xFFF2F3F5) : const Color(0xFF23272A);
+    final secondaryTextColor = isDark ? Colors.white60 : Colors.black54;
 
     return Scaffold(
-      backgroundColor: theme.scaffoldBackgroundColor,
+      backgroundColor: isDark ? AppTheme.darkScaffoldBg : AppTheme.lightScaffoldBg,
       appBar: AppBar(
-        title: const Text('Attendance Results'),
+        title: Text(
+          'Attendance Results',
+          style: TextStyle(fontWeight: FontWeight.bold, color: primaryTextColor),
+        ),
         backgroundColor: Colors.transparent,
         elevation: 0,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.ios_share_rounded),
-            tooltip: 'Export as CSV',
-            onPressed: _exportCsv,
+          Padding(
+            padding: const EdgeInsets.only(right: 8.0),
+            child: IconButton(
+              icon: const Icon(Icons.ios_share_rounded, color: AppTheme.discordPurple),
+              tooltip: 'Export as CSV',
+              onPressed: _exportCsv,
+            ),
           ),
         ],
       ),
       body: Stack(
         children: [
-          // Background Glows
+          // Ambient blurred glow orbs
           Positioned(
-            top: -50,
-            right: -50,
-            child: Container(
-              width: 250,
-              height: 250,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: theme.colorScheme.secondary.withOpacity(0.15),
+            top: -40,
+            right: -40,
+            child: IgnorePointer(
+              child: Container(
+                width: 220,
+                height: 220,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: AppTheme.discordPurple.withValues(alpha: isDark ? 0.20 : 0.12),
+                ),
               ),
-            ).blurred(),
+            ),
           ),
-          
+          Positioned(
+            bottom: 80,
+            left: -50,
+            child: IgnorePointer(
+              child: Container(
+                width: 200,
+                height: 200,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: AppTheme.discordGreen.withValues(alpha: isDark ? 0.10 : 0.08),
+                ),
+              ),
+            ),
+          ),
+
           Column(
             children: [
               // Summary Header
               Padding(
-                padding: const EdgeInsets.all(24.0),
-                child: Container(
-                  padding: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.surface.withOpacity(0.6),
-                    borderRadius: BorderRadius.circular(30),
-                    border: Border.all(color: Colors.white.withOpacity(0.1)),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.2),
-                        blurRadius: 30,
-                        offset: const Offset(0, 10),
-                      ),
-                    ],
-                  ),
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+                child: GlassCard(
+                  hasGlow: true,
+                  glowColor: AppTheme.discordPurple,
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceAround,
                     children: [
-                      _buildStatColumn('Present', presentCount.toString(), primaryColor),
-                      Container(width: 1, height: 40, color: Colors.white.withOpacity(0.2)),
-                      _buildStatColumn('Absent', (_knownResults.length - presentCount).toString(), theme.colorScheme.error),
+                      _buildStatColumn('Present', presentCount.toString(), AppTheme.discordGreen, secondaryTextColor),
+                      Container(
+                        width: 1,
+                        height: 44,
+                        color: isDark ? Colors.white12 : Colors.black12,
+                      ),
+                      _buildStatColumn('Absent', (_knownResults.length - presentCount).toString(), AppTheme.discordRed, secondaryTextColor),
                     ],
                   ),
                 ),
               ),
-              
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 24.0),
+
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20.0),
                 child: Align(
                   alignment: Alignment.centerLeft,
                   child: Text(
-                    'Manual Overrides',
+                    'STUDENTS ATTENDANCE ROSTER',
                     style: TextStyle(
-                      color: Colors.grey,
-                      fontWeight: FontWeight.w600,
+                      color: secondaryTextColor,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
                       letterSpacing: 1.2,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+
+              // Search Field in Glass Container
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20.0),
+                child: GlassCard(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+                  child: TextField(
+                    onChanged: (value) => setState(() => _searchQuery = value),
+                    style: TextStyle(color: primaryTextColor),
+                    decoration: InputDecoration(
+                      hintText: 'Search students…',
+                      hintStyle: TextStyle(color: secondaryTextColor),
+                      prefixIcon: const Icon(Icons.search, color: AppTheme.discordPurple),
+                      border: InputBorder.none,
+                      contentPadding: const EdgeInsets.symmetric(vertical: 14),
                     ),
                   ),
                 ),
               ),
               const SizedBox(height: 12),
 
-              // Search Panel
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                child: TextField(
-                  onChanged: (value) => setState(() => _searchQuery = value),
-                  style: const TextStyle(color: Colors.white),
-                  decoration: InputDecoration(
-                    hintText: 'Search students…',
-                    hintStyle: TextStyle(color: Colors.white.withOpacity(0.4)),
-                    prefixIcon: Icon(Icons.search, color: Colors.white.withOpacity(0.6)),
-                    filled: true,
-                    fillColor: theme.colorScheme.surface.withOpacity(0.5),
-                    contentPadding: const EdgeInsets.symmetric(vertical: 0),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(16),
-                      borderSide: BorderSide.none,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-
               // Student List
               Expanded(
                 child: _filteredResults.isEmpty
                     ? Center(
                         child: Text(
-                          _searchQuery.isEmpty ? 'No students enrolled in this class.' : 'No students match "$_searchQuery".',
-                          style: TextStyle(color: Colors.white.withOpacity(0.5)),
+                          _searchQuery.isEmpty
+                              ? 'No students enrolled in this class.'
+                              : 'No students match "$_searchQuery".',
+                          style: TextStyle(color: secondaryTextColor),
                         ),
                       )
                     : ListView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-                  itemCount: _filteredResults.length,
-                  itemBuilder: (context, index) {
-                    final result = _filteredResults[index];
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+                        itemCount: _filteredResults.length,
+                        itemBuilder: (context, index) {
+                          final result = _filteredResults[index];
+                          final isPresent = _overrides[result.studentId!] ??
+                              (result.status == AttendanceStatus.present);
 
-                    final isPresent = _overrides[result.studentId!] ?? (result.status == AttendanceStatus.present);
-
-                    return Container(
-                      margin: const EdgeInsets.only(bottom: 16),
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.surface,
-                        borderRadius: BorderRadius.circular(20),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.1),
-                            blurRadius: 10,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: GlassCard(
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                              child: Row(
+                                children: [
+                                  CircleAvatar(
+                                    radius: 22,
+                                    backgroundColor: (isPresent ? AppTheme.discordGreen : AppTheme.discordPurple)
+                                        .withValues(alpha: 0.18),
+                                    child: Text(
+                                      result.name!.isNotEmpty
+                                          ? result.name!.substring(0, 1).toUpperCase()
+                                          : '?',
+                                      style: TextStyle(
+                                        color: isPresent ? AppTheme.discordGreen : AppTheme.discordPurple,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 16,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 14),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          result.name!,
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.w600,
+                                            fontSize: 15,
+                                            color: primaryTextColor,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 3),
+                                        Row(
+                                          children: [
+                                            Text(
+                                              result.studentId!,
+                                              style: TextStyle(fontSize: 12, color: secondaryTextColor),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                              decoration: BoxDecoration(
+                                                color: (isPresent ? AppTheme.discordGreen : AppTheme.discordRed)
+                                                    .withValues(alpha: 0.15),
+                                                borderRadius: BorderRadius.circular(6),
+                                              ),
+                                              child: Text(
+                                                isPresent ? 'PRESENT' : 'ABSENT',
+                                                style: TextStyle(
+                                                  color: isPresent ? AppTheme.discordGreen : AppTheme.discordRed,
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 10,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  Switch(
+                                    value: isPresent,
+                                    activeColor: AppTheme.discordPurple,
+                                    activeTrackColor: AppTheme.discordPurple.withValues(alpha: 0.4),
+                                    inactiveTrackColor: isDark ? Colors.white10 : Colors.black12,
+                                    inactiveThumbColor: Colors.grey,
+                                    onChanged: (value) {
+                                      setState(() {
+                                        _overrides[result.studentId!] = value;
+                                      });
+                                    },
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
                       ),
-                      child: ListTile(
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                        leading: CircleAvatar(
-                          backgroundColor: primaryColor.withOpacity(0.2),
-                          child: Text(
-                            result.name!.substring(0, 1).toUpperCase(),
-                            style: TextStyle(color: primaryColor, fontWeight: FontWeight.bold),
-                          ),
-                        ),
-                        title: Text(
-                          result.name!,
-                          style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.white),
-                        ),
-                        subtitle: Text(
-                          result.studentId!,
-                          style: TextStyle(color: Colors.white.withOpacity(0.5)),
-                        ),
-                        trailing: Switch(
-                          value: isPresent,
-                          activeColor: primaryColor,
-                          inactiveTrackColor: theme.colorScheme.surface,
-                          inactiveThumbColor: Colors.grey,
-                          onChanged: (value) {
-                            setState(() {
-                              _overrides[result.studentId!] = value;
-                            });
-                          },
-                        ),
-                      ),
-                    );
-                  },
-                ),
               ),
 
               if (_debugEntry != null)
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                  padding: const EdgeInsets.symmetric(horizontal: 20.0),
                   child: Theme(
                     data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
                     child: ExpansionTile(
                       tilePadding: EdgeInsets.zero,
-                      collapsedIconColor: Colors.white.withOpacity(0.5),
-                      iconColor: Colors.white.withOpacity(0.5),
-                      leading: Icon(Icons.analytics_outlined, size: 18, color: Colors.white.withOpacity(0.5)),
+                      collapsedIconColor: secondaryTextColor,
+                      iconColor: AppTheme.discordPurple,
+                      leading: Icon(Icons.analytics_outlined, size: 18, color: secondaryTextColor),
                       title: Text(
                         'Pipeline Telemetry',
-                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.white.withOpacity(0.5)),
+                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: secondaryTextColor),
                       ),
                       children: [
-                        Container(
-                          width: double.infinity,
+                        GlassCard(
                           padding: const EdgeInsets.all(12),
                           margin: const EdgeInsets.only(bottom: 8),
-                          decoration: BoxDecoration(
-                            color: theme.colorScheme.surface.withOpacity(0.5),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
                           child: Text(
                             _debugEntry!.name ?? '',
-                            style: TextStyle(fontSize: 12, fontFamily: 'monospace', color: Colors.white.withOpacity(0.6)),
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontFamily: 'monospace',
+                              color: secondaryTextColor,
+                            ),
                           ),
                         ),
                       ],
@@ -263,21 +317,24 @@ class _ResultsScreenState extends State<ResultsScreen> {
                   ),
                 ),
 
-              // Export Button
+              // Confirm & Save Button
               Padding(
-                padding: const EdgeInsets.all(24.0),
+                padding: const EdgeInsets.all(20.0),
                 child: SizedBox(
                   width: double.infinity,
-                  height: 56,
+                  height: 54,
                   child: ElevatedButton.icon(
-                    onPressed: () {
-                      // Navigate back or Export to CSV
-                      Navigator.pop(context);
-                    },
-                    icon: const Icon(Icons.check_circle_outline),
-                    label: const Text('Confirm & Save', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.check_circle_outline, color: Colors.white),
+                    label: const Text(
+                      'Confirm & Save',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+                    ),
                     style: ElevatedButton.styleFrom(
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                      backgroundColor: AppTheme.discordPurple,
+                      elevation: 4,
+                      shadowColor: AppTheme.discordPurple.withValues(alpha: 0.4),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                     ),
                   ),
                 ),
@@ -289,7 +346,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
     );
   }
 
-  Widget _buildStatColumn(String label, String value, Color color) {
+  Widget _buildStatColumn(String label, String value, Color color, Color secondaryTextColor) {
     return Column(
       children: [
         Text(
@@ -304,7 +361,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
         Text(
           label,
           style: TextStyle(
-            color: Colors.white.withOpacity(0.7),
+            color: secondaryTextColor,
             fontWeight: FontWeight.w500,
           ),
         ),
@@ -313,22 +370,3 @@ class _ResultsScreenState extends State<ResultsScreen> {
   }
 }
 
-extension BlurExtension on Widget {
-  Widget blurred({double sigma = 40.0}) {
-    return ImageFilterWidget(sigma: sigma, child: this);
-  }
-}
-
-class ImageFilterWidget extends StatelessWidget {
-  final Widget child;
-  final double sigma;
-  const ImageFilterWidget({super.key, required this.child, required this.sigma});
-
-  @override
-  Widget build(BuildContext context) {
-    return BackdropFilter(
-      filter: ImageFilter.blur(sigmaX: sigma, sigmaY: sigma),
-      child: child,
-    );
-  }
-}

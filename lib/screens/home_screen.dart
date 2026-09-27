@@ -3,9 +3,10 @@ import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 import '../native/classroom_engine.dart';
+import '../theme/app_theme.dart';
+import '../widgets/glass_card.dart';
 import 'capture_screen.dart';
 import 'enrollment_screen.dart';
-import 'results_screen.dart' show BlurExtension;
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -60,26 +61,52 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _addNewClass() async {
     final controller = TextEditingController();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     final newClass = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: Theme.of(context).colorScheme.surface,
-        title: const Text('Add New Class', style: TextStyle(color: Colors.white)),
+        backgroundColor: isDark ? AppTheme.darkSurface : AppTheme.lightSurface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: Text(
+          'Add New Class',
+          style: TextStyle(
+            color: isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
         content: TextField(
           controller: controller,
-          style: const TextStyle(color: Colors.white),
-          decoration: const InputDecoration(
+          style: TextStyle(color: isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary),
+          decoration: InputDecoration(
             hintText: 'e.g. Bio101',
-            hintStyle: TextStyle(color: Colors.white54),
+            hintStyle: TextStyle(color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary),
+            filled: true,
+            fillColor: AppTheme.discordPurple.withOpacity(0.08),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+              borderSide: BorderSide(color: AppTheme.discordPurple.withOpacity(0.3)),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+              borderSide: const BorderSide(color: AppTheme.discordPurple, width: 2),
+            ),
           ),
           autofocus: true,
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            child: Text(
+              'Cancel',
+              style: TextStyle(color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary),
+            ),
           ),
-          TextButton(
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: AppTheme.discordPurple,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
             onPressed: () {
               final val = controller.text.trim();
               if (val.isNotEmpty) Navigator.pop(context, val);
@@ -103,6 +130,8 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _showClassSelector() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -110,26 +139,56 @@ class _HomeScreenState extends State<HomeScreen> {
       builder: (context) => Container(
         padding: const EdgeInsets.all(24),
         decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface.withOpacity(0.9),
+          color: (isDark ? AppTheme.darkSurface : AppTheme.lightSurface).withOpacity(0.92),
           borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
-          border: Border.all(color: Colors.white.withOpacity(0.1)),
+          border: Border.all(
+            color: isDark ? Colors.white.withOpacity(0.12) : AppTheme.discordPurple.withOpacity(0.15),
+          ),
         ),
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2))),
-              const SizedBox(height: 24),
-              const Text('Select Classroom', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: isDark ? Colors.white24 : Colors.black12,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                'Select Classroom',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary,
+                ),
+              ),
               const SizedBox(height: 16),
               if (classes.isEmpty)
-                const Padding(padding: EdgeInsets.all(16.0), child: Text('No classes found', style: TextStyle(color: Colors.white54))),
+                Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Text(
+                    'No classes found',
+                    style: TextStyle(color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary),
+                  ),
+                ),
               ...classes.map((c) => ListTile(
-                title: Text(c, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
-                trailing: selectedClass == c ? Icon(Icons.check_circle, color: Theme.of(context).colorScheme.primary) : null,
+                title: Text(
+                  c,
+                  style: TextStyle(
+                    color: isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                trailing: selectedClass == c
+                    ? const Icon(Icons.check_circle_rounded, color: AppTheme.discordPurple)
+                    : null,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                tileColor: selectedClass == c ? Theme.of(context).colorScheme.primary.withOpacity(0.1) : Colors.transparent,
+                tileColor: selectedClass == c ? AppTheme.discordPurple.withOpacity(0.12) : Colors.transparent,
                 onTap: () {
                   Navigator.pop(context);
                   setState(() => selectedClass = c);
@@ -137,20 +196,19 @@ class _HomeScreenState extends State<HomeScreen> {
                   _loadStudents();
                 },
               )),
-              const SizedBox(height: 24),
-              ElevatedButton.icon(
+              const SizedBox(height: 20),
+              FilledButton.icon(
                 onPressed: () {
                   Navigator.pop(context);
                   _addNewClass();
                 },
-                icon: const Icon(Icons.add),
+                icon: const Icon(Icons.add_rounded),
                 label: const Text('Create New Class'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Theme.of(context).colorScheme.secondary,
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppTheme.discordPurple,
                   foregroundColor: Colors.white,
                   minimumSize: const Size(double.infinity, 50),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                  elevation: 8,
                 ),
               ),
               const SizedBox(height: 10),
@@ -165,8 +223,10 @@ class _HomeScreenState extends State<HomeScreen> {
                       icon: const Icon(Icons.share_rounded, size: 16),
                       label: const Text('Export Roster', style: TextStyle(fontSize: 12)),
                       style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.white,
-                        side: BorderSide(color: Colors.white.withOpacity(0.2)),
+                        foregroundColor: isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary,
+                        side: BorderSide(
+                          color: isDark ? Colors.white.withOpacity(0.2) : AppTheme.discordPurple.withOpacity(0.3),
+                        ),
                         padding: const EdgeInsets.symmetric(vertical: 12),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       ),
@@ -182,8 +242,10 @@ class _HomeScreenState extends State<HomeScreen> {
                       icon: const Icon(Icons.download_rounded, size: 16),
                       label: const Text('Import Roster', style: TextStyle(fontSize: 12)),
                       style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.white,
-                        side: BorderSide(color: Colors.white.withOpacity(0.2)),
+                        foregroundColor: isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary,
+                        side: BorderSide(
+                          color: isDark ? Colors.white.withOpacity(0.2) : AppTheme.discordPurple.withOpacity(0.3),
+                        ),
                         padding: const EdgeInsets.symmetric(vertical: 12),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       ),
@@ -199,45 +261,24 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Future<void> _clearDatabase() async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: Theme.of(context).colorScheme.surface,
-        title: const Text('Clear Roster?', style: TextStyle(color: Colors.white)),
-        content: const Text('This will delete all enrolled students in this class.', style: TextStyle(color: Colors.white70)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: Text('Clear', style: TextStyle(color: Theme.of(context).colorScheme.error)),
-          ),
-        ],
-      ),
-    );
-
-    if (confirm == true) {
-      await ClassroomEngine.instance.clearRoster();
-      await _loadStudents();
-    }
-  }
-
   Future<void> _exportCurrentRoster() async {
     if (enrolledStudents.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('No students in $selectedClass to export!')),
+        const SnackBar(content: Text('No students in this class to export! Enroll students first.')),
       );
       return;
     }
     try {
-      final file = await ClassroomEngine.instance.exportClassroomRoster(selectedClass);
+      final file = await ClassroomEngine.instance.exportClassroomRoster();
       await Share.shareXFiles(
         [XFile(file.path)],
-        text: 'Classroom Roster: $selectedClass (${enrolledStudents.length} Students)',
+        text: 'Classroom Roster Export: $selectedClass (${enrolledStudents.length} Students with 512-d Face Embeddings)',
       );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Exported ${enrolledStudents.length} students from $selectedClass!')),
+        );
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -247,30 +288,84 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  Future<void> _clearDatabase() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Clear Entire Database?'),
+        content: const Text(
+          'This will delete ALL classes, enrolled students, face embeddings, and attendance records across the entire app.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppTheme.discordRed),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Clear Everything'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      await ClassroomEngine.instance.clearAllData();
+      await _initData();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Entire database cleared. Fresh start!')),
+        );
+      }
+    }
+  }
+
   Future<void> _importRosterDialog() async {
     final textController = TextEditingController();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     final result = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: Theme.of(context).colorScheme.surface,
-        title: const Text('Import Classroom Roster', style: TextStyle(color: Colors.white)),
+        backgroundColor: isDark ? AppTheme.darkSurface : AppTheme.lightSurface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: Text(
+          'Import Classroom Roster',
+          style: TextStyle(
+            color: isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               'Paste the exported classroom JSON package to import all student profiles and face embeddings:',
-              style: TextStyle(fontSize: 13, color: Colors.white70),
+              style: TextStyle(
+                fontSize: 13,
+                color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+              ),
             ),
             const SizedBox(height: 12),
             TextField(
               controller: textController,
               maxLines: 6,
-              style: const TextStyle(color: Colors.white, fontSize: 12),
+              style: TextStyle(
+                color: isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary,
+                fontSize: 12,
+              ),
               decoration: InputDecoration(
                 hintText: '{"class_id": "CS101", "students": [...]}',
-                hintStyle: const TextStyle(color: Colors.white38),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                hintStyle: TextStyle(
+                  color: isDark ? AppTheme.darkTextSecondary.withOpacity(0.5) : AppTheme.lightTextSecondary.withOpacity(0.5),
+                ),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: const BorderSide(color: AppTheme.discordPurple, width: 2),
+                ),
               ),
             ),
           ],
@@ -278,9 +373,13 @@ class _HomeScreenState extends State<HomeScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel', style: TextStyle(color: Colors.white70)),
+            child: Text(
+              'Cancel',
+              style: TextStyle(color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary),
+            ),
           ),
           FilledButton.icon(
+            style: FilledButton.styleFrom(backgroundColor: AppTheme.discordPurple),
             icon: const Icon(Icons.file_download_done_rounded),
             label: const Text('Import'),
             onPressed: () => Navigator.pop(ctx, true),
@@ -316,40 +415,40 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final primaryColor = theme.colorScheme.primary;
+    final isDark = theme.brightness == Brightness.dark;
 
     return Scaffold(
       body: Stack(
         children: [
-          // Background glowing orbs
+          // Background ambient glowing orbs (Discord Purple)
           Positioned(
             top: -100,
             left: -50,
             child: Container(
-              width: 300,
-              height: 300,
+              width: 320,
+              height: 320,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: theme.colorScheme.secondary.withOpacity(0.15),
+                color: AppTheme.discordPurple.withOpacity(isDark ? 0.22 : 0.14),
               ),
-            ).blurred(),
+            ).blurred(blur: 50),
           ),
           Positioned(
-            bottom: -50,
-            right: -50,
+            bottom: -60,
+            right: -60,
             child: Container(
-              width: 250,
-              height: 250,
+              width: 280,
+              height: 280,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: primaryColor.withOpacity(0.15),
+                color: AppTheme.discordLightPurple.withOpacity(isDark ? 0.20 : 0.12),
               ),
-            ).blurred(),
+            ).blurred(blur: 50),
           ),
           
           SafeArea(
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 12.0),
+              padding: const EdgeInsets.symmetric(horizontal: 22.0, vertical: 12.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -357,94 +456,137 @@ class _HomeScreenState extends State<HomeScreen> {
                   Row(
                     children: [
                       Expanded(
-                        child: GestureDetector(
+                        child: GlassCard(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                          borderRadius: 20,
                           onTap: _showClassSelector,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                            decoration: BoxDecoration(
-                              color: theme.colorScheme.surface.withOpacity(0.5),
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(color: Colors.white.withOpacity(0.1)),
-                            ),
-                            child: Row(
-                              children: [
-                                CircleAvatar(
-                                  radius: 14,
-                                  backgroundColor: primaryColor.withOpacity(0.2),
-                                  child: Icon(Icons.class_, size: 14, color: primaryColor),
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Text(
-                                        'Active Classroom',
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: TextStyle(fontSize: 10, color: Colors.white.withOpacity(0.5), fontWeight: FontWeight.w600),
+                          child: Row(
+                            children: [
+                              CircleAvatar(
+                                radius: 14,
+                                backgroundColor: AppTheme.discordPurple.withValues(alpha: 0.18),
+                                child: const Icon(Icons.class_rounded, size: 14, color: AppTheme.discordPurple),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      'Active Classroom',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                                        fontWeight: FontWeight.w600,
                                       ),
-                                      Text(
-                                        selectedClass,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.white),
+                                    ),
+                                    Text(
+                                      selectedClass,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.bold,
+                                        color: isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary,
                                       ),
-                                    ],
-                                  ),
+                                    ),
+                                  ],
                                 ),
-                                const SizedBox(width: 4),
-                                Icon(Icons.keyboard_arrow_down_rounded, color: Colors.white.withOpacity(0.5), size: 18),
-                              ],
-                            ),
+                              ),
+                              const SizedBox(width: 4),
+                              Icon(
+                                Icons.keyboard_arrow_down_rounded,
+                                color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                                size: 18,
+                              ),
+                            ],
                           ),
                         ),
                       ),
-                      const SizedBox(width: 4),
-                      IconButton(
-                        icon: const Icon(Icons.share_rounded, color: Colors.white70, size: 20),
-                        onPressed: _exportCurrentRoster,
-                        tooltip: 'Export Classroom Roster',
-                        visualDensity: VisualDensity.compact,
+                      const SizedBox(width: 10),
+                      // Light / Dark Theme Switcher Button (Glass Card Pill)
+                      GlassCard(
+                        borderRadius: 18,
+                        padding: const EdgeInsets.all(4),
+                        child: IconButton(
+                          icon: Icon(
+                            isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+                            color: isDark ? AppTheme.discordYellow : AppTheme.discordPurple,
+                            size: 22,
+                          ),
+                          onPressed: () {
+                            appThemeModeNotifier.value = isDark ? ThemeMode.light : ThemeMode.dark;
+                          },
+                          tooltip: isDark ? 'Switch to Light Glass' : 'Switch to Dark Glass',
+                          visualDensity: VisualDensity.compact,
+                        ),
                       ),
-                      IconButton(
-                        icon: const Icon(Icons.file_download_rounded, color: Colors.white70, size: 20),
-                        onPressed: _importRosterDialog,
-                        tooltip: 'Import Classroom Roster',
-                        visualDensity: VisualDensity.compact,
-                      ),
-                      IconButton(
-                        icon: Icon(Icons.delete_sweep_rounded, color: theme.colorScheme.error.withOpacity(0.8)),
-                        onPressed: _clearDatabase,
-                        tooltip: 'Clear Database',
-                        visualDensity: VisualDensity.compact,
-                      ),
-                      CircleAvatar(
-                        radius: 18,
-                        backgroundColor: theme.colorScheme.surface,
-                        child: const Icon(Icons.school, color: Colors.white, size: 18),
+                      const SizedBox(width: 6),
+                      // More Options Menu in Glass Pill
+                      GlassCard(
+                        borderRadius: 18,
+                        padding: const EdgeInsets.all(4),
+                        child: PopupMenuButton<String>(
+                          icon: Icon(
+                            Icons.more_vert_rounded,
+                            color: isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary,
+                            size: 20,
+                          ),
+                          color: isDark ? AppTheme.darkSurface : AppTheme.lightSurface,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                          onSelected: (value) {
+                            if (value == 'export') _exportCurrentRoster();
+                            if (value == 'import') _importRosterDialog();
+                            if (value == 'clear') _clearDatabase();
+                          },
+                          itemBuilder: (ctx) => [
+                            PopupMenuItem(
+                              value: 'export',
+                              child: Row(
+                                children: [
+                                  Icon(Icons.share_rounded, size: 18, color: AppTheme.discordPurple),
+                                  const SizedBox(width: 10),
+                                  Text('Export Roster', style: TextStyle(color: isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary)),
+                                ],
+                              ),
+                            ),
+                            PopupMenuItem(
+                              value: 'import',
+                              child: Row(
+                                children: [
+                                  Icon(Icons.file_download_rounded, size: 18, color: AppTheme.discordLightPurple),
+                                  const SizedBox(width: 10),
+                                  Text('Import Roster', style: TextStyle(color: isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary)),
+                                ],
+                              ),
+                            ),
+                            const PopupMenuDivider(),
+                            PopupMenuItem(
+                              value: 'clear',
+                              child: Row(
+                                children: const [
+                                  Icon(Icons.delete_sweep_rounded, size: 18, color: AppTheme.discordRed),
+                                  SizedBox(width: 10),
+                                  Text('Clear Database', style: TextStyle(color: AppTheme.discordRed, fontWeight: FontWeight.bold)),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 20),
                   
-                  // Dashboard Stats Card
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(24),
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.surface.withOpacity(0.5),
-                      borderRadius: BorderRadius.circular(30),
-                      border: Border.all(color: Colors.white.withOpacity(0.1)),
-                      boxShadow: [
-                        BoxShadow(
-                          color: primaryColor.withOpacity(0.1),
-                          blurRadius: 30,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
+                  // Dashboard Stats Card (Glassmorphism + Glow)
+                  GlassCard(
+                    hasGlow: true,
+                    glowColor: AppTheme.discordPurple,
+                    padding: const EdgeInsets.all(22),
+                    borderRadius: 26,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -453,38 +595,52 @@ class _HomeScreenState extends State<HomeScreen> {
                           children: [
                             Text(
                               'Total Enrolled',
-                              style: theme.textTheme.bodyMedium?.copyWith(
-                                color: Colors.grey,
+                              style: TextStyle(
+                                fontSize: 14,
                                 fontWeight: FontWeight.w600,
+                                color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
                               ),
                             ),
-                            Icon(Icons.people_alt_rounded, color: theme.colorScheme.secondary),
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: AppTheme.discordPurple.withOpacity(0.15),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: const Icon(
+                                Icons.people_alt_rounded,
+                                color: AppTheme.discordPurple,
+                                size: 20,
+                              ),
+                            ),
                           ],
                         ),
-                        const SizedBox(height: 8),
+                        const SizedBox(height: 10),
                         Text(
                           isLoading ? '...' : '${enrolledStudents.length} Students',
-                          style: theme.textTheme.headlineMedium?.copyWith(
+                          style: TextStyle(
+                            fontSize: 30,
                             fontWeight: FontWeight.bold,
-                            color: Colors.white,
+                            color: isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary,
+                            letterSpacing: -0.5,
                           ),
                         ),
                       ],
                     ),
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 20),
 
-                  // Actions Grid (Fixed height)
+                  // Actions Grid (Take Attendance & Enroll Students)
                   SizedBox(
-                    height: 120,
+                    height: 140,
                     child: Row(
                       children: [
                         Expanded(
-                          child: _buildActionCard(
-                            context,
-                            title: 'Take Attendance',
-                            icon: Icons.camera_alt_rounded,
-                            color: primaryColor,
+                          child: GlassCard(
+                            hasGlow: true,
+                            glowColor: AppTheme.discordPurple,
+                            borderRadius: 22,
+                            padding: const EdgeInsets.all(12),
                             onTap: () async {
                               final cameras = await availableCameras();
                               if (cameras.isEmpty) {
@@ -500,47 +656,114 @@ class _HomeScreenState extends State<HomeScreen> {
                                 builder: (_) => CaptureScreen(cameras: cameras, engine: ClassroomEngine.instance),
                               ));
                             },
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    gradient: const LinearGradient(
+                                      colors: [AppTheme.discordPurple, AppTheme.discordDeepPurple],
+                                    ),
+                                    shape: BoxShape.circle,
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: AppTheme.discordPurple.withOpacity(0.4),
+                                        blurRadius: 12,
+                                        offset: const Offset(0, 4),
+                                      ),
+                                    ],
+                                  ),
+                                  child: const Icon(Icons.camera_alt_rounded, size: 24, color: Colors.white),
+                                ),
+                                const SizedBox(height: 10),
+                                Text(
+                                  'Take Attendance',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
-                        const SizedBox(width: 16),
+                        const SizedBox(width: 14),
                         Expanded(
-                          child: _buildActionCard(
-                            context,
-                            title: 'Enroll Students',
-                            icon: Icons.person_add_rounded,
-                            color: theme.colorScheme.secondary,
+                          child: GlassCard(
+                            hasGlow: true,
+                            glowColor: AppTheme.discordDeepPurple,
+                            borderRadius: 22,
+                            padding: const EdgeInsets.all(12),
                             onTap: () async {
                               await Navigator.push(context, MaterialPageRoute(
                                 builder: (_) => EnrollmentScreen(engine: ClassroomEngine.instance),
                               ));
                               _loadStudents();
                             },
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    gradient: const LinearGradient(
+                                      colors: [AppTheme.discordLightPurple, AppTheme.discordPurple],
+                                    ),
+                                    shape: BoxShape.circle,
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: AppTheme.discordLightPurple.withOpacity(0.4),
+                                        blurRadius: 12,
+                                        offset: const Offset(0, 4),
+                                      ),
+                                    ],
+                                  ),
+                                  child: const Icon(Icons.person_add_rounded, size: 24, color: Colors.white),
+                                ),
+                                const SizedBox(height: 10),
+                                Text(
+                                  'Enroll Students',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ],
                     ),
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 22),
 
                   // Enrolled List Header
                   Text(
                     'Enrolled Students',
-                    style: theme.textTheme.titleMedium?.copyWith(
+                    style: TextStyle(
+                      fontSize: 16,
                       fontWeight: FontWeight.bold,
-                      color: Colors.white,
+                      color: isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary,
                     ),
                   ),
                   const SizedBox(height: 12),
 
-                  // Dynamic List View
+                  // Dynamic List View with GlassCards
                   Expanded(
                     child: isLoading
-                        ? const Center(child: CircularProgressIndicator())
+                        ? const Center(child: CircularProgressIndicator(color: AppTheme.discordPurple))
                         : enrolledStudents.isEmpty
                             ? Center(
                                 child: Text(
                                   'No students enrolled in $selectedClass yet.',
-                                  style: TextStyle(color: Colors.white.withOpacity(0.5)),
+                                  style: TextStyle(
+                                    color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                                  ),
                                 ),
                               )
                             : ListView.builder(
@@ -548,31 +771,43 @@ class _HomeScreenState extends State<HomeScreen> {
                                 itemCount: enrolledStudents.length,
                                 itemBuilder: (context, index) {
                                   final s = enrolledStudents[index];
-                                  return Container(
-                                    margin: const EdgeInsets.only(bottom: 12),
-                                    decoration: BoxDecoration(
-                                      color: theme.colorScheme.surface.withOpacity(0.7),
-                                      borderRadius: BorderRadius.circular(16),
-                                      border: Border.all(color: Colors.white.withOpacity(0.05)),
-                                    ),
+                                  final sName = s['name'] as String? ?? 'Unknown';
+                                  final sId = s['student_id'] as String? ?? '';
+                                  return GlassCard(
+                                    padding: EdgeInsets.zero,
+                                    borderRadius: 18,
+                                    margin: const EdgeInsets.only(bottom: 10),
                                     child: ListTile(
                                       leading: CircleAvatar(
-                                        backgroundColor: primaryColor.withOpacity(0.2),
+                                        backgroundColor: AppTheme.discordPurple.withOpacity(0.18),
                                         child: Text(
-                                          s['name'] != null ? s['name'].toString().substring(0, 1).toUpperCase() : '?',
-                                          style: TextStyle(color: primaryColor, fontWeight: FontWeight.bold),
+                                          sName.isNotEmpty ? sName[0].toUpperCase() : '?',
+                                          style: const TextStyle(
+                                            color: AppTheme.discordPurple,
+                                            fontWeight: FontWeight.bold,
+                                          ),
                                         ),
                                       ),
                                       title: Text(
-                                        s['name'] ?? 'Unknown',
-                                        style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.white),
+                                        sName,
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w600,
+                                          color: isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary,
+                                        ),
                                       ),
                                       subtitle: Text(
-                                        s['student_id'] ?? '',
-                                        style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 12),
+                                        sId,
+                                        style: TextStyle(
+                                          color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                                          fontSize: 12,
+                                        ),
                                       ),
                                       trailing: IconButton(
-                                        icon: const Icon(Icons.remove_circle_outline, color: Colors.redAccent, size: 20),
+                                        icon: const Icon(
+                                          Icons.remove_circle_outline_rounded,
+                                          color: AppTheme.discordRed,
+                                          size: 20,
+                                        ),
                                         onPressed: () async {
                                           if (s['student_id'] != null) {
                                             await ClassroomEngine.instance.deleteStudent(s['student_id']);
@@ -590,45 +825,6 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildActionCard(BuildContext context, {required String title, required IconData icon, required Color color, required VoidCallback onTap}) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: Colors.white.withOpacity(0.05)),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.2),
-              blurRadius: 15,
-              offset: const Offset(0, 5),
-            ),
-          ],
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: color.withOpacity(0.2),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(icon, size: 28, color: color),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              title,
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.white, fontSize: 13),
-            ),
-          ],
-        ),
       ),
     );
   }

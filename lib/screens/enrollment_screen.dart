@@ -1,5 +1,6 @@
 import 'dart:math';
 import 'dart:typed_data';
+import 'dart:ui';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
@@ -7,6 +8,8 @@ import 'package:share_plus/share_plus.dart';
 import '../models/detection.dart';
 import '../modules/pose_estimation/face_pose.dart';
 import '../native/classroom_engine.dart';
+import '../theme/app_theme.dart';
+import '../widgets/glass_card.dart';
 
 /// Enrollment screen — adds a student to the local roster from a captured
 /// photo. MVP simplification: one reference photo per student, taken here
@@ -536,181 +539,227 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
       body: SingleChildScrollView(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          child: Column(
-            children: [
-              // Student Name Input
-              TextField(
-                controller: _nameController,
-                style: const TextStyle(fontWeight: FontWeight.w600),
-                decoration: InputDecoration(
-                  labelText: 'Student Name',
-                  hintText: 'e.g. Athish Pranav',
-                  prefixIcon: const Icon(Icons.person_rounded),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
-                  filled: true,
-                  fillColor: Theme.of(context).colorScheme.surface.withOpacity(0.5),
-                ),
-                onChanged: (_) {
-                  if (_error != null) setState(() => _error = null);
-                },
-              ),
-              const SizedBox(height: 12),
-
-              // Mode Toggle: Face ID (Apple-Style) vs Quick 1-Shot
-              Container(
-                decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.3),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                padding: const EdgeInsets.all(4),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: GestureDetector(
-                        onTap: () => setState(() => _isFaceIdMode = true),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(vertical: 8),
-                          decoration: BoxDecoration(
-                            color: _isFaceIdMode ? Theme.of(context).colorScheme.primary : Colors.transparent,
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Center(
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.face_retouching_natural_rounded, size: 16, color: _isFaceIdMode ? Colors.white : Colors.white60),
-                                const SizedBox(width: 6),
-                                Text(
-                                  '3D Face ID',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
-                                    color: _isFaceIdMode ? Colors.white : Colors.white60,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
+          child: Builder(
+            builder: (context) {
+              final isDark = Theme.of(context).brightness == Brightness.dark;
+              return Column(
+                children: [
+                  // Student Name Input in GlassCard
+                  GlassCard(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+                    borderRadius: 18,
+                    child: TextField(
+                      controller: _nameController,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary,
                       ),
+                      decoration: InputDecoration(
+                        labelText: 'Student Name',
+                        labelStyle: TextStyle(
+                          color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                        ),
+                        hintText: 'e.g. Athish Pranav',
+                        hintStyle: TextStyle(
+                          color: isDark ? AppTheme.darkTextSecondary.withOpacity(0.5) : AppTheme.lightTextSecondary.withOpacity(0.5),
+                        ),
+                        prefixIcon: const Icon(Icons.person_rounded, color: AppTheme.discordPurple),
+                        border: InputBorder.none,
+                      ),
+                      onChanged: (_) {
+                        if (_error != null) setState(() => _error = null);
+                      },
                     ),
-                    Expanded(
-                      child: GestureDetector(
-                        onTap: () => setState(() => _isFaceIdMode = false),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(vertical: 8),
-                          decoration: BoxDecoration(
-                            color: !_isFaceIdMode ? Theme.of(context).colorScheme.primary : Colors.transparent,
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Center(
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.camera_alt_rounded, size: 16, color: !_isFaceIdMode ? Colors.white : Colors.white60),
-                                const SizedBox(width: 6),
-                                Text(
-                                  'Quick 1-Shot',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
-                                    color: !_isFaceIdMode ? Colors.white : Colors.white60,
-                                  ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Mode Toggle: Face ID (Apple-Style) vs Quick 1-Shot
+                  GlassCard(
+                    padding: const EdgeInsets.all(4),
+                    borderRadius: 14,
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () => setState(() => _isFaceIdMode = true),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                              decoration: BoxDecoration(
+                                color: _isFaceIdMode ? AppTheme.discordPurple : Colors.transparent,
+                                borderRadius: BorderRadius.circular(10),
+                                boxShadow: _isFaceIdMode
+                                    ? [
+                                        BoxShadow(
+                                          color: AppTheme.discordPurple.withOpacity(0.4),
+                                          blurRadius: 10,
+                                          offset: const Offset(0, 2),
+                                        )
+                                      ]
+                                    : null,
+                              ),
+                              child: Center(
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      Icons.face_retouching_natural_rounded,
+                                      size: 16,
+                                      color: _isFaceIdMode ? Colors.white : (isDark ? Colors.white60 : Colors.black54),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      '3D Face ID',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                        color: _isFaceIdMode ? Colors.white : (isDark ? Colors.white70 : Colors.black87),
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                              ],
+                              ),
                             ),
                           ),
                         ),
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () => setState(() => _isFaceIdMode = false),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                              decoration: BoxDecoration(
+                                color: !_isFaceIdMode ? AppTheme.discordPurple : Colors.transparent,
+                                borderRadius: BorderRadius.circular(10),
+                                boxShadow: !_isFaceIdMode
+                                    ? [
+                                        BoxShadow(
+                                          color: AppTheme.discordPurple.withOpacity(0.4),
+                                          blurRadius: 10,
+                                          offset: const Offset(0, 2),
+                                        )
+                                      ]
+                                    : null,
+                              ),
+                              child: Center(
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      Icons.camera_alt_rounded,
+                                      size: 16,
+                                      color: !_isFaceIdMode ? Colors.white : (isDark ? Colors.white60 : Colors.black54),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      'Quick 1-Shot',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                        color: !_isFaceIdMode ? Colors.white : (isDark ? Colors.white70 : Colors.black87),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Camera Viewfinder (Face ID Circular Ring vs Standard Preview)
+                  _isFaceIdMode
+                      ? _buildFaceIdViewfinder()
+                      : SizedBox(
+                          height: 320,
+                          child: _buildStandardCameraPreview(),
+                        ),
+
+                  if (_error != null) ...[
+                    const SizedBox(height: 10),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: AppTheme.discordRed.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: AppTheme.discordRed.withOpacity(0.4)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.error_outline_rounded, color: AppTheme.discordRed, size: 18),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              _error!,
+                              style: const TextStyle(color: AppTheme.discordRed, fontSize: 12),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
-                ),
-              ),
-              const SizedBox(height: 16),
+                  const SizedBox(height: 16),
 
-              // Camera Viewfinder (Face ID Circular Ring vs Standard Preview)
-              _isFaceIdMode
-                  ? _buildFaceIdViewfinder()
-                  : SizedBox(
-                      height: 320,
-                      child: _buildStandardCameraPreview(),
-                    ),
-
-              if (_error != null) ...[
-                const SizedBox(height: 10),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: Colors.red.withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: Colors.red.withOpacity(0.4)),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.error_outline_rounded, color: Colors.redAccent, size: 18),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          _error!,
-                          style: const TextStyle(color: Colors.redAccent, fontSize: 12),
+                  // Action Buttons
+                  if (_isFaceIdMode)
+                    Column(
+                      children: [
+                        FilledButton.icon(
+                          style: FilledButton.styleFrom(
+                            backgroundColor: _faceIdStep == 2 ? AppTheme.discordGreen : AppTheme.discordPurple,
+                            foregroundColor: Colors.white,
+                            minimumSize: const Size(double.infinity, 52),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                            elevation: 6,
+                            shadowColor: (_faceIdStep == 2 ? AppTheme.discordGreen : AppTheme.discordPurple).withOpacity(0.4),
+                          ),
+                          onPressed: _isProcessing ? null : _captureFaceIdPose,
+                          icon: _isProcessing
+                              ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                              : Icon(_faceIdStep == 0
+                                  ? Icons.filter_center_focus_rounded
+                                  : (_faceIdStep == 1 ? Icons.arrow_back_rounded : Icons.arrow_forward_rounded)),
+                          label: Text(
+                            _isProcessing
+                                ? 'Processing Angle…'
+                                : (_faceIdStep == 0
+                                    ? 'Capture Pose 1: Frontal'
+                                    : (_faceIdStep == 1
+                                        ? 'Capture Pose 2: Turn Left'
+                                        : 'Capture Pose 3: Turn Right & Finish')),
+                            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-              const SizedBox(height: 16),
-
-              // Action Buttons
-              if (_isFaceIdMode)
-                Column(
-                  children: [
+                        if (_faceIdStep > 0)
+                          TextButton.icon(
+                            onPressed: _isProcessing ? null : _resetFaceId,
+                            icon: const Icon(Icons.restart_alt_rounded, size: 16, color: AppTheme.discordPurple),
+                            label: const Text('Restart Face ID Scan', style: TextStyle(fontSize: 12, color: AppTheme.discordPurple)),
+                          ),
+                      ],
+                    )
+                  else
                     FilledButton.icon(
                       style: FilledButton.styleFrom(
-                        backgroundColor: _faceIdStep == 2 ? const Color(0xFF10B981) : Theme.of(context).colorScheme.primary,
+                        backgroundColor: AppTheme.discordPurple,
+                        foregroundColor: Colors.white,
                         minimumSize: const Size(double.infinity, 52),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                        elevation: 6,
+                        shadowColor: AppTheme.discordPurple.withOpacity(0.4),
                       ),
-                      onPressed: _isProcessing ? null : _captureFaceIdPose,
+                      onPressed: _isProcessing ? null : _captureAndEnroll,
                       icon: _isProcessing
-                          ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                          : Icon(_faceIdStep == 0
-                              ? Icons.filter_center_focus_rounded
-                              : (_faceIdStep == 1 ? Icons.arrow_back_rounded : Icons.arrow_forward_rounded)),
-                      label: Text(
-                        _isProcessing
-                            ? 'Processing Angle…'
-                            : (_faceIdStep == 0
-                                ? 'Capture Pose 1: Frontal'
-                                : (_faceIdStep == 1
-                                    ? 'Capture Pose 2: Turn Left'
-                                    : 'Capture Pose 3: Turn Right & Finish')),
-                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-                      ),
+                          ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                          : const Icon(Icons.camera_alt_rounded),
+                      label: Text(_isProcessing ? 'Processing…' : 'Capture & Enroll'),
                     ),
-                    if (_faceIdStep > 0)
-                      TextButton.icon(
-                        onPressed: _isProcessing ? null : _resetFaceId,
-                        icon: const Icon(Icons.restart_alt_rounded, size: 16),
-                        label: const Text('Restart Face ID Scan', style: TextStyle(fontSize: 12)),
-                      ),
-                  ],
-                )
-              else
-                FilledButton.icon(
-                  style: FilledButton.styleFrom(
-                    minimumSize: const Size(double.infinity, 52),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                  ),
-                  onPressed: _isProcessing ? null : _captureAndEnroll,
-                  icon: _isProcessing
-                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                      : const Icon(Icons.camera_alt_rounded),
-                  label: Text(_isProcessing ? 'Processing…' : 'Capture & Enroll'),
-                ),
-            ],
+                ],
+              );
+            },
           ),
         ),
       ),
@@ -745,6 +794,8 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
       'Turn your head slightly to the RIGHT (~15°)',
     ];
 
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -755,23 +806,25 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
               decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.5),
+                color: (isDark ? Colors.black : Colors.white).withOpacity(0.55),
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: Colors.white.withOpacity(0.2)),
+                border: Border.all(
+                  color: isDark ? Colors.white.withOpacity(0.15) : AppTheme.discordPurple.withOpacity(0.2),
+                ),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(
                     isBack ? Icons.camera_rear_rounded : Icons.camera_front_rounded,
-                    color: isBack ? Colors.cyanAccent : Colors.orangeAccent,
+                    color: isBack ? AppTheme.discordPurple : AppTheme.discordYellow,
                     size: 14,
                   ),
                   const SizedBox(width: 6),
                   Text(
                     isBack ? 'BACK CAMERA (HD)' : 'FRONT CAMERA',
                     style: TextStyle(
-                      color: isBack ? Colors.cyanAccent : Colors.orangeAccent,
+                      color: isBack ? AppTheme.discordPurple : AppTheme.discordYellow,
                       fontSize: 10,
                       fontWeight: FontWeight.bold,
                     ),
@@ -780,14 +833,18 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
               ),
             ),
             Material(
-              color: Colors.black.withOpacity(0.5),
+              color: (isDark ? Colors.black : Colors.white).withOpacity(0.55),
               shape: const CircleBorder(),
               child: InkWell(
                 customBorder: const CircleBorder(),
                 onTap: _toggleCamera,
-                child: const Padding(
-                  padding: EdgeInsets.all(8),
-                  child: Icon(Icons.cameraswitch_rounded, color: Colors.white, size: 18),
+                child: Padding(
+                  padding: const EdgeInsets.all(8),
+                  child: Icon(
+                    Icons.cameraswitch_rounded,
+                    color: isDark ? Colors.white : Colors.black87,
+                    size: 18,
+                  ),
                 ),
               ),
             ),
@@ -799,21 +856,31 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
           decoration: BoxDecoration(
-            color: Colors.black.withOpacity(0.65),
+            color: (isDark ? Colors.black : Colors.white).withOpacity(0.75),
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: Colors.cyanAccent.withOpacity(0.4)),
+            border: Border.all(color: AppTheme.discordPurple.withOpacity(0.5)),
+            boxShadow: [
+              BoxShadow(
+                color: AppTheme.discordPurple.withOpacity(0.18),
+                blurRadius: 10,
+                offset: const Offset(0, 2),
+              ),
+            ],
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
                 'Step ${_faceIdStep + 1}/3: ',
-                style: const TextStyle(color: Colors.cyanAccent, fontWeight: FontWeight.bold, fontSize: 11),
+                style: const TextStyle(color: AppTheme.discordPurple, fontWeight: FontWeight.bold, fontSize: 11),
               ),
               Flexible(
                 child: Text(
                   stepPrompts[_faceIdStep],
-                  style: const TextStyle(color: Colors.white, fontSize: 11),
+                  style: TextStyle(
+                    color: isDark ? Colors.white : Colors.black87,
+                    fontSize: 11,
+                  ),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
@@ -877,13 +944,13 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
         color: isDone
-            ? const Color(0xFF10B981).withOpacity(0.2)
-            : (isActive ? Colors.cyanAccent.withOpacity(0.2) : Colors.black.withOpacity(0.4)),
+            ? AppTheme.discordGreen.withOpacity(0.2)
+            : (isActive ? AppTheme.discordPurple.withOpacity(0.2) : Colors.black.withOpacity(0.3)),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: isDone
-              ? const Color(0xFF10B981)
-              : (isActive ? Colors.cyanAccent : Colors.white24),
+              ? AppTheme.discordGreen
+              : (isActive ? AppTheme.discordPurple : Colors.white24),
           width: 1.5,
         ),
       ),
@@ -891,16 +958,16 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
         mainAxisSize: MainAxisSize.min,
         children: [
           if (isDone)
-            const Icon(Icons.check_circle_rounded, color: Color(0xFF10B981), size: 12)
+            const Icon(Icons.check_circle_rounded, color: AppTheme.discordGreen, size: 12)
           else if (isActive)
-            const Icon(Icons.radio_button_checked_rounded, color: Colors.cyanAccent, size: 12)
+            const Icon(Icons.radio_button_checked_rounded, color: AppTheme.discordPurple, size: 12)
           else
             const Icon(Icons.radio_button_unchecked_rounded, color: Colors.white38, size: 12),
           const SizedBox(width: 4),
           Text(
             label,
             style: TextStyle(
-              color: isDone ? const Color(0xFF10B981) : (isActive ? Colors.cyanAccent : Colors.white54),
+              color: isDone ? AppTheme.discordGreen : (isActive ? AppTheme.discordPurple : Colors.white54),
               fontSize: 10,
               fontWeight: FontWeight.bold,
             ),
@@ -960,14 +1027,14 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
                     children: [
                       Icon(
                         isBack ? Icons.camera_rear_rounded : Icons.camera_front_rounded,
-                        color: isBack ? Colors.cyanAccent : Colors.orangeAccent,
+                        color: isBack ? AppTheme.discordPurple : AppTheme.discordYellow,
                         size: 14,
                       ),
                       const SizedBox(width: 6),
                       Text(
                         isBack ? 'BACK CAMERA (HD)' : 'FRONT CAMERA',
                         style: TextStyle(
-                          color: isBack ? Colors.cyanAccent : Colors.orangeAccent,
+                          color: isBack ? AppTheme.discordPurple : AppTheme.discordYellow,
                           fontSize: 10,
                           fontWeight: FontWeight.bold,
                         ),
@@ -1016,12 +1083,12 @@ class FaceIdRingPainter extends CustomPainter {
       ..strokeCap = StrokeCap.round;
 
     final activePaint = Paint()
-      ..color = Colors.cyanAccent
+      ..color = AppTheme.discordPurple
       ..strokeWidth = 3.5
       ..strokeCap = StrokeCap.round;
 
     final completedPaint = Paint()
-      ..color = const Color(0xFF10B981) // Neon emerald green
+      ..color = AppTheme.discordGreen // Discord neon green
       ..strokeWidth = 4.0
       ..strokeCap = StrokeCap.round;
 

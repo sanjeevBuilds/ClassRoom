@@ -613,6 +613,11 @@ class ClassroomEngine {
     }
   }
 
+  /// Clears all database data for clean testing/reset.
+  Future<void> clearAllData() async {
+    await clearRoster();
+  }
+
   /// Exports the entire classroom roster (students + face embeddings) to a portable JSON file.
   Future<File> exportClassroomRoster([String? classId]) async {
     final targetClass = classId ?? currentClassId;
