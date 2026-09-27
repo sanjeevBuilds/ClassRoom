@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:opencv_dart/opencv_dart.dart' as cv;
@@ -267,6 +268,146 @@ class ClassroomEngine {
     } finally {
       frame.release();
     }
+  }
+
+  /// Processes a face photo, detects the face, computes 6-axis pose, and extracts
+  /// the 512-d ArcFace embedding. Returns null if no face is detected.
+  Future<Embedding?> processFacePhoto(String photoPath) async {
+    if (_yunetDetector == null || _arcfaceEmbedder == null || _rosterDb == null) {
+      await _initPipeline();
+    }
+
+    var frame = cv.imread(photoPath);
+    if (frame.isEmpty) {
+      frame.release();
+      return null;
+    }
+
+    try {
+      int detW, detH;
+      if (frame.cols >= frame.rows) {
+        detW = 640;
+        detH = (640 * frame.rows / frame.cols).round();
+      } else {
+        detH = 640;
+        detW = (640 * frame.cols / frame.rows).round();
+      }
+      detW = (detW ~/ 2) * 2;
+      detH = (detH ~/ 2) * 2;
+
+      final detFrame = cv.resize(frame, (detW, detH));
+
+      List<Detection> detections = await _yunetDetector!.detect(
+        detFrame,
+        frameId: 0,
+        timestampSec: 0.0,
+      );
+
+      int rotationCode = -1;
+      if (detections.isEmpty) {
+        final candidateRotations = [
+          cv.ROTATE_90_CLOCKWISE,
+          cv.ROTATE_90_COUNTERCLOCKWISE,
+          cv.ROTATE_180,
+        ];
+        for (final rot in candidateRotations) {
+          final rotatedDet = cv.rotate(detFrame, rot);
+          final dets = await _yunetDetector!.detect(
+            rotatedDet,
+            frameId: 0,
+            timestampSec: 0.0,
+          );
+          rotatedDet.release();
+
+          if (dets.isNotEmpty) {
+            detections = dets;
+            rotationCode = rot;
+            break;
+          }
+        }
+      }
+
+      if (rotationCode != -1) {
+        final rotatedFull = cv.rotate(frame, rotationCode);
+        frame.release();
+        frame = rotatedFull;
+        final oldW = detW;
+        detW = (rotationCode == cv.ROTATE_180) ? detW : detH;
+        detH = (rotationCode == cv.ROTATE_180) ? detH : oldW;
+      }
+      detFrame.release();
+
+      if (detections.isEmpty) {
+        final haar = HaarCascadeDetector();
+        try {
+          await haar.init('assets/models/haarcascade_frontalface_default.xml');
+          final downscaled = cv.resize(frame, (detW, detH));
+          detections = await haar.detect(downscaled, frameId: 0, timestampSec: 0.0);
+          downscaled.release();
+        } catch (_) {}
+      }
+
+      if (detections.isEmpty) {
+        return null;
+      }
+
+      final scaleX = frame.cols / detW;
+      final scaleY = frame.rows / detH;
+
+      final scaledDetections = detections.map((d) {
+        final scaledBbox = [
+          d.bbox[0] * scaleX,
+          d.bbox[1] * scaleY,
+          d.bbox[2] * scaleX,
+          d.bbox[3] * scaleY,
+        ];
+        List<List<double>>? scaledLms;
+        if (d.landmarks != null) {
+          scaledLms = d.landmarks!.map((pt) => [pt[0] * scaleX, pt[1] * scaleY]).toList();
+        }
+        return Detection(
+          frameId: d.frameId,
+          timestampSec: d.timestampSec,
+          bbox: scaledBbox,
+          confidence: d.confidence,
+          detector: d.detector,
+          detIndex: d.detIndex,
+          landmarks: scaledLms,
+        );
+      }).toList();
+
+      scaledDetections.sort((a, b) {
+        final areaA = (a.bbox[2] - a.bbox[0]) * (a.bbox[3] - a.bbox[1]);
+        final areaB = (b.bbox[2] - b.bbox[0]) * (b.bbox[3] - b.bbox[1]);
+        return areaB.compareTo(areaA);
+      });
+
+      final bestDet = scaledDetections.first;
+      lastEnrollmentPose = const FacePoseEstimator().estimatePose(bestDet);
+      final embedding = await _arcfaceEmbedder!.extractEmbedding(frame, bestDet);
+      return embedding;
+    } catch (_) {
+      return null;
+    } finally {
+      frame.release();
+    }
+  }
+
+  /// Enrolls a student into the roster with multiple reference pose embeddings (e.g. Face ID Frontal, Left, Right).
+  Future<bool> enrollStudentWithEmbeddings({
+    required String studentId,
+    required String name,
+    required List<Float32List> embeddings,
+  }) async {
+    if (_rosterDb == null) {
+      await _initPipeline();
+    }
+    await _rosterDb!.enrollStudent(RosterEntry(
+      studentId: studentId,
+      name: name,
+      referenceEmbeddings: embeddings,
+    ));
+    return true;
   }
 
   /// Runs the full enhanced pipeline on a recorded sweep video:
