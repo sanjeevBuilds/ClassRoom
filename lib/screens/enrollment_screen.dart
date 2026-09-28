@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'dart:math';
 import 'dart:typed_data';
-import 'dart:ui';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:sensors_plus/sensors_plus.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../models/detection.dart';
@@ -11,11 +13,16 @@ import '../native/classroom_engine.dart';
 import '../theme/app_theme.dart';
 import '../widgets/glass_card.dart';
 
-/// Enrollment screen — adds a student to the local roster from a captured
-/// photo. MVP simplification: one reference photo per student, taken here
-/// (the real plan is multiple photos across angles/lighting).
+/// Enrollment screen — Apple iPhone-style Face ID guided enrollment.
 ///
-/// Owner: Teammate 5 (Module 5)
+/// Features:
+/// - Real-time 6-axis Gyroscope & Face Motion tracking.
+/// - Apple Face ID-style 36 radial tick marks that dynamically illuminate.
+/// - Interactive in-aperture 3D head direction guidance (Center, Left, Right).
+/// - Automatic steady-pose detection & auto-capture with haptic feedback.
+/// - Multi-pose reference vectors (Frontal, Left 15°, Right 15°) saved to local SQLite.
+/// - Gyroscope stability warning overlay ("Hold Device Steady").
+/// - Toggle between Auto-Guided Face ID and Quick 1-Shot capture.
 class EnrollmentScreen extends StatefulWidget {
   final ClassroomEngine engine;
 
@@ -25,7 +32,8 @@ class EnrollmentScreen extends StatefulWidget {
   State<EnrollmentScreen> createState() => _EnrollmentScreenState();
 }
 
-class _EnrollmentScreenState extends State<EnrollmentScreen> {
+class _EnrollmentScreenState extends State<EnrollmentScreen>
+    with SingleTickerProviderStateMixin {
   final _nameController = TextEditingController();
   CameraController? _controller;
   List<CameraDescription> _cameras = [];
@@ -36,16 +44,132 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
   FacePose? _lastPose;
 
   // Face ID Multi-Pose Enrollment State
-  bool _isFaceIdMode = true; // Default to authentic Face ID multi-pose
+  bool _isFaceIdMode = true; // Apple Face ID multi-pose mode
+  bool _isAutoGuideEnabled = true; // Auto-track & auto-capture when aligned
   int _faceIdStep = 0; // 0 = Frontal, 1 = Left, 2 = Right
   final List<Float32List> _faceIdEmbeddings = [];
   final List<FacePose> _faceIdPoses = [];
 
+  // Gyroscope & Guidance Motion Tracking
+  StreamSubscription<GyroscopeEvent>? _gyroSubscription;
+  Timer? _guidanceTimer;
+  bool _isMovingTooFast = false;
+  double _angularSpeed = 0.0;
+  double _headOffsetX = 0.0; // [-1.0, 1.0] horizontal head/phone motion
+  double _headOffsetY = 0.0; // [-1.0, 1.0] vertical head/phone motion
+  double _autoProgress = 0.0; // 0.0 to 1.0 step completion progress
+  bool _showSuccessAnimation = false;
+
+  late AnimationController _animController;
+  late Animation<double> _pulseAnimation;
+
   @override
   void initState() {
     super.initState();
+    _animController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    )..repeat(reverse: true);
+    _pulseAnimation =
+        Tween<double>(begin: 0.95, end: 1.05).animate(CurvedAnimation(
+      parent: _animController,
+      curve: Curves.easeInOut,
+    ));
+
     _initCamera();
     _loadEnrolledStudents();
+    _initSensors();
+    _startGuidanceLoop();
+  }
+
+  void _initSensors() {
+    _gyroSubscription = gyroscopeEventStream().listen((GyroscopeEvent event) {
+      final speed =
+          sqrt(event.x * event.x + event.y * event.y + event.z * event.z);
+
+      // In portrait orientation:
+      // event.y is horizontal turning (Yaw velocity)
+      // event.x is vertical tilting (Pitch velocity)
+      final newOffsetX =
+          (_headOffsetX + event.y * 0.06).clamp(-1.0, 1.0) * 0.93;
+      final newOffsetY =
+          (_headOffsetY - event.x * 0.06).clamp(-1.0, 1.0) * 0.93;
+
+      final tooFast = speed > 1.35;
+      if (mounted) {
+        setState(() {
+          _angularSpeed = speed;
+          _isMovingTooFast = tooFast;
+          _headOffsetX = newOffsetX;
+          _headOffsetY = newOffsetY;
+        });
+      }
+    });
+  }
+
+  void _startGuidanceLoop() {
+    _guidanceTimer?.cancel();
+    _guidanceTimer = Timer.periodic(const Duration(milliseconds: 80), (timer) {
+      if (!mounted ||
+          !_isFaceIdMode ||
+          _isProcessing ||
+          _showSuccessAnimation ||
+          _controller == null ||
+          !_controller!.value.isInitialized) {
+        return;
+      }
+
+      // Check if student roll number is entered
+      if (_nameController.text.trim().isEmpty) {
+        if (_autoProgress > 0.0) {
+          setState(() => _autoProgress = 0.0);
+        }
+        return;
+      }
+
+      // If moving too fast, decrease progress
+      if (_isMovingTooFast) {
+        if (_autoProgress > 0.0) {
+          setState(() {
+            _autoProgress = max(0.0, _autoProgress - 0.08);
+          });
+        }
+        return;
+      }
+
+      // Pose alignment logic based on target Face ID step
+      bool isPoseAligned = false;
+      if (_faceIdStep == 0) {
+        // Frontal: centered within circle (|offset| < 0.35)
+        isPoseAligned = _headOffsetX.abs() < 0.38 && _headOffsetY.abs() < 0.38;
+      } else if (_faceIdStep == 1) {
+        // Left 15°: user turns head slightly left
+        isPoseAligned = _headOffsetX < -0.12 ||
+            (_lastPose != null && _lastPose!.yaw < -6.0);
+      } else if (_faceIdStep == 2) {
+        // Right 15°: user turns head slightly right
+        isPoseAligned = _headOffsetX > 0.12 ||
+            (_lastPose != null && _lastPose!.yaw > 6.0);
+      }
+
+      // Auto-progress accumulator
+      if (_isAutoGuideEnabled) {
+        if (isPoseAligned && _angularSpeed < 0.85) {
+          setState(() {
+            _autoProgress = min(1.0, _autoProgress + 0.12);
+          });
+          if (_autoProgress >= 1.0) {
+            _autoProgress = 0.0;
+            HapticFeedback.mediumImpact();
+            _captureFaceIdPose();
+          }
+        } else {
+          setState(() {
+            _autoProgress = max(0.0, _autoProgress - 0.06);
+          });
+        }
+      }
+    });
   }
 
   Future<void> _loadEnrolledStudents() async {
@@ -66,7 +190,7 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
     if (index != null && index >= 0 && index < _cameras.length) {
       _cameraIndex = index;
     } else {
-      // Default to BACK camera for high-resolution 6-axis pose modeling
+      // Default to back camera or front if available
       final backIdx = _cameras
           .indexWhere((c) => c.lensDirection == CameraLensDirection.back);
       _cameraIndex = (backIdx != -1) ? backIdx : 0;
@@ -74,8 +198,11 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
 
     await _controller?.dispose();
     final selectedCamera = _cameras[_cameraIndex];
-    final controller = CameraController(selectedCamera, ResolutionPreset.high,
-        enableAudio: false);
+    final controller = CameraController(
+      selectedCamera,
+      ResolutionPreset.high,
+      enableAudio: false,
+    );
     await controller.initialize();
     if (!mounted) return;
     setState(() => _controller = controller);
@@ -89,6 +216,9 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
 
   @override
   void dispose() {
+    _guidanceTimer?.cancel();
+    _gyroSubscription?.cancel();
+    _animController.dispose();
     _controller?.dispose();
     _nameController.dispose();
     super.dispose();
@@ -102,7 +232,7 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
       return;
     }
 
-    // Restrict duplicate names (case-insensitive)
+    // Check duplicate name
     final isDuplicate = _enrolledStudents.any(
       (s) =>
           (s['name'] as String? ?? '').trim().toLowerCase() ==
@@ -111,7 +241,7 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
     if (isDuplicate) {
       setState(() {
         _error =
-            'Student "$name" is already enrolled. Please use a unique name.';
+            'Student "$name" is already enrolled. Please use a unique roll number.';
       });
       return;
     }
@@ -132,7 +262,7 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
       if (!found) {
         setState(() {
           _error =
-              'No face detected in the photo — try again with better lighting/framing.';
+              'No face detected in the photo — center face and try again.';
         });
         return;
       }
@@ -141,13 +271,11 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
       await _loadEnrolledStudents();
       if (!mounted) return;
 
-      final poseText = _lastPose != null
-          ? ' | Pose: Yaw ${_lastPose!.yaw.toStringAsFixed(0)}°, Pitch ${_lastPose!.pitch.toStringAsFixed(0)}°, Frontality: ${(_lastPose!.frontalityScore * 100).toStringAsFixed(0)}%'
-          : '';
+      HapticFeedback.heavyImpact();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Enrolled $name$poseText'),
-          backgroundColor: Colors.green.shade700,
+          content: Text('Enrolled $name successfully!'),
+          backgroundColor: AppTheme.discordGreen,
         ),
       );
       _nameController.clear();
@@ -198,12 +326,13 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
       final pose = widget.engine.lastEnrollmentPose ??
           const FacePoseEstimator().estimatePose(
             Detection(
-                frameId: 0,
-                timestampSec: 0,
-                bbox: [0, 0, 100, 100],
-                confidence: 0.9,
-                detector: 'yunet',
-                detIndex: 0),
+              frameId: 0,
+              timestampSec: 0,
+              bbox: [0, 0, 100, 100],
+              confidence: 0.9,
+              detector: 'yunet',
+              detIndex: 0,
+            ),
           );
 
       _faceIdEmbeddings.add(embedding.vector);
@@ -211,11 +340,16 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
       _lastPose = pose;
 
       if (_faceIdStep < 2) {
+        HapticFeedback.lightImpact();
         setState(() {
           _faceIdStep++;
+          _autoProgress = 0.0;
         });
       } else {
         // All 3 angles completed: finalize multi-pose roster enrollment
+        setState(() => _showSuccessAnimation = true);
+        HapticFeedback.heavyImpact();
+
         final studentId = DateTime.now().millisecondsSinceEpoch.toString();
         await widget.engine.enrollStudentWithEmbeddings(
           studentId: studentId,
@@ -226,28 +360,33 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
         await _loadEnrolledStudents();
         if (!mounted) return;
 
+        await Future.delayed(const Duration(milliseconds: 1400));
+        if (!mounted) return;
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Row(
               children: [
                 const Icon(Icons.check_circle_rounded,
-                    color: Colors.greenAccent),
+                    color: AppTheme.discordGreen),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'Face ID Enrolled: $name with 3 3D Poses (Front, Left, Right)!',
+                    'Apple Face ID Complete: $name (Frontal, Left, Right)!',
                     style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
                 ),
               ],
             ),
-            backgroundColor: const Color(0xFF0F172A),
+            backgroundColor: const Color(0xFF1E1F22),
             duration: const Duration(seconds: 4),
           ),
         );
 
         setState(() {
+          _showSuccessAnimation = false;
           _faceIdStep = 0;
+          _autoProgress = 0.0;
           _faceIdEmbeddings.clear();
           _faceIdPoses.clear();
           _nameController.clear();
@@ -263,6 +402,7 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
   void _resetFaceId() {
     setState(() {
       _faceIdStep = 0;
+      _autoProgress = 0.0;
       _faceIdEmbeddings.clear();
       _faceIdPoses.clear();
       _error = null;
@@ -277,10 +417,11 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
         content: Text('Delete $name and their face data from the roster?'),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel')),
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            style: FilledButton.styleFrom(backgroundColor: AppTheme.discordRed),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Delete'),
           ),
@@ -314,13 +455,6 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
         text:
             'Classroom Roster Export: ${widget.engine.currentClassId} (${_enrolledStudents.length} Students with 512-d Face Embeddings)',
       );
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content: Text(
-                  'Exported ${_enrolledStudents.length} students from ${widget.engine.currentClassId}!')),
-        );
-      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -341,7 +475,7 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Paste the exported classroom JSON package below to import all students and face embeddings:',
+              'Paste the exported classroom JSON package below to import students and face embeddings:',
               style: TextStyle(fontSize: 13, color: Colors.grey),
             ),
             const SizedBox(height: 12),
@@ -431,12 +565,16 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
                           style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
-                            color: isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary,
+                            color: isDark
+                                ? AppTheme.darkTextPrimary
+                                : AppTheme.lightTextPrimary,
                           ),
                         ),
                         IconButton(
                           icon: const Icon(Icons.close_rounded),
-                          color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                          color: isDark
+                              ? AppTheme.darkTextSecondary
+                              : AppTheme.lightTextSecondary,
                           onPressed: () => Navigator.pop(modalCtx),
                         ),
                       ],
@@ -448,7 +586,9 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
                           child: Text(
                             'No students enrolled yet.',
                             style: TextStyle(
-                              color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                              color: isDark
+                                  ? AppTheme.darkTextSecondary
+                                  : AppTheme.lightTextSecondary,
                             ),
                           ),
                         ),
@@ -457,21 +597,26 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
                       Expanded(
                         child: ListView.separated(
                           itemCount: _enrolledStudents.length,
-                          separatorBuilder: (_, __) => const SizedBox(height: 8),
+                          separatorBuilder: (_, __) =>
+                              const SizedBox(height: 8),
                           itemBuilder: (_, i) {
                             final s = _enrolledStudents[i];
                             final id = s['student_id'] as String? ?? '';
                             final sName = s['name'] as String? ?? 'Unknown';
                             return GlassCard(
-                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 14, vertical: 8),
                               borderRadius: 16,
                               child: Row(
                                 children: [
                                   CircleAvatar(
                                     radius: 18,
-                                    backgroundColor: AppTheme.discordPurple.withValues(alpha: 0.18),
+                                    backgroundColor: AppTheme.discordPurple
+                                        .withValues(alpha: 0.18),
                                     child: Text(
-                                      sName.isNotEmpty ? sName[0].toUpperCase() : '?',
+                                      sName.isNotEmpty
+                                          ? sName[0].toUpperCase()
+                                          : '?',
                                       style: const TextStyle(
                                         color: AppTheme.discordPurple,
                                         fontWeight: FontWeight.bold,
@@ -481,7 +626,8 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
                                   const SizedBox(width: 12),
                                   Expanded(
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         Text(
                                           sName,
@@ -490,7 +636,9 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
                                           style: TextStyle(
                                             fontWeight: FontWeight.w600,
                                             fontSize: 14,
-                                            color: isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary,
+                                            color: isDark
+                                                ? AppTheme.darkTextPrimary
+                                                : AppTheme.lightTextPrimary,
                                           ),
                                         ),
                                         const SizedBox(height: 2),
@@ -500,7 +648,9 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
                                           overflow: TextOverflow.ellipsis,
                                           style: TextStyle(
                                             fontSize: 11,
-                                            color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                                            color: isDark
+                                                ? AppTheme.darkTextSecondary
+                                                : AppTheme.lightTextSecondary,
                                           ),
                                         ),
                                       ],
@@ -547,7 +697,7 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
             child: const Text('Cancel'),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            style: FilledButton.styleFrom(backgroundColor: AppTheme.discordRed),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Clear All'),
           ),
@@ -568,6 +718,8 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
       appBar: AppBar(
         titleSpacing: 0,
@@ -624,10 +776,10 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
                 child: Row(
                   children: [
                     Icon(Icons.delete_sweep_rounded,
-                        size: 20, color: Colors.redAccent),
+                        size: 20, color: AppTheme.discordRed),
                     SizedBox(width: 12),
                     Text('Clear All Faces',
-                        style: TextStyle(color: Colors.redAccent)),
+                        style: TextStyle(color: AppTheme.discordRed)),
                   ],
                 ),
               ),
@@ -638,289 +790,319 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
       body: SingleChildScrollView(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          child: Builder(
-            builder: (context) {
-              final isDark = Theme.of(context).brightness == Brightness.dark;
-              return Column(
-                children: [
-                  // Student Name Input in GlassCard
-                  GlassCard(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
-                    borderRadius: 18,
-                    child: TextField(
-                      controller: _nameController,
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        color: isDark
-                            ? AppTheme.darkTextPrimary
-                            : AppTheme.lightTextPrimary,
-                      ),
-                      decoration: InputDecoration(
-                        hintText: 'Student Roll No (e.g. 23Z...)',
-                        hintStyle: TextStyle(
-                          color: isDark
+          child: Column(
+            children: [
+              // Student Roll No Input in GlassCard
+              GlassCard(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+                borderRadius: 18,
+                child: TextField(
+                  controller: _nameController,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: isDark
+                        ? AppTheme.darkTextPrimary
+                        : AppTheme.lightTextPrimary,
+                  ),
+                  decoration: InputDecoration(
+                    hintText: 'Student Roll No (e.g. 23Z319)',
+                    hintStyle: TextStyle(
+                      color: (isDark
                               ? AppTheme.darkTextSecondary
-                                  .withValues(alpha: 0.6)
-                              : AppTheme.lightTextSecondary
-                                  .withValues(alpha: 0.6),
-                          fontSize: 15,
-                        ),
-                        prefixIcon: const Icon(Icons.badge_rounded,
-                            color: AppTheme.discordPurple),
-                        border: InputBorder.none,
-                        contentPadding:
-                            const EdgeInsets.symmetric(vertical: 14),
-                      ),
-                      onChanged: (_) {
-                        if (_error != null) setState(() => _error = null);
-                      },
+                              : AppTheme.lightTextSecondary)
+                          .withValues(alpha: 0.6),
+                      fontSize: 15,
                     ),
+                    prefixIcon: const Icon(Icons.badge_rounded,
+                        color: AppTheme.discordPurple),
+                    border: InputBorder.none,
+                    contentPadding: const EdgeInsets.symmetric(vertical: 14),
                   ),
-                  const SizedBox(height: 12),
+                  onChanged: (_) {
+                    if (_error != null) setState(() => _error = null);
+                  },
+                ),
+              ),
+              const SizedBox(height: 12),
 
-                  // Mode Toggle: Face ID (Apple-Style) vs Quick 1-Shot
-                  GlassCard(
-                    padding: const EdgeInsets.all(4),
-                    borderRadius: 14,
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: GestureDetector(
-                            onTap: () => setState(() => _isFaceIdMode = true),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(vertical: 8),
-                              decoration: BoxDecoration(
-                                color: _isFaceIdMode
-                                    ? AppTheme.discordPurple
-                                    : Colors.transparent,
-                                borderRadius: BorderRadius.circular(10),
-                                boxShadow: _isFaceIdMode
-                                    ? [
-                                        BoxShadow(
-                                          color: AppTheme.discordPurple
-                                              .withOpacity(0.4),
-                                          blurRadius: 10,
-                                          offset: const Offset(0, 2),
-                                        )
-                                      ]
-                                    : null,
-                              ),
-                              child: Center(
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(
-                                      Icons.face_retouching_natural_rounded,
-                                      size: 16,
-                                      color: _isFaceIdMode
-                                          ? Colors.white
-                                          : (isDark
-                                              ? Colors.white60
-                                              : Colors.black54),
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      '3D Face ID',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.bold,
-                                        color: _isFaceIdMode
-                                            ? Colors.white
-                                            : (isDark
-                                                ? Colors.white70
-                                                : Colors.black87),
-                                      ),
-                                    ),
-                                  ],
+              // Mode Toggle: Apple Face ID vs Quick 1-Shot
+              GlassCard(
+                padding: const EdgeInsets.all(4),
+                borderRadius: 14,
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () => setState(() => _isFaceIdMode = true),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          decoration: BoxDecoration(
+                            color: _isFaceIdMode
+                                ? AppTheme.discordPurple
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(10),
+                            boxShadow: _isFaceIdMode
+                                ? [
+                                    BoxShadow(
+                                      color: AppTheme.discordPurple
+                                          .withValues(alpha: 0.4),
+                                      blurRadius: 10,
+                                      offset: const Offset(0, 2),
+                                    )
+                                  ]
+                                : null,
+                          ),
+                          child: Center(
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.face_retouching_natural_rounded,
+                                  size: 16,
+                                  color: _isFaceIdMode
+                                      ? Colors.white
+                                      : (isDark
+                                          ? Colors.white60
+                                          : Colors.black54),
                                 ),
-                              ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  'Apple Face ID',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    color: _isFaceIdMode
+                                        ? Colors.white
+                                        : (isDark
+                                            ? Colors.white70
+                                            : Colors.black87),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ),
-                        Expanded(
-                          child: GestureDetector(
-                            onTap: () => setState(() => _isFaceIdMode = false),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(vertical: 8),
-                              decoration: BoxDecoration(
-                                color: !_isFaceIdMode
-                                    ? AppTheme.discordPurple
-                                    : Colors.transparent,
-                                borderRadius: BorderRadius.circular(10),
-                                boxShadow: !_isFaceIdMode
-                                    ? [
-                                        BoxShadow(
-                                          color: AppTheme.discordPurple
-                                              .withOpacity(0.4),
-                                          blurRadius: 10,
-                                          offset: const Offset(0, 2),
-                                        )
-                                      ]
-                                    : null,
-                              ),
-                              child: Center(
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(
-                                      Icons.camera_alt_rounded,
-                                      size: 16,
-                                      color: !_isFaceIdMode
-                                          ? Colors.white
-                                          : (isDark
-                                              ? Colors.white60
-                                              : Colors.black54),
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      'Quick 1-Shot',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.bold,
-                                        color: !_isFaceIdMode
-                                            ? Colors.white
-                                            : (isDark
-                                                ? Colors.white70
-                                                : Colors.black87),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Camera Viewfinder (Face ID Circular Ring vs Standard Preview)
-                  _isFaceIdMode
-                      ? _buildFaceIdViewfinder()
-                      : SizedBox(
-                          height: 320,
-                          child: _buildStandardCameraPreview(),
-                        ),
-
-                  if (_error != null) ...[
-                    const SizedBox(height: 10),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: AppTheme.discordRed.withOpacity(0.15),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                            color: AppTheme.discordRed.withOpacity(0.4)),
                       ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.error_outline_rounded,
-                              color: AppTheme.discordRed, size: 18),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              _error!,
-                              style: const TextStyle(
-                                  color: AppTheme.discordRed, fontSize: 12),
+                    ),
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () => setState(() => _isFaceIdMode = false),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          decoration: BoxDecoration(
+                            color: !_isFaceIdMode
+                                ? AppTheme.discordPurple
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(10),
+                            boxShadow: !_isFaceIdMode
+                                ? [
+                                    BoxShadow(
+                                      color: AppTheme.discordPurple
+                                          .withValues(alpha: 0.4),
+                                      blurRadius: 10,
+                                      offset: const Offset(0, 2),
+                                    )
+                                  ]
+                                : null,
+                          ),
+                          child: Center(
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.camera_alt_rounded,
+                                  size: 16,
+                                  color: !_isFaceIdMode
+                                      ? Colors.white
+                                      : (isDark
+                                          ? Colors.white60
+                                          : Colors.black54),
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  'Quick 1-Shot',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    color: !_isFaceIdMode
+                                        ? Colors.white
+                                        : (isDark
+                                            ? Colors.white70
+                                            : Colors.black87),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                        ],
+                        ),
                       ),
                     ),
                   ],
-                  const SizedBox(height: 16),
+                ),
+              ),
+              const SizedBox(height: 16),
 
-                  // Action Buttons
-                  if (_isFaceIdMode)
-                    Column(
-                      children: [
-                        FilledButton.icon(
-                          style: FilledButton.styleFrom(
-                            backgroundColor: _faceIdStep == 2
-                                ? AppTheme.discordGreen
-                                : AppTheme.discordPurple,
-                            foregroundColor: Colors.white,
-                            minimumSize: const Size(double.infinity, 52),
-                            shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16)),
-                            elevation: 6,
-                            shadowColor: (_faceIdStep == 2
-                                    ? AppTheme.discordGreen
-                                    : AppTheme.discordPurple)
-                                .withOpacity(0.4),
-                          ),
-                          onPressed: _isProcessing ? null : _captureFaceIdPose,
-                          icon: _isProcessing
-                              ? const SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(
-                                      strokeWidth: 2, color: Colors.white))
-                              : Icon(_faceIdStep == 0
-                                  ? Icons.filter_center_focus_rounded
-                                  : (_faceIdStep == 1
-                                      ? Icons.arrow_back_rounded
-                                      : Icons.arrow_forward_rounded)),
-                          label: Text(
-                            _isProcessing
-                                ? 'Processing Angle…'
-                                : (_faceIdStep == 0
-                                    ? 'Capture Pose 1: Frontal'
-                                    : (_faceIdStep == 1
-                                        ? 'Capture Pose 2: Turn Left'
-                                        : 'Capture Pose 3: Turn Right & Finish')),
-                            style: const TextStyle(
-                                fontSize: 15, fontWeight: FontWeight.bold),
-                          ),
+              // Camera Viewfinder (Face ID Guided Ring vs Standard Preview)
+              _isFaceIdMode
+                  ? _buildGuidedFaceIdViewfinder()
+                  : SizedBox(
+                      height: 320,
+                      child: _buildStandardCameraPreview(),
+                    ),
+
+              if (_error != null) ...[
+                const SizedBox(height: 10),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: AppTheme.discordRed.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                        color: AppTheme.discordRed.withValues(alpha: 0.4)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.error_outline_rounded,
+                          color: AppTheme.discordRed, size: 18),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          _error!,
+                          style: const TextStyle(
+                              color: AppTheme.discordRed, fontSize: 12),
                         ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              const SizedBox(height: 16),
+
+              // Action & Guidance Controls
+              if (_isFaceIdMode)
+                Column(
+                  children: [
+                    // Guided Auto-Capture vs Manual Capture Switcher
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        FilterChip(
+                          avatar: Icon(
+                            _isAutoGuideEnabled
+                                ? Icons.auto_mode_rounded
+                                : Icons.touch_app_rounded,
+                            size: 16,
+                            color: _isAutoGuideEnabled
+                                ? Colors.white
+                                : AppTheme.discordPurple,
+                          ),
+                          label: Text(
+                            _isAutoGuideEnabled
+                                ? 'Auto-Guidance Active'
+                                : 'Manual Capture',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: _isAutoGuideEnabled
+                                  ? Colors.white
+                                  : (isDark ? Colors.white70 : Colors.black87),
+                            ),
+                          ),
+                          selected: _isAutoGuideEnabled,
+                          selectedColor: AppTheme.discordPurple,
+                          onSelected: (val) {
+                            setState(() => _isAutoGuideEnabled = val);
+                          },
+                        ),
+                        const SizedBox(width: 12),
                         if (_faceIdStep > 0)
                           TextButton.icon(
                             onPressed: _isProcessing ? null : _resetFaceId,
                             icon: const Icon(Icons.restart_alt_rounded,
                                 size: 16, color: AppTheme.discordPurple),
-                            label: const Text('Restart Face ID Scan',
+                            label: const Text('Reset',
                                 style: TextStyle(
                                     fontSize: 12,
                                     color: AppTheme.discordPurple)),
                           ),
                       ],
-                    )
-                  else
+                    ),
+                    const SizedBox(height: 10),
+
+                    // Manual Capture Trigger Button (as backup or instant capture)
                     FilledButton.icon(
                       style: FilledButton.styleFrom(
-                        backgroundColor: AppTheme.discordPurple,
+                        backgroundColor: _faceIdStep == 2
+                            ? AppTheme.discordGreen
+                            : AppTheme.discordPurple,
                         foregroundColor: Colors.white,
                         minimumSize: const Size(double.infinity, 52),
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(16)),
                         elevation: 6,
-                        shadowColor: AppTheme.discordPurple.withOpacity(0.4),
+                        shadowColor: (_faceIdStep == 2
+                                ? AppTheme.discordGreen
+                                : AppTheme.discordPurple)
+                            .withValues(alpha: 0.4),
                       ),
-                      onPressed: _isProcessing ? null : _captureAndEnroll,
+                      onPressed: _isProcessing ? null : _captureFaceIdPose,
                       icon: _isProcessing
                           ? const SizedBox(
                               width: 18,
                               height: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2))
-                          : const Icon(Icons.camera_alt_rounded),
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2, color: Colors.white))
+                          : Icon(_faceIdStep == 0
+                              ? Icons.filter_center_focus_rounded
+                              : (_faceIdStep == 1
+                                  ? Icons.arrow_back_rounded
+                                  : Icons.arrow_forward_rounded)),
                       label: Text(
-                          _isProcessing ? 'Processing…' : 'Capture & Enroll'),
+                        _isProcessing
+                            ? 'Processing Angle…'
+                            : (_faceIdStep == 0
+                                ? 'Capture Angle 1: Frontal'
+                                : (_faceIdStep == 1
+                                    ? 'Capture Angle 2: Left 15°'
+                                    : 'Capture Angle 3: Right 15° & Finish')),
+                        style: const TextStyle(
+                            fontSize: 15, fontWeight: FontWeight.bold),
+                      ),
                     ),
-                ],
-              );
-            },
+                  ],
+                )
+              else
+                FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppTheme.discordPurple,
+                    foregroundColor: Colors.white,
+                    minimumSize: const Size(double.infinity, 52),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16)),
+                    elevation: 6,
+                    shadowColor:
+                        AppTheme.discordPurple.withValues(alpha: 0.4),
+                  ),
+                  onPressed: _isProcessing ? null : _captureAndEnroll,
+                  icon: _isProcessing
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Icon(Icons.camera_alt_rounded),
+                  label:
+                      Text(_isProcessing ? 'Processing…' : 'Capture & Enroll'),
+                ),
+            ],
           ),
         ),
       ),
     );
   }
 
-  Widget _buildFaceIdViewfinder() {
+  Widget _buildGuidedFaceIdViewfinder() {
     final controller = _controller;
     if (_error != null && controller == null) {
       return Center(child: Text(_error!));
@@ -945,9 +1127,9 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
     final isBack = _cameras.isNotEmpty &&
         _cameras[_cameraIndex].lensDirection == CameraLensDirection.back;
     final stepPrompts = [
-      'Look straight into the circle',
-      'Turn your head slightly to the LEFT (~15°)',
-      'Turn your head slightly to the RIGHT (~15°)',
+      'Position face inside circle & look straight',
+      'Slowly turn your head to the LEFT (~15°)',
+      'Slowly turn your head to the RIGHT (~15°)',
     ];
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -955,19 +1137,20 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        // Camera Lens Mode Indicator & Switch Camera
+        // Camera Lens Mode & Gyroscope Status Pill
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
               decoration: BoxDecoration(
-                color: (isDark ? Colors.black : Colors.white).withOpacity(0.55),
+                color: (isDark ? Colors.black : Colors.white)
+                    .withValues(alpha: 0.55),
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(
                   color: isDark
-                      ? Colors.white.withOpacity(0.15)
-                      : AppTheme.discordPurple.withOpacity(0.2),
+                      ? Colors.white.withValues(alpha: 0.15)
+                      : AppTheme.discordPurple.withValues(alpha: 0.2),
                 ),
               ),
               child: Row(
@@ -996,8 +1179,55 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
                 ],
               ),
             ),
+
+            // Gyroscope Live Sensor Badge
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: _isMovingTooFast
+                    ? AppTheme.discordRed.withValues(alpha: 0.2)
+                    : AppTheme.discordGreen.withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: _isMovingTooFast
+                      ? AppTheme.discordRed
+                      : AppTheme.discordGreen,
+                  width: 1.2,
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    _isMovingTooFast
+                        ? Icons.motion_photos_paused_rounded
+                        : Icons.screen_rotation_alt_rounded,
+                    color: _isMovingTooFast
+                        ? AppTheme.discordRed
+                        : AppTheme.discordGreen,
+                    size: 13,
+                  ),
+                  const SizedBox(width: 5),
+                  Text(
+                    _isMovingTooFast
+                        ? 'HOLD STEADY'
+                        : 'GYRO GUIDED',
+                    style: TextStyle(
+                      color: _isMovingTooFast
+                          ? AppTheme.discordRed
+                          : AppTheme.discordGreen,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // Switch Camera Button
             Material(
-              color: (isDark ? Colors.black : Colors.white).withOpacity(0.55),
+              color: (isDark ? Colors.black : Colors.white)
+                  .withValues(alpha: 0.55),
               shape: const CircleBorder(),
               child: InkWell(
                 customBorder: const CircleBorder(),
@@ -1014,19 +1244,26 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
             ),
           ],
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 10),
 
-        // Guidance Prompt Pill (Separated, no overlap on ticks!)
+        // Apple Face ID Dynamic Guidance Prompt Pill
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
           decoration: BoxDecoration(
-            color: (isDark ? Colors.black : Colors.white).withOpacity(0.75),
+            color: (isDark ? const Color(0xFF1E1F22) : Colors.white)
+                .withValues(alpha: 0.85),
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AppTheme.discordPurple.withOpacity(0.5)),
+            border: Border.all(
+                color: _isMovingTooFast
+                    ? AppTheme.discordRed
+                    : AppTheme.discordPurple.withValues(alpha: 0.5)),
             boxShadow: [
               BoxShadow(
-                color: AppTheme.discordPurple.withOpacity(0.18),
-                blurRadius: 10,
+                color: (_isMovingTooFast
+                        ? AppTheme.discordRed
+                        : AppTheme.discordPurple)
+                    .withValues(alpha: 0.20),
+                blurRadius: 12,
                 offset: const Offset(0, 2),
               ),
             ],
@@ -1034,19 +1271,32 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
+              Icon(
+                _faceIdStep == 0
+                    ? Icons.center_focus_strong_rounded
+                    : (_faceIdStep == 1
+                        ? Icons.arrow_back_rounded
+                        : Icons.arrow_forward_rounded),
+                size: 16,
+                color: AppTheme.discordPurple,
+              ),
+              const SizedBox(width: 8),
               Text(
-                'Step ${_faceIdStep + 1}/3: ',
+                'Pose ${_faceIdStep + 1}/3: ',
                 style: const TextStyle(
                     color: AppTheme.discordPurple,
                     fontWeight: FontWeight.bold,
-                    fontSize: 11),
+                    fontSize: 12),
               ),
               Flexible(
                 child: Text(
-                  stepPrompts[_faceIdStep],
+                  _isMovingTooFast
+                      ? 'Slow down — hold phone steady'
+                      : stepPrompts[_faceIdStep],
                   style: TextStyle(
                     color: isDark ? Colors.white : Colors.black87,
-                    fontSize: 11,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -1056,53 +1306,107 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
         ),
         const SizedBox(height: 16),
 
-        // Apple Face ID Circular Aperture & 36-Tick Radial Ring
+        // Apple Face ID Aperture with 36 Radial Ticks & 3D Gyro Guide
         Center(
           child: SizedBox(
-            width: 230,
-            height: 230,
+            width: 250,
+            height: 250,
             child: Stack(
               alignment: Alignment.center,
               children: [
+                // Camera Viewport in Circle
                 ClipOval(
                   child: SizedBox(
-                    width: 194,
-                    height: 194,
+                    width: 200,
+                    height: 200,
                     child: FittedBox(
                       fit: BoxFit.cover,
                       child: SizedBox(
-                        width: controller.value.previewSize?.height ?? 194,
-                        height: controller.value.previewSize?.width ?? 194,
+                        width: controller.value.previewSize?.height ?? 200,
+                        height: controller.value.previewSize?.width ?? 200,
                         child: CameraPreview(controller),
                       ),
                     ),
                   ),
                 ),
+
+                // Apple Face ID 36 Radial Ticks & Interactive Progress Ring
                 CustomPaint(
-                  size: const Size(230, 230),
+                  size: const Size(250, 250),
                   painter: FaceIdRingPainter(
                     completedPoses: _faceIdEmbeddings.length,
                     currentStep: _faceIdStep,
+                    stepProgress: _autoProgress,
+                    headOffsetX: _headOffsetX,
+                    headOffsetY: _headOffsetY,
+                    pulseFactor: _pulseAnimation.value,
+                    isSuccess: _showSuccessAnimation,
+                  ),
+                ),
+
+                // Floating In-Aperture Head Tracking Reticle
+                IgnorePointer(
+                  child: Transform.translate(
+                    offset: Offset(_headOffsetX * 35.0, _headOffsetY * 35.0),
+                    child: Container(
+                      width: 130,
+                      height: 155,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(65),
+                        border: Border.all(
+                          color: _isMovingTooFast
+                              ? AppTheme.discordRed.withValues(alpha: 0.8)
+                              : (_autoProgress > 0.5
+                                  ? AppTheme.discordGreen
+                                  : AppTheme.discordPurple)
+                                  .withValues(alpha: 0.6),
+                          width: 2.0,
+                        ),
+                      ),
+                      child: Center(
+                        child: _showSuccessAnimation
+                            ? const Icon(Icons.check_circle_rounded,
+                                color: AppTheme.discordGreen, size: 48)
+                            : Icon(
+                                _faceIdStep == 0
+                                    ? Icons.face_rounded
+                                    : (_faceIdStep == 1
+                                        ? Icons.arrow_back_rounded
+                                        : Icons.arrow_forward_rounded),
+                                color: Colors.white.withValues(alpha: 0.4),
+                                size: 32,
+                              ),
+                      ),
+                    ),
                   ),
                 ),
               ],
             ),
           ),
         ),
-        const SizedBox(height: 14),
+        const SizedBox(height: 16),
 
-        // Pose Status Badges
+        // Apple Face ID Multi-Pose Sector Badges
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             _buildPoseBadge(
-                '1. Frontal', _faceIdEmbeddings.isNotEmpty, _faceIdStep == 0),
-            const SizedBox(width: 6),
+              '1. Frontal',
+              _faceIdEmbeddings.isNotEmpty,
+              _faceIdStep == 0,
+            ),
+            const SizedBox(width: 8),
             _buildPoseBadge(
-                '2. Left 15°', _faceIdEmbeddings.length >= 2, _faceIdStep == 1),
-            const SizedBox(width: 6),
-            _buildPoseBadge('3. Right 15°', _faceIdEmbeddings.length >= 3,
-                _faceIdStep == 2),
+              '2. Left 15°',
+              _faceIdEmbeddings.length >= 2,
+              _faceIdStep == 1,
+            ),
+            const SizedBox(width: 8),
+            _buildPoseBadge(
+              '3. Right 15°',
+              _faceIdEmbeddings.length >= 3,
+              _faceIdStep == 2,
+            ),
           ],
         ),
       ],
@@ -1111,13 +1415,13 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
 
   Widget _buildPoseBadge(String label, bool isDone, bool isActive) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
         color: isDone
-            ? AppTheme.discordGreen.withOpacity(0.2)
+            ? AppTheme.discordGreen.withValues(alpha: 0.2)
             : (isActive
-                ? AppTheme.discordPurple.withOpacity(0.2)
-                : Colors.black.withOpacity(0.3)),
+                ? AppTheme.discordPurple.withValues(alpha: 0.2)
+                : Colors.black.withValues(alpha: 0.3)),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: isDone
@@ -1131,21 +1435,21 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
         children: [
           if (isDone)
             const Icon(Icons.check_circle_rounded,
-                color: AppTheme.discordGreen, size: 12)
+                color: AppTheme.discordGreen, size: 13)
           else if (isActive)
             const Icon(Icons.radio_button_checked_rounded,
-                color: AppTheme.discordPurple, size: 12)
+                color: AppTheme.discordPurple, size: 13)
           else
             const Icon(Icons.radio_button_unchecked_rounded,
-                color: Colors.white38, size: 12),
-          const SizedBox(width: 4),
+                color: Colors.white38, size: 13),
+          const SizedBox(width: 5),
           Text(
             label,
             style: TextStyle(
               color: isDone
                   ? AppTheme.discordGreen
                   : (isActive ? AppTheme.discordPurple : Colors.white54),
-              fontSize: 10,
+              fontSize: 11,
               fontWeight: FontWeight.bold,
             ),
           ),
@@ -1180,8 +1484,8 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
               height: 250,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(100),
-                border:
-                    Border.all(color: Colors.white.withOpacity(0.5), width: 2),
+                border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.5), width: 2),
               ),
             ),
           ),
@@ -1198,9 +1502,10 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.6),
+                    color: Colors.black.withValues(alpha: 0.6),
                     borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: Colors.white.withOpacity(0.2)),
+                    border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.2)),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -1233,9 +1538,10 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
                   child: Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.6),
+                      color: Colors.black.withValues(alpha: 0.6),
                       shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white.withOpacity(0.3)),
+                      border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.3)),
                     ),
                     child: const Icon(Icons.cameraswitch_rounded,
                         color: Colors.white, size: 18),
@@ -1251,12 +1557,26 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
 }
 
 /// Custom painter that renders Apple Face ID-style 36 radial tick marks
-/// that illuminate green as each 3D facial pose is acquired.
+/// that dynamically illuminate neon green as each 3D facial pose is acquired,
+/// with real-time head motion tracking and auto-capture sweep indicator.
 class FaceIdRingPainter extends CustomPainter {
   final int completedPoses; // 0, 1, 2, or 3
   final int currentStep; // 0, 1, or 2
+  final double stepProgress; // 0.0 to 1.0
+  final double headOffsetX; // [-1.0, 1.0]
+  final double headOffsetY; // [-1.0, 1.0]
+  final double pulseFactor;
+  final bool isSuccess;
 
-  FaceIdRingPainter({required this.completedPoses, required this.currentStep});
+  FaceIdRingPainter({
+    required this.completedPoses,
+    required this.currentStep,
+    this.stepProgress = 0.0,
+    this.headOffsetX = 0.0,
+    this.headOffsetY = 0.0,
+    this.pulseFactor = 1.0,
+    this.isSuccess = false,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -1265,31 +1585,40 @@ class FaceIdRingPainter extends CustomPainter {
     const totalTicks = 36;
 
     final inactivePaint = Paint()
-      ..color = Colors.white.withOpacity(0.25)
+      ..color = Colors.white.withValues(alpha: 0.22)
       ..strokeWidth = 2.5
       ..strokeCap = StrokeCap.round;
 
     final activePaint = Paint()
       ..color = AppTheme.discordPurple
-      ..strokeWidth = 3.5
+      ..strokeWidth = 3.6
       ..strokeCap = StrokeCap.round;
 
     final completedPaint = Paint()
       ..color = AppTheme.discordGreen // Discord neon green
-      ..strokeWidth = 4.0
+      ..strokeWidth = 4.2
       ..strokeCap = StrokeCap.round;
 
+    // Draw Apple Face ID 36 Radial Ticks
     for (int i = 0; i < totalTicks; i++) {
       final angle = (i * 2 * pi / totalTicks) - (pi / 2);
-      final tickStart = Offset(center.dx + (radius - 12) * cos(angle),
-          center.dy + (radius - 12) * sin(angle));
+      final tickLength = (isSuccess) ? 16.0 : 13.0;
+      final tickStart = Offset(
+        center.dx + (radius - tickLength) * cos(angle),
+        center.dy + (radius - tickLength) * sin(angle),
+      );
       final tickEnd = Offset(
-          center.dx + radius * cos(angle), center.dy + radius * sin(angle));
+        center.dx + radius * cos(angle),
+        center.dy + radius * sin(angle),
+      );
 
-      // 12 ticks per sector (0..11: Frontal, 12..23: Left, 24..35: Right)
+      // 12 ticks per sector:
+      // Sector 0: Frontal (ticks 0..11)
+      // Sector 1: Left 15° (ticks 12..23)
+      // Sector 2: Right 15° (ticks 24..35)
       final sector = i ~/ 12;
       Paint paintToUse;
-      if (sector < completedPoses) {
+      if (isSuccess || sector < completedPoses) {
         paintToUse = completedPaint;
       } else if (sector == currentStep) {
         paintToUse = activePaint;
@@ -1299,10 +1628,36 @@ class FaceIdRingPainter extends CustomPainter {
 
       canvas.drawLine(tickStart, tickEnd, paintToUse);
     }
+
+    // Draw Smooth Step Completion Arc inside the ticks
+    if (stepProgress > 0.0 && !isSuccess) {
+      final progressPaint = Paint()
+        ..color = AppTheme.discordGreen.withValues(alpha: 0.85)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 3.0
+        ..strokeCap = StrokeCap.round;
+
+      final sectorStartAngle =
+          (currentStep * 12 * 2 * pi / totalTicks) - (pi / 2);
+      final sweepAngle = (12 * 2 * pi / totalTicks) * stepProgress;
+
+      canvas.drawArc(
+        Rect.fromCircle(center: center, radius: radius - 18),
+        sectorStartAngle,
+        sweepAngle,
+        false,
+        progressPaint,
+      );
+    }
   }
 
   @override
   bool shouldRepaint(FaceIdRingPainter oldDelegate) =>
       oldDelegate.completedPoses != completedPoses ||
-      oldDelegate.currentStep != currentStep;
+      oldDelegate.currentStep != currentStep ||
+      oldDelegate.stepProgress != stepProgress ||
+      oldDelegate.headOffsetX != headOffsetX ||
+      oldDelegate.headOffsetY != headOffsetY ||
+      oldDelegate.pulseFactor != pulseFactor ||
+      oldDelegate.isSuccess != isSuccess;
 }

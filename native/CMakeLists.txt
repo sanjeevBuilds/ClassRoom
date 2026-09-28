@@ -50,6 +50,11 @@ endif()
 set(SOURCES
   src/frame_sampler.cpp
   src/blur_filter.cpp
+  src/lighting_enhancer.cpp
+  src/homography.cpp
+  src/face_pose.cpp
+  src/sahi_slicing.cpp
+  src/desk_tracker.cpp
   src/yunet_detector.cpp
   src/haar_cascade_detector.cpp
   src/identity_clusterer.cpp
