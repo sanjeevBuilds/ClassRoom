@@ -6,8 +6,9 @@ import '../native/classroom_engine.dart';
 import '../theme/app_theme.dart';
 import '../widgets/glass_card.dart';
 
-/// Apple Face ID-Style Enrollment Screen with Radial Tick Ring
-/// Interfaces seamlessly with C++ on-device engine (native/src/pipeline.cpp).
+/// Apple Face ID-Style 3D Multi-Pose Enrollment Screen with Radial Tick Ring
+/// Captures 3 distinct angles per student (Frontal, Left 15°, Right 15°)
+/// and stores all 3 512-D vectors in SQLite via the C++ engine.
 class EnrollmentScreen extends StatefulWidget {
   final ClassroomEngine engine;
 
@@ -26,6 +27,10 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> with SingleTickerPr
   bool _isProcessing = false;
   String? _error;
   List<Map<String, dynamic>> _enrolledStudents = [];
+
+  // Face ID Multi-Pose 3-Step State
+  int _faceIdStep = 0; // 0 = Frontal (0°), 1 = Left (~15°), 2 = Right (~15°)
+  final List<String> _capturedPhotos = [];
 
   // Face ID ring animation
   late AnimationController _ringAnimController;
@@ -89,72 +94,106 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> with SingleTickerPr
     super.dispose();
   }
 
-  Future<void> _captureAndEnroll() async {
+  void _resetPoseSequence() {
+    setState(() {
+      _faceIdStep = 0;
+      _capturedPhotos.clear();
+      _ticksCompleted = 0;
+      _error = null;
+    });
+  }
+
+  Future<void> _capturePoseStep() async {
     final controller = _controller;
     final rollNo = _rollNoController.text.trim();
     final name = _nameController.text.trim().isEmpty ? rollNo : _nameController.text.trim();
 
     if (controller == null || rollNo.isEmpty) {
-      setState(() => _error = 'Please enter student Roll No / Name first.');
+      setState(() => _error = 'Please enter student Roll No (e.g. 23Z319) first.');
       return;
     }
 
-    // Check duplicate student
-    final isDuplicate = _enrolledStudents.any(
-      (s) => (s['student_id'] as String? ?? '').trim().toLowerCase() == rollNo.toLowerCase(),
-    );
-    if (isDuplicate) {
-      setState(() {
-        _error = 'Student "$rollNo" is already enrolled. Please use a unique roll number.';
-      });
-      return;
+    // Check duplicate student on first step
+    if (_faceIdStep == 0) {
+      final isDuplicate = _enrolledStudents.any(
+        (s) => (s['student_id'] as String? ?? '').trim().toLowerCase() == rollNo.toLowerCase(),
+      );
+      if (isDuplicate) {
+        setState(() {
+          _error = 'Student "$rollNo" is already enrolled. Please use a unique roll number.';
+        });
+        return;
+      }
     }
 
     setState(() {
       _isProcessing = true;
       _error = null;
-      _ticksCompleted = _totalTicks ~/ 2;
     });
 
     try {
       final photo = await controller.takePicture();
-      final found = await widget.engine.enrollStudentFromPhoto(
-        photoPath: photo.path,
-        studentId: rollNo,
-        name: name,
-      );
+      _capturedPhotos.add(photo.path);
 
-      if (!found) {
+      if (_faceIdStep == 0) {
+        // Step 1 completed (Frontal) -> Move to Left Angle
         setState(() {
-          _error = 'No face detected in the photo — try again with better lighting/framing.';
-          _ticksCompleted = 0;
+          _ticksCompleted = 16;
+          _faceIdStep = 1;
         });
-        return;
-      }
+      } else if (_faceIdStep == 1) {
+        // Step 2 completed (Left) -> Move to Right Angle
+        setState(() {
+          _ticksCompleted = 32;
+          _faceIdStep = 2;
+        });
+      } else {
+        // Step 3 completed (Right) -> Finalize all 3 poses in C++ engine
+        setState(() => _ticksCompleted = 48);
 
-      setState(() => _ticksCompleted = _totalTicks);
-      await _loadEnrolledStudents();
+        final enrolledCount = await widget.engine.enrollStudentFromPhotos(
+          photoPaths: _capturedPhotos,
+          studentId: rollNo,
+          name: name,
+        );
 
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          backgroundColor: AppTheme.discordGreen,
-          content: Row(
-            children: [
-              const Icon(Icons.check_circle_rounded, color: Colors.white),
-              const SizedBox(width: 10),
-              Expanded(child: Text('Enrolled $name ($rollNo) successfully!', style: const TextStyle(fontWeight: FontWeight.bold))),
-            ],
+        if (enrolledCount == 0) {
+          setState(() {
+            _error = 'No face detected across the 3 photos. Please ensure good lighting and try again.';
+            _resetPoseSequence();
+          });
+          return;
+        }
+
+        await _loadEnrolledStudents();
+
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: AppTheme.discordGreen,
+            duration: const Duration(seconds: 3),
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle_rounded, color: Colors.white),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Face ID Enrolled: $name ($rollNo) with $enrolledCount 3D Poses (Front, Left, Right)!',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
-      );
-      _rollNoController.clear();
-      _nameController.clear();
-      setState(() => _ticksCompleted = 0);
+        );
+
+        _rollNoController.clear();
+        _nameController.clear();
+        _resetPoseSequence();
+      }
     } catch (e) {
       setState(() {
         _error = 'Enrollment failed: $e';
-        _ticksCompleted = 0;
       });
     } finally {
       if (mounted) setState(() => _isProcessing = false);
@@ -224,6 +263,7 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> with SingleTickerPr
                             final s = _enrolledStudents[i];
                             final sName = s['name'] as String? ?? 'Unknown';
                             final sId = s['student_id'] as String? ?? '';
+                            final embCount = s['embeddings_count'] as int? ?? 3;
                             return Container(
                               margin: const EdgeInsets.only(bottom: 8),
                               decoration: BoxDecoration(
@@ -248,12 +288,32 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> with SingleTickerPr
                                     color: isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary,
                                   ),
                                 ),
-                                subtitle: Text(
-                                  'ID: $sId',
-                                  style: TextStyle(
-                                    color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
-                                    fontSize: 12,
-                                  ),
+                                subtitle: Row(
+                                  children: [
+                                    Text(
+                                      'ID: $sId',
+                                      style: TextStyle(
+                                        color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                                      decoration: BoxDecoration(
+                                        color: AppTheme.discordGreen.withValues(alpha: 0.15),
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Text(
+                                        '$embCount Poses',
+                                        style: const TextStyle(
+                                          color: AppTheme.discordGreen,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 10,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                                 trailing: IconButton(
                                   icon: const Icon(Icons.delete_outline_rounded, color: AppTheme.discordRed),
@@ -279,6 +339,33 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> with SingleTickerPr
         );
       },
     );
+  }
+
+  String _getStepInstruction() {
+    switch (_faceIdStep) {
+      case 0:
+        return 'Step 1 of 3: Look straight at camera (Frontal 0°)';
+      case 1:
+        return 'Step 2 of 3: Turn head slightly LEFT (~15°)';
+      case 2:
+        return 'Step 3 of 3: Turn head slightly RIGHT (~15°)';
+      default:
+        return 'Center face in the circle';
+    }
+  }
+
+  String _getButtonLabel() {
+    if (_isProcessing) return 'Extracting 3D Landmarks…';
+    switch (_faceIdStep) {
+      case 0:
+        return 'Capture Frontal Pose (1/3)';
+      case 1:
+        return 'Capture Left Angle (2/3)';
+      case 2:
+        return 'Capture Right Angle (3/3) & Finalize';
+      default:
+        return 'Capture Face';
+    }
   }
 
   @override
@@ -331,7 +418,7 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> with SingleTickerPr
                         ),
                       ),
                       Text(
-                        'Student Enrollment',
+                        '3D Face ID Enrollment',
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
@@ -349,7 +436,20 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> with SingleTickerPr
                       ),
                     ],
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 14),
+
+                  // Multi-Angle Step Indicator Chips
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      _buildAngleBadge('1. Frontal', 0, _faceIdStep >= 1),
+                      const SizedBox(width: 8),
+                      _buildAngleBadge('2. Left 15°', 1, _faceIdStep >= 2),
+                      const SizedBox(width: 8),
+                      _buildAngleBadge('3. Right 15°', 2, _ticksCompleted == 48),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
 
                   // Camera Lens Indicator & Flip Toggle
                   Row(
@@ -392,6 +492,40 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> with SingleTickerPr
                         ),
                       ],
                     ],
+                  ),
+                  const SizedBox(height: 14),
+
+                  // Dynamic Pose Guidance Banner
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: AppTheme.discordPurple.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: AppTheme.discordPurple.withValues(alpha: 0.25)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          _faceIdStep == 0
+                              ? Icons.visibility_rounded
+                              : (_faceIdStep == 1
+                                  ? Icons.keyboard_double_arrow_left_rounded
+                                  : Icons.keyboard_double_arrow_right_rounded),
+                          size: 18,
+                          color: AppTheme.discordPurple,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          _getStepInstruction(),
+                          style: const TextStyle(
+                            color: AppTheme.discordPurple,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                   const SizedBox(height: 16),
 
@@ -442,12 +576,12 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> with SingleTickerPr
                       ),
                     ),
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 18),
 
                   // Error Banner
                   if (_error != null)
                     Container(
-                      margin: const EdgeInsets.only(bottom: 16),
+                      margin: const EdgeInsets.only(bottom: 14),
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                       decoration: BoxDecoration(
                         color: AppTheme.discordRed.withValues(alpha: 0.15),
@@ -476,6 +610,7 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> with SingleTickerPr
                       children: [
                         TextField(
                           controller: _rollNoController,
+                          enabled: _faceIdStep == 0,
                           style: TextStyle(color: isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary),
                           decoration: InputDecoration(
                             labelText: 'Student Roll No (e.g. 23Z319)',
@@ -499,6 +634,7 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> with SingleTickerPr
                         const SizedBox(height: 12),
                         TextField(
                           controller: _nameController,
+                          enabled: _faceIdStep == 0,
                           style: TextStyle(color: isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary),
                           decoration: InputDecoration(
                             labelText: 'Student Full Name (Optional)',
@@ -522,36 +658,83 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> with SingleTickerPr
                       ],
                     ),
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 16),
 
-                  // Capture & Enroll Button
+                  // Capture Button
                   SizedBox(
                     width: double.infinity,
                     height: 54,
                     child: ElevatedButton.icon(
-                      onPressed: _isProcessing ? null : _captureAndEnroll,
+                      onPressed: _isProcessing ? null : _capturePoseStep,
                       icon: _isProcessing
                           ? const SizedBox(
                               width: 20,
                               height: 20,
                               child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                             )
-                          : const Icon(Icons.camera_enhance_rounded, color: Colors.white),
+                          : Icon(
+                              _faceIdStep == 2 ? Icons.check_circle_rounded : Icons.camera_enhance_rounded,
+                              color: Colors.white,
+                            ),
                       label: Text(
-                        _isProcessing ? 'Extracting Face Biometrics…' : 'Capture & Enroll Face',
+                        _getButtonLabel(),
                         style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.white),
                       ),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.discordPurple,
+                        backgroundColor: _faceIdStep == 2 ? AppTheme.discordGreen : AppTheme.discordPurple,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                         elevation: 4,
-                        shadowColor: AppTheme.discordPurple.withValues(alpha: 0.4),
+                        shadowColor: (_faceIdStep == 2 ? AppTheme.discordGreen : AppTheme.discordPurple)
+                            .withValues(alpha: 0.4),
                       ),
                     ),
                   ),
+
+                  // Reset / Retake Button if in multi-step flow
+                  if (_faceIdStep > 0) ...[
+                    const SizedBox(height: 8),
+                    TextButton.icon(
+                      onPressed: _resetPoseSequence,
+                      icon: const Icon(Icons.refresh_rounded, size: 16, color: AppTheme.discordRed),
+                      label: const Text('Reset & Start Over', style: TextStyle(color: AppTheme.discordRed, fontSize: 13)),
+                    ),
+                  ],
                   const SizedBox(height: 24),
                 ],
               ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAngleBadge(String label, int stepIndex, bool isCompleted) {
+    final isCurrent = _faceIdStep == stepIndex;
+    final color = isCompleted
+        ? AppTheme.discordGreen
+        : (isCurrent ? AppTheme.discordPurple : Colors.grey.withValues(alpha: 0.5));
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color, width: isCurrent ? 1.5 : 1.0),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (isCompleted) ...[
+            const Icon(Icons.check, size: 12, color: AppTheme.discordGreen),
+            const SizedBox(width: 4),
+          ],
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: isCurrent ? FontWeight.bold : FontWeight.w500,
+              color: color,
             ),
           ),
         ],

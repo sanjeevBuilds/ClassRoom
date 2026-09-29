@@ -15,6 +15,8 @@ class ClassroomBindings {
         _ProcessSweepVideoDart>('ClassroomProcessSweepVideo');
     enrollStudentFromPhoto = _lib.lookupFunction<_EnrollNative, _EnrollDart>(
         'ClassroomEnrollStudentFromPhoto');
+    enrollStudentFromPhotos = _lib.lookupFunction<_EnrollNative, _EnrollDart>(
+        'ClassroomEnrollStudentFromPhotos');
     getLastError = _lib.lookupFunction<_GetLastErrorNative,
         _GetLastErrorDart>('ClassroomGetLastError');
     freeString =
@@ -46,6 +48,14 @@ class ClassroomBindings {
       Pointer<Utf8> yunetModelPath,
       Pointer<Utf8> arcfaceModelPath,
       Pointer<Utf8> rosterDbPath) enrollStudentFromPhoto;
+
+  late final int Function(
+      Pointer<Utf8> photoPathsCsv,
+      Pointer<Utf8> studentId,
+      Pointer<Utf8> name,
+      Pointer<Utf8> yunetModelPath,
+      Pointer<Utf8> arcfaceModelPath,
+      Pointer<Utf8> rosterDbPath) enrollStudentFromPhotos;
 
   late final Pointer<Utf8> Function(Pointer<Utf8> rosterDbPath) getEnrolledStudents;
 

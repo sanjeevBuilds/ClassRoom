@@ -104,6 +104,25 @@ class ClassroomEngine {
         )));
   }
 
+  /// Multi-angle 3D face enrollment (Apple Face ID style): detects, aligns,
+  /// and extracts embeddings from multiple angle photos (Frontal, Left 15°, Right 15°)
+  /// and saves all 512-D vectors under [studentId]/[name] in SQLite.
+  /// Returns the number of successfully enrolled angles (>= 1 on success).
+  Future<int> enrollStudentFromPhotos({
+    required List<String> photoPaths,
+    required String studentId,
+    required String name,
+  }) {
+    return Isolate.run(() => _enrollStudentFromPhotos(_MultiEnrollArgs(
+          photoPaths: photoPaths,
+          studentId: studentId,
+          name: name,
+          yunetModelPath: yunetModelPath,
+          arcfaceModelPath: arcfaceModelPath,
+          rosterDbPath: rosterDbPath,
+        )));
+  }
+
   /// Runs the full pipeline on a recorded sweep video and returns the
   /// attendance results.
   Future<List<AttendanceResult>> processSweepVideo(String videoPath) {
@@ -152,6 +171,24 @@ class _EnrollArgs {
   final String rosterDbPath;
 }
 
+class _MultiEnrollArgs {
+  const _MultiEnrollArgs({
+    required this.photoPaths,
+    required this.studentId,
+    required this.name,
+    required this.yunetModelPath,
+    required this.arcfaceModelPath,
+    required this.rosterDbPath,
+  });
+
+  final List<String> photoPaths;
+  final String studentId;
+  final String name;
+  final String yunetModelPath;
+  final String arcfaceModelPath;
+  final String rosterDbPath;
+}
+
 class _SweepArgs {
   const _SweepArgs({
     required this.videoPath,
@@ -191,6 +228,29 @@ bool _enrollStudentFromPhoto(_EnrollArgs args) {
     return result == 1;
   } finally {
     for (final ptr in [photoPath, studentId, name, yunet, arcface, rosterDb]) {
+      calloc.free(ptr);
+    }
+  }
+}
+
+int _enrollStudentFromPhotos(_MultiEnrollArgs args) {
+  final bindings = ClassroomBindings();
+  final photoPathsCsv = args.photoPaths.join(',').toNativeUtf8();
+  final studentId = args.studentId.toNativeUtf8();
+  final name = args.name.toNativeUtf8();
+  final yunet = args.yunetModelPath.toNativeUtf8();
+  final arcface = args.arcfaceModelPath.toNativeUtf8();
+  final rosterDb = args.rosterDbPath.toNativeUtf8();
+  try {
+    final result = bindings.enrollStudentFromPhotos(
+        photoPathsCsv, studentId, name, yunet, arcface, rosterDb);
+    if (result == -1) {
+      final err = bindings.getLastError().toDartString();
+      throw StateError('Multi-angle enrollment failed: $err');
+    }
+    return result;
+  } finally {
+    for (final ptr in [photoPathsCsv, studentId, name, yunet, arcface, rosterDb]) {
       calloc.free(ptr);
     }
   }

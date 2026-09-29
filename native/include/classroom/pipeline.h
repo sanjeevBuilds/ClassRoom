@@ -43,6 +43,14 @@ bool EnrollStudentFromPhoto(const std::string& photo_path,
                              const std::string& name,
                              const PipelineConfig& config);
 
+// Multi-angle 3D face enrollment: detects, aligns, and extracts 512-D embeddings
+// from multiple photos (e.g. Frontal, Left 15°, Right 15°) and saves all vectors
+// under the student's entry in SQLite. Returns number of faces successfully enrolled.
+int EnrollStudentFromPhotos(const std::vector<std::string>& photo_paths,
+                            const std::string& student_id,
+                            const std::string& name,
+                            const PipelineConfig& config);
+
 // Serializes attendance results to the same JSON shape the Dart app's
 // AttendanceResult.toJson() already produces, for a single, simple
 // hand-off across the FFI boundary.
@@ -79,6 +87,12 @@ CLASSROOM_EXPORT const char* ClassroomProcessSweepVideo(
 // ClassroomGetLastError() for details in that case).
 CLASSROOM_EXPORT int ClassroomEnrollStudentFromPhoto(
     const char* photo_path, const char* student_id, const char* name,
+    const char* yunet_model_path, const char* arcface_model_path,
+    const char* roster_db_path);
+
+// Multi-angle photo enrollment: photo_paths is a null-terminated string of comma-separated or json file paths.
+CLASSROOM_EXPORT int ClassroomEnrollStudentFromPhotos(
+    const char* photo_paths_csv, const char* student_id, const char* name,
     const char* yunet_model_path, const char* arcface_model_path,
     const char* roster_db_path);
 

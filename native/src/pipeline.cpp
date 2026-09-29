@@ -177,6 +177,46 @@ bool EnrollStudentFromPhoto(const std::string& photo_path,
   return true;
 }
 
+int EnrollStudentFromPhotos(const std::vector<std::string>& photo_paths,
+                            const std::string& student_id,
+                            const std::string& name,
+                            const PipelineConfig& config) {
+  if (photo_paths.empty()) return 0;
+
+  YuNetDetector detector;
+  detector.Init(config.yunet_model_path, 0.45, 0.3);
+
+  ArcFaceEmbedder embedder;
+  embedder.Init(config.arcface_model_path);
+
+  RosterEntry entry;
+  entry.student_id = student_id;
+  entry.name = name;
+
+  int faces_enrolled = 0;
+  for (const auto& path : photo_paths) {
+    cv::Mat frame = cv::imread(path);
+    if (frame.empty()) continue;
+
+    auto detections = detector.Detect(frame, 0, 0.0);
+    const Detection* largest = LargestFace(detections);
+    if (largest != nullptr) {
+      auto embedding = embedder.ExtractEmbedding(frame, *largest);
+      entry.reference_embeddings.push_back(embedding.vector);
+      faces_enrolled++;
+    }
+  }
+
+  if (faces_enrolled > 0) {
+    RosterDB roster_db;
+    roster_db.Init(config.roster_db_path);
+    roster_db.EnrollStudent(entry);
+    roster_db.Close();
+  }
+
+  return faces_enrolled;
+}
+
 std::string AttendanceResultsToJson(const std::vector<AttendanceResult>& results) {
   std::ostringstream os;
   os << "[";
@@ -263,6 +303,35 @@ int ClassroomEnrollStudentFromPhoto(const char* photo_path,
     const bool found_face = classroom::EnrollStudentFromPhoto(
         photo_path, student_id, name, config);
     return found_face ? 1 : 0;
+  } catch (const std::exception& e) {
+    g_last_error = e.what();
+    return -1;
+  } catch (...) {
+    g_last_error = "unknown native exception";
+    return -1;
+  }
+}
+
+int ClassroomEnrollStudentFromPhotos(const char* photo_paths_csv,
+                                     const char* student_id, const char* name,
+                                     const char* yunet_model_path,
+                                     const char* arcface_model_path,
+                                     const char* roster_db_path) {
+  try {
+    classroom::PipelineConfig config;
+    config.yunet_model_path = yunet_model_path;
+    config.arcface_model_path = arcface_model_path;
+    config.roster_db_path = roster_db_path;
+
+    std::vector<std::string> paths;
+    std::string csv_str(photo_paths_csv ? photo_paths_csv : "");
+    std::stringstream ss(csv_str);
+    std::string item;
+    while (std::getline(ss, item, ',')) {
+      if (!item.empty()) paths.push_back(item);
+    }
+
+    return classroom::EnrollStudentFromPhotos(paths, student_id, name, config);
   } catch (const std::exception& e) {
     g_last_error = e.what();
     return -1;
