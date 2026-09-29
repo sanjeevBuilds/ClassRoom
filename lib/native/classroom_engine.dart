@@ -546,7 +546,7 @@ class ClassroomEngine {
 
     // 7. Roster database lookup & Cosine similarity matching
     final rosterEntries = await _rosterDb!.getAllEntries();
-    final matcher = CosineMatcher(tauMatch: 0.40);
+    final matcher = CosineMatcher(tauMatch: 0.38);
     final results = matcher.matchClustersToRoster(clusters, rosterEntries);
 
     // 8. Progressive Roster Learning (EMA update for high-confidence matches >= 0.85)

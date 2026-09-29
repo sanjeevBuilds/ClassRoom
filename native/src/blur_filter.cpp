@@ -18,18 +18,37 @@ double BlurFilter::ComputeSharpness(const cv::Mat& frame) const {
 
 std::vector<SampledFrame> BlurFilter::FilterBlurryFrames(
     std::vector<SampledFrame> frames) const {
+  if (frames.empty()) return {};
+
+  for (auto& f : frames) {
+    f.sharpness_score = ComputeSharpness(f.frame_lowres);
+  }
+
   std::vector<SampledFrame> kept;
   kept.reserve(frames.size());
 
   for (auto& f : frames) {
-    const double score = ComputeSharpness(f.frame_lowres);
-    if (score >= tau_blur_) {
-      f.sharpness_score = score;
+    if (f.sharpness_score >= tau_blur_) {
       kept.push_back(std::move(f));
     }
-    // Below threshold: dropped. cv::Mat's ref-counted buffers free
-    // themselves once f goes out of scope at the end of this loop
-    // iteration — no manual release() needed, unlike the Dart version.
+  }
+
+  // Adaptive classroom fallback: If rapid camera panning or dimmed projector
+  // lighting causes fewer than 35% of frames to meet tau_blur, retain the top
+  // 65% sharpest frames so the face detector is never starved of visual evidence.
+  if (kept.size() < frames.size() * 0.35 && !frames.empty()) {
+    std::sort(frames.begin(), frames.end(),
+              [](const SampledFrame& a, const SampledFrame& b) {
+                return a.sharpness_score > b.sharpness_score;
+              });
+    const size_t target_count =
+        std::max(size_t(1), static_cast<size_t>(frames.size() * 0.65));
+    kept.clear();
+    for (size_t i = 0; i < target_count && i < frames.size(); ++i) {
+      if (!frames[i].frame.empty()) {
+        kept.push_back(std::move(frames[i]));
+      }
+    }
   }
 
   return kept;

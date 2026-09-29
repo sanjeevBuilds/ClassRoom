@@ -23,7 +23,7 @@ class YuNetDetector extends DetectorBase {
 
   /// Load the YuNet ONNX model from an asset path
   /// (e.g. 'assets/models/yunet_int8.onnx').
-  Future<void> init(String assetPath, {double scoreThreshold = 0.45, double nmsThreshold = 0.3}) async {
+  Future<void> init(String assetPath, {double scoreThreshold = 0.30, double nmsThreshold = 0.3}) async {
     final data = await rootBundle.load(assetPath);
     final bytes = data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
     _detector = cv.FaceDetectorYN.fromBuffer(

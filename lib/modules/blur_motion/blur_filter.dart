@@ -38,17 +38,44 @@ class BlurFilter {
   List<Map<String, dynamic>> filterBlurryFrames(
     List<Map<String, dynamic>> frames,
   ) {
-    final kept = <Map<String, dynamic>>[];
+    if (frames.isEmpty) return [];
+
     for (final frame in frames) {
       final lowres = frame['frame_lowres'] as cv.Mat;
-      final score = computeSharpness(lowres);
+      frame['sharpness_score'] = computeSharpness(lowres);
+    }
+
+    final kept = <Map<String, dynamic>>[];
+    final dropped = <Map<String, dynamic>>[];
+
+    for (final frame in frames) {
+      final score = frame['sharpness_score'] as double;
       if (score >= tauBlur) {
-        frame['sharpness_score'] = score;
         kept.add(frame);
       } else {
-        (frame['frame'] as cv.Mat).release();
-        lowres.release();
+        dropped.add(frame);
       }
+    }
+
+    // Adaptive fallback: if rapid camera panning or dimmed projector
+    // lighting causes fewer than 35% of frames to meet tauBlur, retain the
+    // top 65% sharpest frames so the face detector is never starved of evidence.
+    if (kept.length < frames.length * 0.35 && frames.isNotEmpty) {
+      frames.sort((a, b) =>
+          (b['sharpness_score'] as double).compareTo(a['sharpness_score'] as double));
+      final targetCount = (frames.length * 0.65).round().clamp(1, frames.length);
+      final finalKept = frames.take(targetCount).toList();
+      final toRelease = frames.skip(targetCount).toList();
+      for (final f in toRelease) {
+        (f['frame'] as cv.Mat).release();
+        (f['frame_lowres'] as cv.Mat).release();
+      }
+      return finalKept;
+    }
+
+    for (final f in dropped) {
+      (f['frame'] as cv.Mat).release();
+      (f['frame_lowres'] as cv.Mat).release();
     }
     return kept;
   }

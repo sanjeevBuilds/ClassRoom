@@ -95,7 +95,7 @@ std::vector<AttendanceResult> ProcessSweepVideo(const std::string& video_path,
   const size_t n_sharp = sharp_frames.size();
 
   YuNetDetector detector;
-  detector.Init(config.yunet_model_path, 0.45, 0.3);
+  detector.Init(config.yunet_model_path, 0.30, 0.3);
 
   ArcFaceEmbedder embedder;
   embedder.Init(config.arcface_model_path);

@@ -23,9 +23,9 @@ struct PipelineConfig {
   std::string arcface_model_path;
   std::string roster_db_path;
   double target_fps = 4.0;
-  double tau_blur = 100.0;
+  double tau_blur = 15.0;     // Calibrated for 640x360 downscaled classroom sweeps
   double tau_cluster = 0.35;
-  double tau_match = 0.45;
+  double tau_match = 0.38;    // Calibrated for asymmetric classroom recognition
 };
 
 // Runs the full pipeline on a recorded sweep video and returns the
