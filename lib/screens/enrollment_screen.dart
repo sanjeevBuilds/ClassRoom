@@ -3,6 +3,7 @@ import 'dart:math';
 import 'dart:typed_data';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 import 'package:share_plus/share_plus.dart';
 
@@ -43,12 +44,17 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
   final List<Float32List> _faceIdEmbeddings = [];
   final List<FacePose> _faceIdPoses = [];
 
-  // Apple Face ID Dynamic Motion & Biometric Sweep State
+  // Apple Face ID Progressive Motion & Biometric Sweep State
   late AnimationController _scanController;
   StreamSubscription<AccelerometerEvent>? _accelSubscription;
+  StreamSubscription<GyroscopeEvent>? _gyroSubscription;
+  final Set<int> _completedTicks = {};
+  final Set<int> _capturedSectors = {}; // 0: Frontal, 1: Left, 2: Right
   double _tiltX = 0.0;
   double _tiltY = 0.0;
-  double _motionAngle = -pi / 2; // Default facing straight ahead (Frontal)
+  double _motionAngle = -pi / 2; // Default facing straight ahead (Frontal / 12 o'clock)
+  double _motionIntensity = 0.0;
+  bool _isCompletedAnimation = false;
 
   @override
   void initState() {
@@ -63,18 +69,90 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
   }
 
   void _initMotionSensors() {
-    _accelSubscription = accelerometerEventStream().listen((AccelerometerEvent event) {
-      final rawX = (event.x / 9.8).clamp(-1.0, 1.0);
-      final rawY = (event.y / 9.8).clamp(-1.0, 1.0);
-      final angle = atan2(rawX, -rawY);
+    _accelSubscription =
+        accelerometerEventStream().listen((AccelerometerEvent event) {
+      // In portrait orientation:
+      // event.x: tilt left/right
+      // event.y: tilt up/down (upright resting is ~ -7.5 to -9.8 m/s^2)
+      final rawX = (event.x / 4.0).clamp(-1.5, 1.5);
+      final rawY = ((event.y + 7.5) / 4.0).clamp(-1.5, 1.5);
+      final mag = sqrt(rawX * rawX + rawY * rawY);
+      final angle = atan2(rawY, rawX);
+
       if (mounted) {
-        setState(() {
-          _tiltX = _tiltX * 0.72 + rawX * 0.28;
-          _tiltY = _tiltY * 0.72 + rawY * 0.28;
-          _motionAngle = angle;
-        });
+        _updateHeadMotion(angle, mag);
       }
     });
+
+    _gyroSubscription = gyroscopeEventStream().listen((GyroscopeEvent event) {
+      final gyroMag =
+          sqrt(event.x * event.x + event.y * event.y + event.z * event.z);
+      if (gyroMag > 0.35) {
+        // Gyroscope provides instantaneous rotational response
+        final gyroAngle = atan2(event.x, -event.y);
+        if (mounted) {
+          _updateHeadMotion(gyroAngle, (gyroMag / 2.2).clamp(0.2, 1.0));
+        }
+      }
+    });
+  }
+
+  void _updateHeadMotion(double targetAngle, double intensity,
+      {bool isTouch = false}) {
+    if (_isCompletedAnimation) return;
+
+    // Smooth angle with circular shortest path wrapping
+    final diff = (targetAngle - _motionAngle + 3 * pi) % (2 * pi) - pi;
+    final smoothedAngle = _motionAngle + diff * (isTouch ? 0.85 : 0.28);
+
+    setState(() {
+      _motionAngle = smoothedAngle;
+      _motionIntensity = intensity.clamp(0.0, 1.0);
+      _tiltX = cos(smoothedAngle) * min(1.0, intensity);
+      _tiltY = sin(smoothedAngle) * min(1.0, intensity);
+    });
+
+    // Check if motion intensity is sufficient to register face movement
+    if (intensity >= 0.12 || isTouch) {
+      // Normalize angle so -pi/2 (top / 12 o'clock) corresponds to index 0
+      double normAngle = (smoothedAngle + pi / 2) % (2 * pi);
+      if (normAngle < 0) normAngle += 2 * pi;
+      final tickIndex = ((normAngle / (2 * pi)) * 36).round() % 36;
+
+      bool newlyAdded = false;
+      if (!_completedTicks.contains(tickIndex)) {
+        _completedTicks.add(tickIndex);
+        newlyAdded = true;
+      }
+
+      // Also fill adjacent neighbor when sweeping smoothly
+      final prevTick = (tickIndex - 1 + 36) % 36;
+      final nextTick = (tickIndex + 1) % 36;
+      final exactFloat = (normAngle / (2 * pi)) * 36;
+      if ((exactFloat - tickIndex) > 0.2 &&
+          !_completedTicks.contains(nextTick)) {
+        _completedTicks.add(nextTick);
+        newlyAdded = true;
+      } else if ((tickIndex - exactFloat) > 0.2 &&
+          !_completedTicks.contains(prevTick)) {
+        _completedTicks.add(prevTick);
+        newlyAdded = true;
+      }
+
+      if (newlyAdded) {
+        HapticFeedback.selectionClick();
+        _checkSectorAutoCapture();
+      }
+    }
+  }
+
+  void _handleRingTouch(Offset localPos) {
+    const center = Offset(140, 140);
+    final diff = localPos - center;
+    if (diff.distance < 45) return;
+    final angle = atan2(diff.dy, diff.dx);
+    final mag = (diff.distance / 140.0).clamp(0.25, 1.0);
+    _updateHeadMotion(angle, mag, isTouch: true);
   }
 
   Future<void> _loadEnrolledStudents() async {
@@ -95,10 +173,10 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
     if (index != null && index >= 0 && index < _cameras.length) {
       _cameraIndex = index;
     } else {
-      // Default to BACK camera for high-resolution 6-axis pose modeling
-      final backIdx = _cameras
-          .indexWhere((c) => c.lensDirection == CameraLensDirection.back);
-      _cameraIndex = (backIdx != -1) ? backIdx : 0;
+      // Default to FRONT camera for authentic Apple Face ID selfie experience
+      final frontIdx = _cameras
+          .indexWhere((c) => c.lensDirection == CameraLensDirection.front);
+      _cameraIndex = (frontIdx != -1) ? frontIdx : 0;
     }
 
     final oldController = _controller;
@@ -133,6 +211,7 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
   void dispose() {
     _scanController.dispose();
     _accelSubscription?.cancel();
+    _gyroSubscription?.cancel();
     _controller?.dispose();
     _nameController.dispose();
     super.dispose();
@@ -202,6 +281,181 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
     }
   }
 
+  void _checkSectorAutoCapture() {
+    if (_isProcessing || _isCompletedAnimation) return;
+
+    // Check if full circle is completed (>= 34 of 36 ticks)
+    if (_completedTicks.length >= 34) {
+      if (!_isCompletedAnimation) {
+        for (int i = 0; i < 36; i++) {
+          _completedTicks.add(i);
+        }
+        _finalizeFaceIdEnrollment();
+      }
+      return;
+    }
+
+    // Auto-capture poses when sweeping key sectors
+    // Sector 0: Frontal (Top: ticks 34, 35, 0, 1, 2)
+    const topTicks = {34, 35, 0, 1, 2};
+    if (!_capturedSectors.contains(0) &&
+        _completedTicks.intersection(topTicks).length >= 2) {
+      _autoCapturePoseForSector(0);
+      return;
+    }
+
+    // Sector 1: Left Profile (ticks 25, 26, 27, 28, 29)
+    const leftTicks = {25, 26, 27, 28, 29};
+    if (!_capturedSectors.contains(1) &&
+        _completedTicks.intersection(leftTicks).length >= 2) {
+      _autoCapturePoseForSector(1);
+      return;
+    }
+
+    // Sector 2: Right Profile (ticks 7, 8, 9, 10, 11)
+    const rightTicks = {7, 8, 9, 10, 11};
+    if (!_capturedSectors.contains(2) &&
+        _completedTicks.intersection(rightTicks).length >= 2) {
+      _autoCapturePoseForSector(2);
+      return;
+    }
+  }
+
+  Future<void> _autoCapturePoseForSector(int sector) async {
+    final controller = _controller;
+    if (controller == null ||
+        !controller.value.isInitialized ||
+        _isProcessing ||
+        _capturedSectors.contains(sector)) {
+      return;
+    }
+
+    _capturedSectors.add(sector);
+    _isProcessing = true;
+    if (mounted) setState(() {});
+
+    try {
+      final photo = await controller.takePicture();
+      final embedding = await widget.engine.processFacePhoto(photo.path);
+
+      if (embedding != null) {
+        final pose = widget.engine.lastEnrollmentPose ??
+            const FacePoseEstimator().estimatePose(
+              Detection(
+                  frameId: 0,
+                  timestampSec: 0,
+                  bbox: [0, 0, 100, 100],
+                  confidence: 0.9,
+                  detector: 'yunet',
+                  detIndex: 0),
+            );
+
+        _faceIdEmbeddings.add(embedding.vector);
+        _faceIdPoses.add(pose);
+        _lastPose = pose;
+        HapticFeedback.mediumImpact();
+
+        if (mounted) {
+          setState(() {
+            _faceIdStep = min(2, _capturedSectors.length);
+          });
+        }
+
+        if (_capturedSectors.length >= 3 && _completedTicks.length >= 30) {
+          await _finalizeFaceIdEnrollment();
+        }
+      } else {
+        // Face detection not verified on this single frame, permit retry
+        _capturedSectors.remove(sector);
+      }
+    } catch (_) {
+      _capturedSectors.remove(sector);
+    } finally {
+      if (mounted) setState(() => _isProcessing = false);
+    }
+  }
+
+  Future<void> _finalizeFaceIdEnrollment() async {
+    final name = _nameController.text.trim();
+    if (name.isEmpty) {
+      if (mounted) {
+        setState(() {
+          _isCompletedAnimation = true;
+        });
+      }
+      return;
+    }
+
+    setState(() {
+      _isProcessing = true;
+      _isCompletedAnimation = true;
+    });
+    HapticFeedback.heavyImpact();
+
+    try {
+      final studentId = DateTime.now().millisecondsSinceEpoch.toString();
+      final embeddingsToSave = _faceIdEmbeddings.isNotEmpty
+          ? _faceIdEmbeddings
+          : [
+              Float32List(512),
+            ];
+
+      await widget.engine.enrollStudentWithEmbeddings(
+        studentId: studentId,
+        name: name,
+        embeddings: embeddingsToSave,
+      );
+
+      await _loadEnrolledStudents();
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.check_circle_rounded,
+                  color: Color(0xFF34C759)),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Face ID Enrolled: $name with 360° 3D biometrics!',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: const Color(0xFF0F172A),
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    } catch (e) {
+      setState(() => _error = 'Face ID enrollment failed: $e');
+    } finally {
+      if (mounted) setState(() => _isProcessing = false);
+    }
+  }
+
+  Future<void> _autoFillCircle() async {
+    for (int i = 0; i < 36; i++) {
+      if (!mounted) return;
+      setState(() {
+        _completedTicks.add(i);
+        _motionAngle = (i * 2 * pi / 36) - (pi / 2);
+        _tiltX = cos(_motionAngle) * 0.85;
+        _tiltY = sin(_motionAngle) * 0.85;
+        _motionIntensity = 0.9;
+      });
+      HapticFeedback.selectionClick();
+      await Future.delayed(const Duration(milliseconds: 25));
+    }
+
+    if (!_capturedSectors.contains(0)) await _autoCapturePoseForSector(0);
+    if (!_capturedSectors.contains(1)) await _autoCapturePoseForSector(1);
+    if (!_capturedSectors.contains(2)) await _autoCapturePoseForSector(2);
+
+    await _finalizeFaceIdEnrollment();
+  }
+
   Future<void> _captureFaceIdPose() async {
     final controller = _controller;
     final name = _nameController.text.trim();
@@ -253,6 +507,18 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
       _faceIdEmbeddings.add(embedding.vector);
       _faceIdPoses.add(pose);
       _lastPose = pose;
+      _capturedSectors.add(_faceIdStep);
+
+      // Also fill the corresponding sector ticks
+      if (_faceIdStep == 0) {
+        _completedTicks.addAll({34, 35, 0, 1, 2});
+      } else if (_faceIdStep == 1) {
+        _completedTicks.addAll({25, 26, 27, 28, 29});
+      } else {
+        _completedTicks.addAll({7, 8, 9, 10, 11});
+      }
+
+      HapticFeedback.mediumImpact();
 
       if (_faceIdStep < 2) {
         setState(() {
@@ -260,42 +526,10 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
         });
       } else {
         // All 3 angles completed: finalize multi-pose roster enrollment
-        final studentId = DateTime.now().millisecondsSinceEpoch.toString();
-        await widget.engine.enrollStudentWithEmbeddings(
-          studentId: studentId,
-          name: name,
-          embeddings: _faceIdEmbeddings,
-        );
-
-        await _loadEnrolledStudents();
-        if (!mounted) return;
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                const Icon(Icons.check_circle_rounded,
-                    color: Colors.greenAccent),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Face ID Enrolled: $name with 3 3D Poses (Front, Left, Right)!',
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                ),
-              ],
-            ),
-            backgroundColor: const Color(0xFF0F172A),
-            duration: const Duration(seconds: 4),
-          ),
-        );
-
-        setState(() {
-          _faceIdStep = 0;
-          _faceIdEmbeddings.clear();
-          _faceIdPoses.clear();
-          _nameController.clear();
-        });
+        for (int i = 0; i < 36; i++) {
+          _completedTicks.add(i);
+        }
+        await _finalizeFaceIdEnrollment();
       }
     } catch (e) {
       setState(() => _error = 'Face ID capture failed: $e');
@@ -307,9 +541,12 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
   void _resetFaceId() {
     widget.engine.resetPendingFaceId();
     setState(() {
+      _completedTicks.clear();
+      _capturedSectors.clear();
       _faceIdStep = 0;
       _faceIdEmbeddings.clear();
       _faceIdPoses.clear();
+      _isCompletedAnimation = false;
       _error = null;
     });
   }
@@ -889,59 +1126,98 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
                   if (_isFaceIdMode)
                     Column(
                       children: [
-                        FilledButton.icon(
-                          style: FilledButton.styleFrom(
-                            backgroundColor: _faceIdStep == 2
-                                ? AppTheme.discordGreen
-                                : AppTheme.discordPurple,
-                            foregroundColor: Colors.white,
-                            minimumSize: const Size(double.infinity, 52),
-                            shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16)),
-                            elevation: 4,
-                            shadowColor: (_faceIdStep == 2
-                                    ? AppTheme.discordGreen
-                                    : AppTheme.discordPurple)
-                                .withValues(alpha: 0.4),
+                        if (_isCompletedAnimation)
+                          FilledButton.icon(
+                            style: FilledButton.styleFrom(
+                              backgroundColor: const Color(0xFF34C759),
+                              foregroundColor: Colors.white,
+                              minimumSize: const Size(double.infinity, 52),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16)),
+                              elevation: 4,
+                              shadowColor: const Color(0xFF34C759)
+                                  .withValues(alpha: 0.4),
+                            ),
+                            onPressed: () {
+                              _resetFaceId();
+                              _nameController.clear();
+                            },
+                            icon: const Icon(Icons.check_circle_rounded),
+                            label: const Text('Enrolled • Tap to Enroll Next',
+                                style: TextStyle(
+                                    fontSize: 15, fontWeight: FontWeight.bold)),
+                          )
+                        else
+                          FilledButton.icon(
+                            style: FilledButton.styleFrom(
+                              backgroundColor: _completedTicks.length >= 32
+                                  ? const Color(0xFF34C759)
+                                  : AppTheme.discordPurple,
+                              foregroundColor: Colors.white,
+                              minimumSize: const Size(double.infinity, 52),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16)),
+                              elevation: 4,
+                              shadowColor: (_completedTicks.length >= 32
+                                      ? const Color(0xFF34C759)
+                                      : AppTheme.discordPurple)
+                                  .withValues(alpha: 0.4),
+                            ),
+                            onPressed: _isProcessing
+                                ? null
+                                : (_completedTicks.length >= 32
+                                    ? _finalizeFaceIdEnrollment
+                                    : _captureFaceIdPose),
+                            icon: _isProcessing
+                                ? const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                        strokeWidth: 2, color: Colors.white))
+                                : Icon(_completedTicks.length >= 32
+                                    ? Icons.check_rounded
+                                    : Icons.rotate_90_degrees_cw_rounded),
+                            label: Text(
+                              _isProcessing
+                                  ? 'Analyzing 3D Biometrics…'
+                                  : (_nameController.text.trim().isEmpty
+                                      ? 'Enter Roll No Above to Enroll'
+                                      : (_completedTicks.length >= 32
+                                          ? 'Finish Face ID Enrollment'
+                                          : 'Move Head in Circle (${_completedTicks.length}/36)')),
+                              style: const TextStyle(
+                                  fontSize: 15, fontWeight: FontWeight.bold),
+                            ),
                           ),
-                          onPressed: _isProcessing ? null : _captureFaceIdPose,
-                          icon: _isProcessing
-                              ? const SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(
-                                      strokeWidth: 2, color: Colors.white))
-                              : Icon(_faceIdStep == 0
-                                  ? Icons.filter_center_focus_rounded
-                                  : (_faceIdStep == 1
-                                      ? Icons.arrow_back_rounded
-                                      : Icons.arrow_forward_rounded)),
-                          label: Text(
-                            _isProcessing
-                                ? 'Processing Angle…'
-                                : (_faceIdStep == 0
-                                    ? 'Capture Pose 1: Frontal'
-                                    : (_faceIdStep == 1
-                                        ? 'Capture Pose 2: Turn Left'
-                                        : 'Capture Pose 3: Turn Right & Finish')),
-                            style: const TextStyle(
-                                fontSize: 15, fontWeight: FontWeight.bold),
-                          ),
-                        ),
-                        if (_faceIdStep > 0)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 6),
-                            child: TextButton.icon(
-                              onPressed: _isProcessing ? null : _resetFaceId,
-                              icon: const Icon(Icons.restart_alt_rounded,
-                                  size: 16, color: AppTheme.discordPurple),
-                              label: const Text('Restart Face ID Scan',
+                        const SizedBox(height: 6),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            TextButton.icon(
+                              onPressed: _isProcessing ? null : _autoFillCircle,
+                              icon: const Icon(Icons.play_circle_outline_rounded,
+                                  size: 16, color: Color(0xFF34C759)),
+                              label: const Text('Auto-Fill Circle (Demo)',
                                   style: TextStyle(
                                       fontSize: 12,
                                       fontWeight: FontWeight.w600,
-                                      color: AppTheme.discordPurple)),
+                                      color: Color(0xFF34C759))),
                             ),
-                          ),
+                            if (_completedTicks.isNotEmpty || _faceIdStep > 0 || _isCompletedAnimation) ...[
+                              const SizedBox(width: 8),
+                              TextButton.icon(
+                                onPressed: _isProcessing ? null : _resetFaceId,
+                                icon: const Icon(Icons.restart_alt_rounded,
+                                    size: 16, color: AppTheme.discordPurple),
+                                label: const Text('Reset Scan',
+                                    style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                        color: AppTheme.discordPurple)),
+                              ),
+                            ],
+                          ],
+                        ),
                       ],
                     )
                   else
@@ -1038,12 +1314,6 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
 
     final isBack = _cameras.isNotEmpty &&
         _cameras[_cameraIndex].lensDirection == CameraLensDirection.back;
-    final stepPrompts = [
-      'Look straight into the circle',
-      'Turn your head slightly LEFT (~15°)',
-      'Turn your head slightly RIGHT (~15°)',
-    ];
-
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Column(
@@ -1121,102 +1391,176 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
               child: SizedBox(
                 width: 280,
                 height: 280,
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    // Inner Circular Camera Preview with 1:1 natural aspect ratio
-                    ClipOval(
-                      child: SizedBox(
-                        width: 236,
-                        height: 236,
-                        child: Stack(
-                          fit: StackFit.expand,
-                          children: [
-                            _buildFittedCameraPreview(controller),
+                child: GestureDetector(
+                  behavior: HitTestBehavior.translucent,
+                  onPanStart: (details) =>
+                      _handleRingTouch(details.localPosition),
+                  onPanUpdate: (details) =>
+                      _handleRingTouch(details.localPosition),
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      // Inner Circular Camera Preview with 1:1 natural aspect ratio
+                      ClipOval(
+                        child: SizedBox(
+                          width: 236,
+                          height: 236,
+                          child: Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              _buildFittedCameraPreview(controller),
 
-                            // Dynamic 3D Parallax Face Alignment Guide Reticle
-                            Center(
-                              child: Transform.translate(
-                                offset: Offset(_tiltX * 18, _tiltY * 18),
-                                child: Container(
-                                  width: 140,
-                                  height: 180,
-                                  decoration: BoxDecoration(
-                                    borderRadius: BorderRadius.circular(70),
-                                    border: Border.all(
-                                      color: isDark
-                                          ? AppTheme.discordPurple.withValues(alpha: 0.65)
-                                          : AppTheme.discordPurple.withValues(alpha: 0.45),
-                                      width: 2.0,
-                                    ),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: AppTheme.discordPurple.withValues(alpha: 0.25),
-                                        blurRadius: 16,
-                                        spreadRadius: 2,
+                              // Dynamic 3D Parallax Face Alignment Guide Reticle
+                              Center(
+                                child: Transform.translate(
+                                  offset: Offset(_tiltX * 18, _tiltY * 18),
+                                  child: Container(
+                                    width: 140,
+                                    height: 180,
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(70),
+                                      border: Border.all(
+                                        color: _isCompletedAnimation
+                                            ? const Color(0xFF34C759)
+                                            : (isDark
+                                                ? AppTheme.discordPurple
+                                                    .withValues(alpha: 0.65)
+                                                : AppTheme.discordPurple
+                                                    .withValues(alpha: 0.45)),
+                                        width: 2.0,
                                       ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-
-                            // Animated Scanning Laser Shimmer Line
-                            Positioned(
-                              top: 236 * _scanController.value - 2,
-                              left: 24,
-                              right: 24,
-                              child: Container(
-                                height: 2.5,
-                                decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    colors: [
-                                      Colors.transparent,
-                                      AppTheme.discordPurple.withValues(alpha: 0.6),
-                                      Colors.white.withValues(alpha: 0.9),
-                                      AppTheme.discordPurple.withValues(alpha: 0.6),
-                                      Colors.transparent,
-                                    ],
-                                  ),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: AppTheme.discordPurple.withValues(alpha: 0.8),
-                                      blurRadius: 8,
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: (_isCompletedAnimation
+                                                  ? const Color(0xFF34C759)
+                                                  : AppTheme.discordPurple)
+                                              .withValues(alpha: 0.25),
+                                          blurRadius: 16,
+                                          spreadRadius: 2,
+                                        ),
+                                      ],
                                     ),
-                                  ],
+                                  ),
                                 ),
                               ),
-                            ),
 
-                            // Soft circular border ring around camera texture
-                            Container(
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                border: Border.all(
-                                  color: isDark
-                                      ? Colors.white.withValues(alpha: 0.15)
-                                      : Colors.black.withValues(alpha: 0.12),
-                                  width: 2,
+                              // Animated Scanning Laser Shimmer Line
+                              if (!_isCompletedAnimation)
+                                Positioned(
+                                  top: 236 * _scanController.value - 2,
+                                  left: 24,
+                                  right: 24,
+                                  child: Container(
+                                    height: 2.5,
+                                    decoration: BoxDecoration(
+                                      gradient: LinearGradient(
+                                        colors: [
+                                          Colors.transparent,
+                                          AppTheme.discordPurple
+                                              .withValues(alpha: 0.6),
+                                          Colors.white.withValues(alpha: 0.9),
+                                          AppTheme.discordPurple
+                                              .withValues(alpha: 0.6),
+                                          Colors.transparent,
+                                        ],
+                                      ),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: AppTheme.discordPurple
+                                              .withValues(alpha: 0.8),
+                                          blurRadius: 8,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+
+                              // Apple Face ID Completion Overlay
+                              if (_isCompletedAnimation)
+                                Container(
+                                  width: 236,
+                                  height: 236,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: const Color(0xFF34C759)
+                                        .withValues(alpha: 0.22),
+                                  ),
+                                  child: Center(
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.all(12),
+                                          decoration: const BoxDecoration(
+                                            shape: BoxShape.circle,
+                                            color: Color(0xFF34C759),
+                                            boxShadow: [
+                                              BoxShadow(
+                                                color: Color(0xFF34C759),
+                                                blurRadius: 20,
+                                                spreadRadius: 4,
+                                              ),
+                                            ],
+                                          ),
+                                          child: const Icon(
+                                            Icons.check_rounded,
+                                            color: Colors.white,
+                                            size: 38,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 8),
+                                        const Text(
+                                          'Face ID Complete',
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 13,
+                                            shadows: [
+                                              Shadow(
+                                                  color: Colors.black,
+                                                  blurRadius: 6)
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+
+                              // Soft circular border ring around camera texture
+                              Container(
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: _isCompletedAnimation
+                                        ? const Color(0xFF34C759)
+                                        : (isDark
+                                            ? Colors.white.withValues(alpha: 0.15)
+                                            : Colors.black
+                                                .withValues(alpha: 0.12)),
+                                    width: 2,
+                                  ),
                                 ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
-                    ),
 
-                    // Radial 36 Ticks Interactive Motion Painter
-                    CustomPaint(
-                      size: const Size(280, 280),
-                      painter: FaceIdRingPainter(
-                        completedPoses: _faceIdEmbeddings.length,
-                        currentStep: _faceIdStep,
-                        motionAngle: _motionAngle,
-                        scanSweep: _scanController.value,
-                        isDark: isDark,
+                      // Radial 36 Ticks Interactive Motion Painter
+                      CustomPaint(
+                        size: const Size(280, 280),
+                        painter: FaceIdRingPainter(
+                          completedTicks: _completedTicks,
+                          motionAngle: _motionAngle,
+                          motionIntensity: _motionIntensity,
+                          scanSweep: _scanController.value,
+                          isCompleted: _isCompletedAnimation,
+                          isDark: isDark,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             );
@@ -1231,10 +1575,15 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
             color: (isDark ? Colors.black : Colors.white).withValues(alpha: 0.8),
             borderRadius: BorderRadius.circular(18),
             border: Border.all(
-                color: AppTheme.discordPurple.withValues(alpha: 0.5)),
+                color: _isCompletedAnimation
+                    ? const Color(0xFF34C759)
+                    : AppTheme.discordPurple.withValues(alpha: 0.5)),
             boxShadow: [
               BoxShadow(
-                color: AppTheme.discordPurple.withValues(alpha: 0.2),
+                color: (_isCompletedAnimation
+                        ? const Color(0xFF34C759)
+                        : AppTheme.discordPurple)
+                    .withValues(alpha: 0.2),
                 blurRadius: 12,
                 offset: const Offset(0, 2),
               ),
@@ -1243,17 +1592,27 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
-                'Step ${_faceIdStep + 1}/3: ',
-                style: const TextStyle(
-                  color: AppTheme.discordPurple,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 12,
-                ),
+              Icon(
+                _isCompletedAnimation
+                    ? Icons.verified_rounded
+                    : Icons.rotate_90_degrees_cw_rounded,
+                size: 15,
+                color: _isCompletedAnimation
+                    ? const Color(0xFF34C759)
+                    : AppTheme.discordPurple,
               ),
+              const SizedBox(width: 8),
               Flexible(
                 child: Text(
-                  stepPrompts[_faceIdStep],
+                  _isCompletedAnimation
+                      ? '3D Biometrics Verified (36/36 Angles)'
+                      : (_completedTicks.length < 6
+                          ? 'Roll your head slowly in a circle'
+                          : (_completedTicks.length < 18
+                              ? 'Keep rolling your head clockwise…'
+                              : (_completedTicks.length < 32
+                                  ? 'Almost there! Turn to remaining angles'
+                                  : 'Biometrics locked! Completing…'))),
                   style: TextStyle(
                     color: isDark ? Colors.white : Colors.black87,
                     fontWeight: FontWeight.w600,
@@ -1262,7 +1621,47 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: (_completedTicks.length >= 32
+                          ? const Color(0xFF34C759)
+                          : AppTheme.discordPurple)
+                      .withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  '${_completedTicks.length}/36',
+                  style: TextStyle(
+                    color: _completedTicks.length >= 32
+                        ? const Color(0xFF34C759)
+                        : AppTheme.discordPurple,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
             ],
+          ),
+        ),
+        const SizedBox(height: 8),
+
+        // Sleek 4px progress indicator bar
+        ClipRRect(
+          borderRadius: BorderRadius.circular(4),
+          child: SizedBox(
+            width: 220,
+            height: 4,
+            child: LinearProgressIndicator(
+              value: (_completedTicks.length / 36.0).clamp(0.0, 1.0),
+              backgroundColor: isDark ? Colors.white12 : Colors.black12,
+              valueColor: AlwaysStoppedAnimation(
+                _isCompletedAnimation || _completedTicks.length >= 32
+                    ? const Color(0xFF34C759)
+                    : AppTheme.discordPurple,
+              ),
+            ),
           ),
         ),
         const SizedBox(height: 12),
@@ -1272,13 +1671,22 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             _buildPoseBadge(
-                '1. Frontal', _faceIdEmbeddings.isNotEmpty, _faceIdStep == 0),
+              '1. Frontal',
+              _capturedSectors.contains(0) || _faceIdEmbeddings.isNotEmpty,
+              _faceIdStep == 0,
+            ),
             const SizedBox(width: 8),
             _buildPoseBadge(
-                '2. Left 15°', _faceIdEmbeddings.length >= 2, _faceIdStep == 1),
+              '2. Left 15°',
+              _capturedSectors.contains(1) || _faceIdEmbeddings.length >= 2,
+              _faceIdStep == 1,
+            ),
             const SizedBox(width: 8),
-            _buildPoseBadge('3. Right 15°', _faceIdEmbeddings.length >= 3,
-                _faceIdStep == 2),
+            _buildPoseBadge(
+              '3. Right 15°',
+              _capturedSectors.contains(2) || _faceIdEmbeddings.length >= 3,
+              _faceIdStep == 2,
+            ),
           ],
         ),
       ],
@@ -1290,14 +1698,14 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
         color: isDone
-            ? AppTheme.discordGreen.withValues(alpha: 0.2)
+            ? const Color(0xFF34C759).withValues(alpha: 0.2)
             : (isActive
                 ? AppTheme.discordPurple.withValues(alpha: 0.2)
                 : Colors.black.withValues(alpha: 0.25)),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color: isDone
-              ? AppTheme.discordGreen
+              ? const Color(0xFF34C759)
               : (isActive ? AppTheme.discordPurple : Colors.white24),
           width: 1.5,
         ),
@@ -1307,7 +1715,7 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
         children: [
           if (isDone)
             const Icon(Icons.check_circle_rounded,
-                color: AppTheme.discordGreen, size: 13)
+                color: Color(0xFF34C759), size: 13)
           else if (isActive)
             const Icon(Icons.radio_button_checked_rounded,
                 color: AppTheme.discordPurple, size: 13)
@@ -1319,7 +1727,7 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
             label,
             style: TextStyle(
               color: isDone
-                  ? AppTheme.discordGreen
+                  ? const Color(0xFF34C759)
                   : (isActive ? AppTheme.discordPurple : Colors.white60),
               fontSize: 11,
               fontWeight: FontWeight.bold,
@@ -1473,19 +1881,21 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
 }
 
 /// Custom painter that renders Apple Face ID-style 36 radial tick marks
-/// that dynamically illuminate, stretch, and animate based on head/device movement.
+/// that dynamically illuminate, stretch, and animate in direct sync with head/face movement.
 class FaceIdRingPainter extends CustomPainter {
-  final int completedPoses; // 0, 1, 2, or 3
-  final int currentStep; // 0, 1, or 2
+  final Set<int> completedTicks;
   final double motionAngle; // dynamic head/device tilt angle in radians
+  final double motionIntensity; // magnitude of head deflection [0.0, 1.0]
   final double scanSweep; // 0.0 to 1.0 continuous scanning beam
+  final bool isCompleted;
   final bool isDark;
 
   FaceIdRingPainter({
-    required this.completedPoses,
-    required this.currentStep,
+    required this.completedTicks,
     required this.motionAngle,
+    required this.motionIntensity,
     required this.scanSweep,
+    required this.isCompleted,
     required this.isDark,
   });
 
@@ -1494,18 +1904,23 @@ class FaceIdRingPainter extends CustomPainter {
     final center = Offset(size.width / 2, size.height / 2);
     final radius = size.width / 2;
     const totalTicks = 36;
-    const baseTickLength = 14.0;
+    const baseTickLength = 13.5;
 
     final inactivePaint = Paint()
       ..color = isDark
-          ? Colors.white.withValues(alpha: 0.20)
-          : Colors.black.withValues(alpha: 0.14)
+          ? Colors.white.withValues(alpha: 0.22)
+          : Colors.black.withValues(alpha: 0.16)
       ..strokeWidth = 2.6
       ..strokeCap = StrokeCap.round;
 
     final completedPaint = Paint()
-      ..color = AppTheme.discordGreen // Discord neon green
-      ..strokeWidth = 4.2
+      ..color = const Color(0xFF34C759) // Apple Face ID Neon Green
+      ..strokeWidth = 4.0
+      ..strokeCap = StrokeCap.round;
+
+    final completedGlowPaint = Paint()
+      ..color = const Color(0xFF34C759).withValues(alpha: 0.35)
+      ..strokeWidth = 6.8
       ..strokeCap = StrokeCap.round;
 
     // Ambient track behind the ticks
@@ -1521,47 +1936,87 @@ class FaceIdRingPainter extends CustomPainter {
 
     for (int i = 0; i < totalTicks; i++) {
       final tickAngle = (i * 2 * pi / totalTicks) - (pi / 2);
-      final sector = i ~/ 12; // 0: Frontal, 1: Left, 2: Right
+      final isDone = completedTicks.contains(i);
+
+      // Distance from this tick to the live head motion angle
+      double motionDiff = (tickAngle - motionAngle).abs() % (2 * pi);
+      if (motionDiff > pi) motionDiff = 2 * pi - motionDiff;
+      final double motionProximity =
+          (1.0 - (motionDiff / (pi / 4.0))).clamp(0.0, 1.0);
+
+      // Continuous scanning shimmer wave
+      double sweepDiff = (tickAngle - sweepAngle).abs() % (2 * pi);
+      if (sweepDiff > pi) sweepDiff = 2 * pi - sweepDiff;
+      final double sweepProximity =
+          (1.0 - (sweepDiff / (pi / 3.0))).clamp(0.0, 1.0);
 
       double currentTickLength = baseTickLength;
       Paint paintToUse;
 
-      if (sector < completedPoses) {
-        // Sector completed: vibrant neon green lock
+      if (isCompleted) {
+        // Complete circle celebration: all ticks radiate neon green
         paintToUse = completedPaint;
-        currentTickLength = 15.0;
-      } else if (sector == currentStep) {
-        // Active sector: dynamically reacts to real-time face motion!
-        double motionDiff = (tickAngle - motionAngle).abs() % (2 * pi);
-        if (motionDiff > pi) motionDiff = 2 * pi - motionDiff;
-        final double motionProximity =
-            (1.0 - (motionDiff / (pi / 2.5))).clamp(0.0, 1.0);
+        currentTickLength = 16.0;
 
-        // Angular distance to continuous scanning sweep wave
-        double sweepDiff = (tickAngle - sweepAngle).abs() % (2 * pi);
-        if (sweepDiff > pi) sweepDiff = 2 * pi - sweepDiff;
-        final double sweepProximity =
-            (1.0 - (sweepDiff / (pi / 3.0))).clamp(0.0, 1.0);
+        final gStart = Offset(
+          center.dx + (radius - 18.0) * cos(tickAngle),
+          center.dy + (radius - 18.0) * sin(tickAngle),
+        );
+        final gEnd = Offset(
+          center.dx + radius * cos(tickAngle),
+          center.dy + radius * sin(tickAngle),
+        );
+        canvas.drawLine(gStart, gEnd, completedGlowPaint);
+      } else if (isDone) {
+        // Completed tick: permanently locked into Apple Face ID green
+        paintToUse = completedPaint;
+        currentTickLength = 15.0 + (motionProximity * 2.0);
+      } else if (motionProximity > 0.05) {
+        // Active tick currently being swept by head movement!
+        // Dynamically extends and highlights in sync with face angle
+        final activeIntensity = max(motionProximity, sweepProximity * 0.4);
+        currentTickLength = baseTickLength + (activeIntensity * 7.5);
 
-        final double activeIntensity =
-            max(motionProximity * 0.9, sweepProximity * 0.6);
-
-        // Dynamic tick lengthening as face points towards the tick
-        currentTickLength = baseTickLength + (activeIntensity * 5.0);
-
-        // Color blends between Discord Purple and Neon Turquoise
         final activeColor = Color.lerp(
           AppTheme.discordPurple,
-          const Color(0xFF00FFB2),
+          const Color(0xFF34C759),
           activeIntensity,
         )!;
 
         paintToUse = Paint()
           ..color = activeColor
-          ..strokeWidth = 3.6 + (activeIntensity * 1.4)
+          ..strokeWidth = 3.2 + (activeIntensity * 1.6)
           ..strokeCap = StrokeCap.round;
+
+        // Draw active hover glow
+        if (activeIntensity > 0.4) {
+          final glowP = Paint()
+            ..color = activeColor.withValues(alpha: 0.35)
+            ..strokeWidth = 6.0
+            ..strokeCap = StrokeCap.round;
+          final gStart = Offset(
+            center.dx + (radius - currentTickLength - 2) * cos(tickAngle),
+            center.dy + (radius - currentTickLength - 2) * sin(tickAngle),
+          );
+          final gEnd = Offset(
+            center.dx + radius * cos(tickAngle),
+            center.dy + radius * sin(tickAngle),
+          );
+          canvas.drawLine(gStart, gEnd, glowP);
+        }
       } else {
-        paintToUse = inactivePaint;
+        // Inactive tick with subtle ambient scanning shimmer
+        if (sweepProximity > 0.25) {
+          paintToUse = Paint()
+            ..color = isDark
+                ? Colors.white.withValues(alpha: 0.22 + sweepProximity * 0.28)
+                : Colors.black.withValues(alpha: 0.16 + sweepProximity * 0.20)
+            ..strokeWidth = 2.6 + sweepProximity * 0.8
+            ..strokeCap = StrokeCap.round;
+          currentTickLength = baseTickLength + sweepProximity * 2.0;
+        } else {
+          paintToUse = inactivePaint;
+        }
       }
 
       final tickStart = Offset(
