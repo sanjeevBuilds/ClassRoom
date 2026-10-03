@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:math';
 import 'dart:typed_data';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
+import 'package:sensors_plus/sensors_plus.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../models/detection.dart';
@@ -24,7 +26,8 @@ class EnrollmentScreen extends StatefulWidget {
   State<EnrollmentScreen> createState() => _EnrollmentScreenState();
 }
 
-class _EnrollmentScreenState extends State<EnrollmentScreen> {
+class _EnrollmentScreenState extends State<EnrollmentScreen>
+    with SingleTickerProviderStateMixin {
   final _nameController = TextEditingController();
   CameraController? _controller;
   List<CameraDescription> _cameras = [];
@@ -40,11 +43,38 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
   final List<Float32List> _faceIdEmbeddings = [];
   final List<FacePose> _faceIdPoses = [];
 
+  // Apple Face ID Dynamic Motion & Biometric Sweep State
+  late AnimationController _scanController;
+  StreamSubscription<AccelerometerEvent>? _accelSubscription;
+  double _tiltX = 0.0;
+  double _tiltY = 0.0;
+  double _motionAngle = -pi / 2; // Default facing straight ahead (Frontal)
+
   @override
   void initState() {
     super.initState();
+    _scanController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2400),
+    )..repeat();
+    _initMotionSensors();
     _initCamera();
     _loadEnrolledStudents();
+  }
+
+  void _initMotionSensors() {
+    _accelSubscription = accelerometerEventStream().listen((AccelerometerEvent event) {
+      final rawX = (event.x / 9.8).clamp(-1.0, 1.0);
+      final rawY = (event.y / 9.8).clamp(-1.0, 1.0);
+      final angle = atan2(rawX, -rawY);
+      if (mounted) {
+        setState(() {
+          _tiltX = _tiltX * 0.72 + rawX * 0.28;
+          _tiltY = _tiltY * 0.72 + rawY * 0.28;
+          _motionAngle = angle;
+        });
+      }
+    });
   }
 
   Future<void> _loadEnrolledStudents() async {
@@ -101,6 +131,8 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
 
   @override
   void dispose() {
+    _scanController.dispose();
+    _accelSubscription?.cancel();
     _controller?.dispose();
     _nameController.dispose();
     super.dispose();
@@ -1081,68 +1113,114 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
         ),
         const SizedBox(height: 10),
 
-        // Apple Face ID Circular Aperture & 36-Tick Radial Ring
-        Center(
-          child: SizedBox(
-            width: 280,
-            height: 280,
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                // Inner Circular Camera Preview with 1:1 natural aspect ratio
-                ClipOval(
-                  child: SizedBox(
-                    width: 236,
-                    height: 236,
-                    child: Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        _buildFittedCameraPreview(controller),
+        // Apple Face ID Circular Aperture & 36-Tick Radial Ring with Interactive Motion
+        AnimatedBuilder(
+          animation: _scanController,
+          builder: (context, _) {
+            return Center(
+              child: SizedBox(
+                width: 280,
+                height: 280,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    // Inner Circular Camera Preview with 1:1 natural aspect ratio
+                    ClipOval(
+                      child: SizedBox(
+                        width: 236,
+                        height: 236,
+                        child: Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            _buildFittedCameraPreview(controller),
 
-                        // Soft border ring around camera texture
-                        Container(
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: isDark
-                                  ? Colors.white.withValues(alpha: 0.15)
-                                  : Colors.black.withValues(alpha: 0.12),
-                              width: 2,
-                            ),
-                          ),
-                        ),
-
-                        // Face positioning guide oval inside circle
-                        Center(
-                          child: Container(
-                            width: 140,
-                            height: 180,
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(70),
-                              border: Border.all(
-                                color: Colors.white.withValues(alpha: 0.28),
-                                width: 1.5,
+                            // Dynamic 3D Parallax Face Alignment Guide Reticle
+                            Center(
+                              child: Transform.translate(
+                                offset: Offset(_tiltX * 18, _tiltY * 18),
+                                child: Container(
+                                  width: 140,
+                                  height: 180,
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(70),
+                                    border: Border.all(
+                                      color: isDark
+                                          ? AppTheme.discordPurple.withValues(alpha: 0.65)
+                                          : AppTheme.discordPurple.withValues(alpha: 0.45),
+                                      width: 2.0,
+                                    ),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: AppTheme.discordPurple.withValues(alpha: 0.25),
+                                        blurRadius: 16,
+                                        spreadRadius: 2,
+                                      ),
+                                    ],
+                                  ),
+                                ),
                               ),
                             ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
 
-                // Radial 36 Ticks Painter
-                CustomPaint(
-                  size: const Size(280, 280),
-                  painter: FaceIdRingPainter(
-                    completedPoses: _faceIdEmbeddings.length,
-                    currentStep: _faceIdStep,
-                    isDark: isDark,
-                  ),
+                            // Animated Scanning Laser Shimmer Line
+                            Positioned(
+                              top: 236 * _scanController.value - 2,
+                              left: 24,
+                              right: 24,
+                              child: Container(
+                                height: 2.5,
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    colors: [
+                                      Colors.transparent,
+                                      AppTheme.discordPurple.withValues(alpha: 0.6),
+                                      Colors.white.withValues(alpha: 0.9),
+                                      AppTheme.discordPurple.withValues(alpha: 0.6),
+                                      Colors.transparent,
+                                    ],
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: AppTheme.discordPurple.withValues(alpha: 0.8),
+                                      blurRadius: 8,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+
+                            // Soft circular border ring around camera texture
+                            Container(
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: isDark
+                                      ? Colors.white.withValues(alpha: 0.15)
+                                      : Colors.black.withValues(alpha: 0.12),
+                                  width: 2,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+
+                    // Radial 36 Ticks Interactive Motion Painter
+                    CustomPaint(
+                      size: const Size(280, 280),
+                      painter: FaceIdRingPainter(
+                        completedPoses: _faceIdEmbeddings.length,
+                        currentStep: _faceIdStep,
+                        motionAngle: _motionAngle,
+                        scanSweep: _scanController.value,
+                        isDark: isDark,
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-          ),
+              ),
+            );
+          },
         ),
         const SizedBox(height: 14),
 
@@ -1395,15 +1473,19 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
 }
 
 /// Custom painter that renders Apple Face ID-style 36 radial tick marks
-/// that illuminate green as each 3D facial pose is acquired.
+/// that dynamically illuminate, stretch, and animate based on head/device movement.
 class FaceIdRingPainter extends CustomPainter {
   final int completedPoses; // 0, 1, 2, or 3
   final int currentStep; // 0, 1, or 2
+  final double motionAngle; // dynamic head/device tilt angle in radians
+  final double scanSweep; // 0.0 to 1.0 continuous scanning beam
   final bool isDark;
 
   FaceIdRingPainter({
     required this.completedPoses,
     required this.currentStep,
+    required this.motionAngle,
+    required this.scanSweep,
     required this.isDark,
   });
 
@@ -1412,18 +1494,13 @@ class FaceIdRingPainter extends CustomPainter {
     final center = Offset(size.width / 2, size.height / 2);
     final radius = size.width / 2;
     const totalTicks = 36;
-    const tickLength = 14.0;
+    const baseTickLength = 14.0;
 
     final inactivePaint = Paint()
       ..color = isDark
-          ? Colors.white.withValues(alpha: 0.22)
-          : Colors.black.withValues(alpha: 0.15)
-      ..strokeWidth = 2.8
-      ..strokeCap = StrokeCap.round;
-
-    final activePaint = Paint()
-      ..color = AppTheme.discordPurple
-      ..strokeWidth = 3.8
+          ? Colors.white.withValues(alpha: 0.20)
+          : Colors.black.withValues(alpha: 0.14)
+      ..strokeWidth = 2.6
       ..strokeCap = StrokeCap.round;
 
     final completedPaint = Paint()
@@ -1437,38 +1514,69 @@ class FaceIdRingPainter extends CustomPainter {
           ? Colors.white.withValues(alpha: 0.05)
           : Colors.black.withValues(alpha: 0.04)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = tickLength;
-    canvas.drawCircle(center, radius - (tickLength / 2), trackPaint);
+      ..strokeWidth = baseTickLength;
+    canvas.drawCircle(center, radius - (baseTickLength / 2), trackPaint);
+
+    final sweepAngle = (scanSweep * 2 * pi) - (pi / 2);
 
     for (int i = 0; i < totalTicks; i++) {
-      final angle = (i * 2 * pi / totalTicks) - (pi / 2);
-      final tickStart = Offset(
-        center.dx + (radius - tickLength) * cos(angle),
-        center.dy + (radius - tickLength) * sin(angle),
-      );
-      final tickEnd = Offset(
-        center.dx + radius * cos(angle),
-        center.dy + radius * sin(angle),
-      );
+      final tickAngle = (i * 2 * pi / totalTicks) - (pi / 2);
+      final sector = i ~/ 12; // 0: Frontal, 1: Left, 2: Right
 
-      // 12 ticks per sector (0..11: Frontal, 12..23: Left, 24..35: Right)
-      final sector = i ~/ 12;
+      double currentTickLength = baseTickLength;
       Paint paintToUse;
+
       if (sector < completedPoses) {
+        // Sector completed: vibrant neon green lock
         paintToUse = completedPaint;
+        currentTickLength = 15.0;
       } else if (sector == currentStep) {
-        paintToUse = activePaint;
+        // Active sector: dynamically reacts to real-time face motion!
+        double motionDiff = (tickAngle - motionAngle).abs() % (2 * pi);
+        if (motionDiff > pi) motionDiff = 2 * pi - motionDiff;
+        final double motionProximity =
+            (1.0 - (motionDiff / (pi / 2.5))).clamp(0.0, 1.0);
+
+        // Angular distance to continuous scanning sweep wave
+        double sweepDiff = (tickAngle - sweepAngle).abs() % (2 * pi);
+        if (sweepDiff > pi) sweepDiff = 2 * pi - sweepDiff;
+        final double sweepProximity =
+            (1.0 - (sweepDiff / (pi / 3.0))).clamp(0.0, 1.0);
+
+        final double activeIntensity =
+            max(motionProximity * 0.9, sweepProximity * 0.6);
+
+        // Dynamic tick lengthening as face points towards the tick
+        currentTickLength = baseTickLength + (activeIntensity * 5.0);
+
+        // Color blends between Discord Purple and Neon Turquoise
+        final activeColor = Color.lerp(
+          AppTheme.discordPurple,
+          const Color(0xFF00FFB2),
+          activeIntensity,
+        )!;
+
+        paintToUse = Paint()
+          ..color = activeColor
+          ..strokeWidth = 3.6 + (activeIntensity * 1.4)
+          ..strokeCap = StrokeCap.round;
       } else {
         paintToUse = inactivePaint;
       }
+
+      final tickStart = Offset(
+        center.dx + (radius - currentTickLength) * cos(tickAngle),
+        center.dy + (radius - currentTickLength) * sin(tickAngle),
+      );
+      final tickEnd = Offset(
+        center.dx + radius * cos(tickAngle),
+        center.dy + radius * sin(tickAngle),
+      );
 
       canvas.drawLine(tickStart, tickEnd, paintToUse);
     }
   }
 
   @override
-  bool shouldRepaint(FaceIdRingPainter oldDelegate) =>
-      oldDelegate.completedPoses != completedPoses ||
-      oldDelegate.currentStep != currentStep ||
-      oldDelegate.isDark != isDark;
+  bool shouldRepaint(FaceIdRingPainter oldDelegate) => true;
 }
