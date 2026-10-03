@@ -71,13 +71,26 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
       _cameraIndex = (backIdx != -1) ? backIdx : 0;
     }
 
-    await _controller?.dispose();
+    final oldController = _controller;
+    if (mounted) setState(() => _controller = null);
+    await oldController?.dispose();
+
     final selectedCamera = _cameras[_cameraIndex];
-    final controller = CameraController(selectedCamera, ResolutionPreset.high,
-        enableAudio: false);
-    await controller.initialize();
-    if (!mounted) return;
-    setState(() => _controller = controller);
+    final controller = CameraController(
+      selectedCamera,
+      ResolutionPreset.high,
+      enableAudio: false,
+    );
+    try {
+      await controller.initialize();
+      if (!mounted) {
+        await controller.dispose();
+        return;
+      }
+      setState(() => _controller = controller);
+    } catch (e) {
+      if (mounted) setState(() => _error = 'Camera init failed: $e');
+    }
   }
 
   Future<void> _toggleCamera() async {
@@ -309,10 +322,18 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
     }
     try {
       final file = await widget.engine.exportClassroomRoster();
+      if (!mounted) return;
+      final box = context.findRenderObject() as RenderBox?;
+      final origin = box != null
+          ? box.localToGlobal(Offset.zero) & box.size
+          : Rect.fromLTWH(0, 0, MediaQuery.of(context).size.width,
+              MediaQuery.of(context).size.height / 2);
+
       await Share.shareXFiles(
         [XFile(file.path)],
         text:
             'Classroom Roster Export: ${widget.engine.currentClassId} (${_enrolledStudents.length} Students with 512-d Face Embeddings)',
+        sharePositionOrigin: origin,
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -699,7 +720,7 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
                                     ? [
                                         BoxShadow(
                                           color: AppTheme.discordPurple
-                                              .withOpacity(0.4),
+                                              .withValues(alpha: 0.4),
                                           blurRadius: 10,
                                           offset: const Offset(0, 2),
                                         )
@@ -753,7 +774,7 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
                                     ? [
                                         BoxShadow(
                                           color: AppTheme.discordPurple
-                                              .withOpacity(0.4),
+                                              .withValues(alpha: 0.4),
                                           blurRadius: 10,
                                           offset: const Offset(0, 2),
                                         )
@@ -801,10 +822,7 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
                   // Camera Viewfinder (Face ID Circular Ring vs Standard Preview)
                   _isFaceIdMode
                       ? _buildFaceIdViewfinder()
-                      : SizedBox(
-                          height: 320,
-                          child: _buildStandardCameraPreview(),
-                        ),
+                      : _buildStandardCameraPreview(),
 
                   if (_error != null) ...[
                     const SizedBox(height: 10),
@@ -812,10 +830,10 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
                       padding: const EdgeInsets.symmetric(
                           horizontal: 14, vertical: 8),
                       decoration: BoxDecoration(
-                        color: AppTheme.discordRed.withOpacity(0.15),
+                        color: AppTheme.discordRed.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(10),
                         border: Border.all(
-                            color: AppTheme.discordRed.withOpacity(0.4)),
+                            color: AppTheme.discordRed.withValues(alpha: 0.4)),
                       ),
                       child: Row(
                         children: [
@@ -848,11 +866,11 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
                             minimumSize: const Size(double.infinity, 52),
                             shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(16)),
-                            elevation: 6,
+                            elevation: 4,
                             shadowColor: (_faceIdStep == 2
                                     ? AppTheme.discordGreen
                                     : AppTheme.discordPurple)
-                                .withOpacity(0.4),
+                                .withValues(alpha: 0.4),
                           ),
                           onPressed: _isProcessing ? null : _captureFaceIdPose,
                           icon: _isProcessing
@@ -879,14 +897,18 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
                           ),
                         ),
                         if (_faceIdStep > 0)
-                          TextButton.icon(
-                            onPressed: _isProcessing ? null : _resetFaceId,
-                            icon: const Icon(Icons.restart_alt_rounded,
-                                size: 16, color: AppTheme.discordPurple),
-                            label: const Text('Restart Face ID Scan',
-                                style: TextStyle(
-                                    fontSize: 12,
-                                    color: AppTheme.discordPurple)),
+                          Padding(
+                            padding: const EdgeInsets.only(top: 6),
+                            child: TextButton.icon(
+                              onPressed: _isProcessing ? null : _resetFaceId,
+                              icon: const Icon(Icons.restart_alt_rounded,
+                                  size: 16, color: AppTheme.discordPurple),
+                              label: const Text('Restart Face ID Scan',
+                                  style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppTheme.discordPurple)),
+                            ),
                           ),
                       ],
                     )
@@ -898,18 +920,20 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
                         minimumSize: const Size(double.infinity, 52),
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(16)),
-                        elevation: 6,
-                        shadowColor: AppTheme.discordPurple.withOpacity(0.4),
+                        elevation: 4,
+                        shadowColor: AppTheme.discordPurple.withValues(alpha: 0.4),
                       ),
                       onPressed: _isProcessing ? null : _captureAndEnroll,
                       icon: _isProcessing
                           ? const SizedBox(
                               width: 18,
                               height: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2))
+                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                           : const Icon(Icons.camera_alt_rounded),
                       label: Text(
-                          _isProcessing ? 'Processing…' : 'Capture & Enroll'),
+                        _isProcessing ? 'Processing…' : 'Capture & Enroll',
+                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                      ),
                     ),
                 ],
               );
@@ -917,6 +941,44 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  /// Scales the camera preview to fill any container with BoxFit.cover
+  /// while strictly preserving its natural real-world aspect ratio (zero distortion/squishing).
+  Widget _buildFittedCameraPreview(CameraController controller) {
+    if (!controller.value.isInitialized) {
+      return const SizedBox();
+    }
+    final double rawAspect = controller.value.aspectRatio;
+    final double previewAspect =
+        rawAspect > 1.0 ? (1.0 / rawAspect) : rawAspect;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final containerWidth = constraints.maxWidth;
+        final containerHeight = constraints.maxHeight;
+        final containerAspect = containerWidth / containerHeight;
+
+        double scale;
+        if (containerAspect > previewAspect) {
+          scale = containerAspect / previewAspect;
+        } else {
+          scale = previewAspect / containerAspect;
+        }
+
+        return ClipRect(
+          child: Center(
+            child: Transform.scale(
+              scale: scale,
+              child: AspectRatio(
+                aspectRatio: previewAspect,
+                child: CameraPreview(controller),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -946,8 +1008,8 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
         _cameras[_cameraIndex].lensDirection == CameraLensDirection.back;
     final stepPrompts = [
       'Look straight into the circle',
-      'Turn your head slightly to the LEFT (~15°)',
-      'Turn your head slightly to the RIGHT (~15°)',
+      'Turn your head slightly LEFT (~15°)',
+      'Turn your head slightly RIGHT (~15°)',
     ];
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -956,77 +1018,146 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
       mainAxisSize: MainAxisSize.min,
       children: [
         // Camera Lens Mode Indicator & Switch Camera
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-              decoration: BoxDecoration(
-                color: (isDark ? Colors.black : Colors.white).withOpacity(0.55),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: isDark
-                      ? Colors.white.withOpacity(0.15)
-                      : AppTheme.discordPurple.withOpacity(0.2),
-                ),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    isBack
-                        ? Icons.camera_rear_rounded
-                        : Icons.camera_front_rounded,
-                    color: isBack
-                        ? AppTheme.discordPurple
-                        : AppTheme.discordYellow,
-                    size: 14,
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: (isDark ? Colors.black : Colors.white).withValues(alpha: 0.55),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: isDark
+                        ? Colors.white.withValues(alpha: 0.15)
+                        : AppTheme.discordPurple.withValues(alpha: 0.2),
                   ),
-                  const SizedBox(width: 6),
-                  Text(
-                    isBack ? 'BACK CAMERA (HD)' : 'FRONT CAMERA',
-                    style: TextStyle(
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      isBack
+                          ? Icons.camera_rear_rounded
+                          : Icons.camera_front_rounded,
                       color: isBack
                           ? AppTheme.discordPurple
                           : AppTheme.discordYellow,
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
+                      size: 14,
                     ),
-                  ),
-                ],
+                    const SizedBox(width: 6),
+                    Text(
+                      isBack ? 'BACK CAMERA (HD)' : 'FRONT CAMERA',
+                      style: TextStyle(
+                        color: isBack
+                            ? AppTheme.discordPurple
+                            : AppTheme.discordYellow,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            Material(
-              color: (isDark ? Colors.black : Colors.white).withOpacity(0.55),
-              shape: const CircleBorder(),
-              child: InkWell(
-                customBorder: const CircleBorder(),
-                onTap: _toggleCamera,
-                child: Padding(
-                  padding: const EdgeInsets.all(8),
-                  child: Icon(
-                    Icons.cameraswitch_rounded,
-                    color: isDark ? Colors.white : Colors.black87,
-                    size: 18,
+              Material(
+                color: (isDark ? Colors.black : Colors.white).withValues(alpha: 0.55),
+                shape: const CircleBorder(),
+                child: InkWell(
+                  customBorder: const CircleBorder(),
+                  onTap: _toggleCamera,
+                  child: Padding(
+                    padding: const EdgeInsets.all(8),
+                    child: Icon(
+                      Icons.cameraswitch_rounded,
+                      color: isDark ? Colors.white : Colors.black87,
+                      size: 18,
+                    ),
                   ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 10),
 
-        // Guidance Prompt Pill (Separated, no overlap on ticks!)
+        // Apple Face ID Circular Aperture & 36-Tick Radial Ring
+        Center(
+          child: SizedBox(
+            width: 280,
+            height: 280,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                // Inner Circular Camera Preview with 1:1 natural aspect ratio
+                ClipOval(
+                  child: SizedBox(
+                    width: 236,
+                    height: 236,
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        _buildFittedCameraPreview(controller),
+
+                        // Soft border ring around camera texture
+                        Container(
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: isDark
+                                  ? Colors.white.withValues(alpha: 0.15)
+                                  : Colors.black.withValues(alpha: 0.12),
+                              width: 2,
+                            ),
+                          ),
+                        ),
+
+                        // Face positioning guide oval inside circle
+                        Center(
+                          child: Container(
+                            width: 140,
+                            height: 180,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(70),
+                              border: Border.all(
+                                color: Colors.white.withValues(alpha: 0.28),
+                                width: 1.5,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                // Radial 36 Ticks Painter
+                CustomPaint(
+                  size: const Size(280, 280),
+                  painter: FaceIdRingPainter(
+                    completedPoses: _faceIdEmbeddings.length,
+                    currentStep: _faceIdStep,
+                    isDark: isDark,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 14),
+
+        // Guidance Prompt Pill (Separated, centered below the ring)
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           decoration: BoxDecoration(
-            color: (isDark ? Colors.black : Colors.white).withOpacity(0.75),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AppTheme.discordPurple.withOpacity(0.5)),
+            color: (isDark ? Colors.black : Colors.white).withValues(alpha: 0.8),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+                color: AppTheme.discordPurple.withValues(alpha: 0.5)),
             boxShadow: [
               BoxShadow(
-                color: AppTheme.discordPurple.withOpacity(0.18),
-                blurRadius: 10,
+                color: AppTheme.discordPurple.withValues(alpha: 0.2),
+                blurRadius: 12,
                 offset: const Offset(0, 2),
               ),
             ],
@@ -1037,16 +1168,18 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
               Text(
                 'Step ${_faceIdStep + 1}/3: ',
                 style: const TextStyle(
-                    color: AppTheme.discordPurple,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 11),
+                  color: AppTheme.discordPurple,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                ),
               ),
               Flexible(
                 child: Text(
                   stepPrompts[_faceIdStep],
                   style: TextStyle(
                     color: isDark ? Colors.white : Colors.black87,
-                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 12,
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -1054,42 +1187,7 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
             ],
           ),
         ),
-        const SizedBox(height: 16),
-
-        // Apple Face ID Circular Aperture & 36-Tick Radial Ring
-        Center(
-          child: SizedBox(
-            width: 230,
-            height: 230,
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                ClipOval(
-                  child: SizedBox(
-                    width: 194,
-                    height: 194,
-                    child: FittedBox(
-                      fit: BoxFit.cover,
-                      child: SizedBox(
-                        width: controller.value.previewSize?.height ?? 194,
-                        height: controller.value.previewSize?.width ?? 194,
-                        child: CameraPreview(controller),
-                      ),
-                    ),
-                  ),
-                ),
-                CustomPaint(
-                  size: const Size(230, 230),
-                  painter: FaceIdRingPainter(
-                    completedPoses: _faceIdEmbeddings.length,
-                    currentStep: _faceIdStep,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 14),
+        const SizedBox(height: 12),
 
         // Pose Status Badges
         Row(
@@ -1097,10 +1195,10 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
           children: [
             _buildPoseBadge(
                 '1. Frontal', _faceIdEmbeddings.isNotEmpty, _faceIdStep == 0),
-            const SizedBox(width: 6),
+            const SizedBox(width: 8),
             _buildPoseBadge(
                 '2. Left 15°', _faceIdEmbeddings.length >= 2, _faceIdStep == 1),
-            const SizedBox(width: 6),
+            const SizedBox(width: 8),
             _buildPoseBadge('3. Right 15°', _faceIdEmbeddings.length >= 3,
                 _faceIdStep == 2),
           ],
@@ -1111,14 +1209,14 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
 
   Widget _buildPoseBadge(String label, bool isDone, bool isActive) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
         color: isDone
-            ? AppTheme.discordGreen.withOpacity(0.2)
+            ? AppTheme.discordGreen.withValues(alpha: 0.2)
             : (isActive
-                ? AppTheme.discordPurple.withOpacity(0.2)
-                : Colors.black.withOpacity(0.3)),
-        borderRadius: BorderRadius.circular(12),
+                ? AppTheme.discordPurple.withValues(alpha: 0.2)
+                : Colors.black.withValues(alpha: 0.25)),
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color: isDone
               ? AppTheme.discordGreen
@@ -1131,21 +1229,21 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
         children: [
           if (isDone)
             const Icon(Icons.check_circle_rounded,
-                color: AppTheme.discordGreen, size: 12)
+                color: AppTheme.discordGreen, size: 13)
           else if (isActive)
             const Icon(Icons.radio_button_checked_rounded,
-                color: AppTheme.discordPurple, size: 12)
+                color: AppTheme.discordPurple, size: 13)
           else
             const Icon(Icons.radio_button_unchecked_rounded,
-                color: Colors.white38, size: 12),
-          const SizedBox(width: 4),
+                color: Colors.white38, size: 13),
+          const SizedBox(width: 5),
           Text(
             label,
             style: TextStyle(
               color: isDone
                   ? AppTheme.discordGreen
-                  : (isActive ? AppTheme.discordPurple : Colors.white54),
-              fontSize: 10,
+                  : (isActive ? AppTheme.discordPurple : Colors.white60),
+              fontSize: 11,
               fontWeight: FontWeight.bold,
             ),
           ),
@@ -1160,91 +1258,137 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
       return Center(child: Text(_error!));
     }
     if (controller == null || !controller.value.isInitialized) {
-      return const Center(child: CircularProgressIndicator());
+      return const SizedBox(
+        height: 360,
+        child: Center(child: CircularProgressIndicator()),
+      );
     }
 
     final isBack = _cameras.isNotEmpty &&
         _cameras[_cameraIndex].lensDirection == CameraLensDirection.back;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return ClipRRect(
-      borderRadius: BorderRadius.circular(16),
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          CameraPreview(controller),
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        height: 360,
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF1E1F22) : Colors.black12,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.1)
+                : AppTheme.discordPurple.withValues(alpha: 0.2),
+            width: 1.5,
+          ),
+        ),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            _buildFittedCameraPreview(controller),
 
-          // Face Alignment Oval Guideline
-          Center(
-            child: Container(
-              width: 200,
-              height: 250,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(100),
-                border:
-                    Border.all(color: Colors.white.withOpacity(0.5), width: 2),
+            // Face Alignment Oval Guideline
+            Center(
+              child: Container(
+                width: 190,
+                height: 250,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(95),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.45),
+                    width: 2.0,
+                  ),
+                ),
               ),
             ),
-          ),
 
-          // Top Controls: Badge & Flip
-          Positioned(
-            top: 12,
-            left: 12,
-            right: 12,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.6),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: Colors.white.withOpacity(0.2)),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        isBack
-                            ? Icons.camera_rear_rounded
-                            : Icons.camera_front_rounded,
-                        color: isBack
-                            ? AppTheme.discordPurple
-                            : AppTheme.discordYellow,
-                        size: 14,
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        isBack ? 'BACK CAMERA (HD)' : 'FRONT CAMERA',
-                        style: TextStyle(
+            // Top Floating Controls: Lens Badge & Flip Button
+            Positioned(
+              top: 12,
+              left: 12,
+              right: 12,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.6),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.2)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          isBack
+                              ? Icons.camera_rear_rounded
+                              : Icons.camera_front_rounded,
                           color: isBack
                               ? AppTheme.discordPurple
                               : AppTheme.discordYellow,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
+                          size: 14,
                         ),
-                      ),
-                    ],
-                  ),
-                ),
-                GestureDetector(
-                  onTap: _toggleCamera,
-                  child: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.6),
-                      shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white.withOpacity(0.3)),
+                        const SizedBox(width: 6),
+                        Text(
+                          isBack ? 'BACK CAMERA (HD)' : 'FRONT CAMERA',
+                          style: TextStyle(
+                            color: isBack
+                                ? AppTheme.discordPurple
+                                : AppTheme.discordYellow,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
                     ),
-                    child: const Icon(Icons.cameraswitch_rounded,
-                        color: Colors.white, size: 18),
+                  ),
+                  GestureDetector(
+                    onTap: _toggleCamera,
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.6),
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.3)),
+                      ),
+                      child: const Icon(Icons.cameraswitch_rounded,
+                          color: Colors.white, size: 18),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // Bottom Alignment Prompt
+            Positioned(
+              bottom: 12,
+              left: 20,
+              right: 20,
+              child: Center(
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.55),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: const Text(
+                    'Center face within the oval guideline',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
                 ),
-              ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -1255,36 +1399,57 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
 class FaceIdRingPainter extends CustomPainter {
   final int completedPoses; // 0, 1, 2, or 3
   final int currentStep; // 0, 1, or 2
+  final bool isDark;
 
-  FaceIdRingPainter({required this.completedPoses, required this.currentStep});
+  FaceIdRingPainter({
+    required this.completedPoses,
+    required this.currentStep,
+    required this.isDark,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
     final radius = size.width / 2;
     const totalTicks = 36;
+    const tickLength = 14.0;
 
     final inactivePaint = Paint()
-      ..color = Colors.white.withOpacity(0.25)
-      ..strokeWidth = 2.5
+      ..color = isDark
+          ? Colors.white.withValues(alpha: 0.22)
+          : Colors.black.withValues(alpha: 0.15)
+      ..strokeWidth = 2.8
       ..strokeCap = StrokeCap.round;
 
     final activePaint = Paint()
       ..color = AppTheme.discordPurple
-      ..strokeWidth = 3.5
+      ..strokeWidth = 3.8
       ..strokeCap = StrokeCap.round;
 
     final completedPaint = Paint()
       ..color = AppTheme.discordGreen // Discord neon green
-      ..strokeWidth = 4.0
+      ..strokeWidth = 4.2
       ..strokeCap = StrokeCap.round;
+
+    // Ambient track behind the ticks
+    final trackPaint = Paint()
+      ..color = isDark
+          ? Colors.white.withValues(alpha: 0.05)
+          : Colors.black.withValues(alpha: 0.04)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = tickLength;
+    canvas.drawCircle(center, radius - (tickLength / 2), trackPaint);
 
     for (int i = 0; i < totalTicks; i++) {
       final angle = (i * 2 * pi / totalTicks) - (pi / 2);
-      final tickStart = Offset(center.dx + (radius - 12) * cos(angle),
-          center.dy + (radius - 12) * sin(angle));
+      final tickStart = Offset(
+        center.dx + (radius - tickLength) * cos(angle),
+        center.dy + (radius - tickLength) * sin(angle),
+      );
       final tickEnd = Offset(
-          center.dx + radius * cos(angle), center.dy + radius * sin(angle));
+        center.dx + radius * cos(angle),
+        center.dy + radius * sin(angle),
+      );
 
       // 12 ticks per sector (0..11: Frontal, 12..23: Left, 24..35: Right)
       final sector = i ~/ 12;
@@ -1304,5 +1469,6 @@ class FaceIdRingPainter extends CustomPainter {
   @override
   bool shouldRepaint(FaceIdRingPainter oldDelegate) =>
       oldDelegate.completedPoses != completedPoses ||
-      oldDelegate.currentStep != currentStep;
+      oldDelegate.currentStep != currentStep ||
+      oldDelegate.isDark != isDark;
 }

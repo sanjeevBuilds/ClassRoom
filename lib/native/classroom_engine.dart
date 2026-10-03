@@ -164,19 +164,11 @@ class ClassroomEngine {
     await clearRoster();
   }
 
-  /// Exports the entire classroom roster (students + metadata) to a portable JSON file.
+  /// Exports the entire classroom roster (students + 512-D embeddings) to a portable JSON file.
   Future<File> exportClassroomRoster([String? classId]) async {
     final targetClass = classId ?? currentClassId;
     final dbPath = p.join(_baseDir, 'roster_$targetClass.db');
-    final students = await Isolate.run(() => _getEnrolledStudents(dbPath));
-    final data = {
-      'class_id': targetClass,
-      'exported_at': DateTime.now().toIso8601String(),
-      'version': '1.0',
-      'student_count': students.length,
-      'students': students,
-    };
-    final jsonStr = const JsonEncoder.withIndent('  ').convert(data);
+    final jsonStr = await Isolate.run(() => _exportRoster(dbPath, targetClass));
 
     final tempDir = await getTemporaryDirectory();
     final exportFile = File(p.join(tempDir.path, 'classroom_roster_$targetClass.json'));
@@ -184,15 +176,46 @@ class ClassroomEngine {
     return exportFile;
   }
 
-  /// Imports a classroom roster from a JSON string.
+  /// Imports a classroom roster from a JSON string into SQLite with full 512-d embeddings.
   Future<int> importClassroomRoster(String jsonString) async {
     final data = jsonDecode(jsonString) as Map<String, dynamic>;
     final importedClass = (data['class_id'] as String?)?.trim() ?? 'ImportedClass';
 
     await addClass(importedClass);
     switchClass(importedClass);
+
     final students = (data['students'] as List?) ?? [];
-    return students.length;
+    int importedCount = 0;
+
+    for (final s in students) {
+      if (s is Map<String, dynamic>) {
+        final studentId = (s['student_id'] as String?)?.trim() ?? '';
+        final name = (s['name'] as String?)?.trim() ?? studentId;
+        final rawEmbeddings = s['reference_embeddings'] as List? ?? [];
+        if (studentId.isEmpty) continue;
+
+        final floatLists = <List<double>>[];
+        for (final item in rawEmbeddings) {
+          if (item is List) {
+            floatLists.add(item.map((v) => (v as num).toDouble()).toList());
+          }
+        }
+
+        if (floatLists.isNotEmpty) {
+          final flatList = floatLists.expand((e) => e).toList();
+          await Isolate.run(() => _saveStudentEmbeddings(
+                studentId,
+                name,
+                flatList,
+                floatLists.length,
+                512,
+                rosterDbPath,
+              ));
+          importedCount++;
+        }
+      }
+    }
+    return importedCount;
   }
 
   /// Processes a face photo, validates face detection via YuNet, and returns an Embedding.
@@ -437,3 +460,55 @@ bool _deleteStudent(String studentId, String rosterDbPath) {
     calloc.free(pathPtr);
   }
 }
+
+String _exportRoster(String rosterDbPath, String classId) {
+  final bindings = ClassroomBindings();
+  final dbPtr = rosterDbPath.toNativeUtf8();
+  final classIdPtr = classId.toNativeUtf8();
+  Pointer<Utf8>? resultPtr;
+  try {
+    resultPtr = bindings.exportRoster(dbPtr, classIdPtr);
+    return resultPtr.toDartString();
+  } finally {
+    calloc.free(dbPtr);
+    calloc.free(classIdPtr);
+    if (resultPtr != null) {
+      bindings.freeString(resultPtr);
+    }
+  }
+}
+
+bool _saveStudentEmbeddings(
+  String studentId,
+  String name,
+  List<double> flatEmbeddings,
+  int numEmbeddings,
+  int dim,
+  String rosterDbPath,
+) {
+  final bindings = ClassroomBindings();
+  final idPtr = studentId.toNativeUtf8();
+  final namePtr = name.toNativeUtf8();
+  final pathPtr = rosterDbPath.toNativeUtf8();
+  final embeddingsPtr = calloc<Float>(flatEmbeddings.length);
+  try {
+    for (int i = 0; i < flatEmbeddings.length; i++) {
+      embeddingsPtr[i] = flatEmbeddings[i];
+    }
+    final status = bindings.saveStudentEmbeddings(
+      idPtr,
+      namePtr,
+      embeddingsPtr,
+      numEmbeddings,
+      dim,
+      pathPtr,
+    );
+    return status == 1;
+  } finally {
+    calloc.free(idPtr);
+    calloc.free(namePtr);
+    calloc.free(pathPtr);
+    calloc.free(embeddingsPtr);
+  }
+}
+

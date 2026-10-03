@@ -270,9 +270,17 @@ class _HomeScreenState extends State<HomeScreen> {
     }
     try {
       final file = await ClassroomEngine.instance.exportClassroomRoster();
+      if (!mounted) return;
+      final box = context.findRenderObject() as RenderBox?;
+      final origin = box != null
+          ? box.localToGlobal(Offset.zero) & box.size
+          : Rect.fromLTWH(0, 0, MediaQuery.of(context).size.width,
+              MediaQuery.of(context).size.height / 2);
+
       await Share.shareXFiles(
         [XFile(file.path)],
         text: 'Classroom Roster Export: $selectedClass (${enrolledStudents.length} Students with 512-d Face Embeddings)',
+        sharePositionOrigin: origin,
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

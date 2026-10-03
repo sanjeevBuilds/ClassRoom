@@ -141,6 +141,25 @@ std::vector<AttendanceResult> ProcessSweepVideo(const std::string& video_path,
   return results;
 }
 
+// Detects face at 0°. If none found, tries 90° CW, 90° CCW, and 180° rotations to
+// guarantee reliable face detection regardless of mobile camera sensor orientation.
+std::vector<Detection> DetectWithRotations(YuNetDetector& detector, cv::Mat& frame) {
+  auto detections = detector.Detect(frame, 0, 0.0);
+  if (!detections.empty()) return detections;
+
+  const int rotations[] = {cv::ROTATE_90_CLOCKWISE, cv::ROTATE_90_COUNTERCLOCKWISE, cv::ROTATE_180};
+  for (int rot : rotations) {
+    cv::Mat rotated;
+    cv::rotate(frame, rotated, rot);
+    auto rot_dets = detector.Detect(rotated, 0, 0.0);
+    if (!rot_dets.empty()) {
+      frame = rotated;
+      return rot_dets;
+    }
+  }
+  return {};
+}
+
 bool EnrollStudentFromPhoto(const std::string& photo_path,
                              const std::string& student_id,
                              const std::string& name,
@@ -153,7 +172,7 @@ bool EnrollStudentFromPhoto(const std::string& photo_path,
 
   YuNetDetector detector;
   detector.Init(config.yunet_model_path, 0.45, 0.3);
-  auto detections = detector.Detect(frame, 0, 0.0);
+  auto detections = DetectWithRotations(detector, frame);
 
   const Detection* largest = LargestFace(detections);
   if (largest == nullptr) {
@@ -198,7 +217,7 @@ int EnrollStudentFromPhotos(const std::vector<std::string>& photo_paths,
     cv::Mat frame = cv::imread(path);
     if (frame.empty()) continue;
 
-    auto detections = detector.Detect(frame, 0, 0.0);
+    auto detections = DetectWithRotations(detector, frame);
     const Detection* largest = LargestFace(detections);
     if (largest != nullptr) {
       auto embedding = embedder.ExtractEmbedding(frame, *largest);
@@ -363,6 +382,79 @@ const char* ClassroomGetEnrolledStudents(const char* roster_db_path) {
     return CopyToHeap(err);
   } catch (...) {
     return CopyToHeap(std::string("{\"error\":\"unknown native exception\"}"));
+  }
+}
+
+const char* ClassroomExportRoster(const char* roster_db_path, const char* class_id) {
+  try {
+    classroom::RosterDB roster_db;
+    roster_db.Init(roster_db_path);
+    auto roster = roster_db.GetAllEntries();
+    roster_db.Close();
+
+    std::ostringstream os;
+    os << "{\n";
+    os << "  \"class_id\": \"" << classroom::JsonEscape(class_id ? class_id : "CS101") << "\",\n";
+    os << "  \"exported_at\": \"2026-10-03T00:00:00.000Z\",\n";
+    os << "  \"version\": \"1.0\",\n";
+    os << "  \"student_count\": " << roster.size() << ",\n";
+    os << "  \"students\": [\n";
+    for (size_t i = 0; i < roster.size(); ++i) {
+      const auto& s = roster[i];
+      if (i > 0) os << ",\n";
+      os << "    {\n";
+      os << "      \"student_id\": \"" << classroom::JsonEscape(s.student_id) << "\",\n";
+      os << "      \"name\": \"" << classroom::JsonEscape(s.name) << "\",\n";
+      os << "      \"reference_embeddings\": [\n";
+      for (size_t j = 0; j < s.reference_embeddings.size(); ++j) {
+        if (j > 0) os << ",\n";
+        os << "        [";
+        const auto& vec = s.reference_embeddings[j];
+        for (size_t k = 0; k < vec.size(); ++k) {
+          if (k > 0) os << ",";
+          os << vec[k];
+        }
+        os << "]";
+      }
+      os << "\n      ]\n";
+      os << "    }";
+    }
+    os << "\n  ]\n";
+    os << "}";
+    return CopyToHeap(os.str());
+  } catch (const std::exception& e) {
+    std::string err = std::string("{\"error\":\"") + classroom::JsonEscape(e.what()) + "\"}";
+    return CopyToHeap(err);
+  } catch (...) {
+    return CopyToHeap(std::string("{\"error\":\"unknown native exception\"}"));
+  }
+}
+
+int ClassroomSaveStudentEmbeddings(const char* student_id, const char* name,
+                                   const float* embeddings, int num_embeddings,
+                                   int dim, const char* roster_db_path) {
+  try {
+    classroom::RosterEntry entry;
+    entry.student_id = student_id ? student_id : "";
+    entry.name = name ? name : "";
+    for (int i = 0; i < num_embeddings; ++i) {
+      const float* start = embeddings + (i * dim);
+      std::array<float, classroom::kEmbeddingDim> arr{};
+      int copy_count = std::min(dim, static_cast<int>(classroom::kEmbeddingDim));
+      std::copy_n(start, copy_count, arr.begin());
+      entry.reference_embeddings.push_back(arr);
+    }
+    classroom::RosterDB roster_db;
+    roster_db.Init(roster_db_path);
+    roster_db.EnrollStudent(entry);
+    roster_db.Close();
+    return 1;
+  } catch (const std::exception& e) {
+    g_last_error = e.what();
+    return -1;
+  } catch (...) {
+    g_last_error = "unknown native exception";
+    return -1;
   }
 }
 

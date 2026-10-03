@@ -100,6 +100,16 @@ CLASSROOM_EXPORT int ClassroomEnrollStudentFromPhotos(
 // Caller MUST call ClassroomFreeString() on the result.
 CLASSROOM_EXPORT const char* ClassroomGetEnrolledStudents(const char* roster_db_path);
 
+// Exports the entire classroom roster as a JSON package including all 512-D float vectors.
+// Caller MUST call ClassroomFreeString() on the result.
+CLASSROOM_EXPORT const char* ClassroomExportRoster(const char* roster_db_path, const char* class_id);
+
+// Inserts or replaces a student and their 512-D float reference embeddings in SQLite.
+// embeddings points to num_embeddings * dim contiguous floats.
+CLASSROOM_EXPORT int ClassroomSaveStudentEmbeddings(const char* student_id, const char* name,
+                                                    const float* embeddings, int num_embeddings,
+                                                    int dim, const char* roster_db_path);
+
 // Deletes a student and their face embeddings by student_id. Returns 1 on success, -1 on error.
 CLASSROOM_EXPORT int ClassroomDeleteStudent(const char* student_id, const char* roster_db_path);
 
