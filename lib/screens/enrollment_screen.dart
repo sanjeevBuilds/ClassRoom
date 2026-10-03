@@ -8,6 +8,7 @@ import 'package:sensors_plus/sensors_plus.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../models/detection.dart';
+import '../models/embedding.dart';
 import '../modules/pose_estimation/face_pose.dart';
 import '../native/classroom_engine.dart';
 import '../theme/app_theme.dart';
@@ -55,6 +56,8 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
   double _motionAngle = -pi / 2; // Default facing straight ahead (Frontal / 12 o'clock)
   double _motionIntensity = 0.0;
   bool _isCompletedAnimation = false;
+  bool _isAutoFilling = false;
+  bool _isEnrolledSuccessfully = false;
 
   @override
   void initState() {
@@ -99,7 +102,7 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
 
   void _updateHeadMotion(double targetAngle, double intensity,
       {bool isTouch = false}) {
-    if (_isCompletedAnimation) return;
+    if (_isCompletedAnimation || _isAutoFilling) return;
 
     // Smooth angle with circular shortest path wrapping
     final diff = (targetAngle - _motionAngle + 3 * pi) % (2 * pi) - pi;
@@ -147,6 +150,7 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
   }
 
   void _handleRingTouch(Offset localPos) {
+    if (_isAutoFilling) return;
     const center = Offset(140, 140);
     final diff = localPos - center;
     if (diff.distance < 45) return;
@@ -281,8 +285,27 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
     }
   }
 
+  Float32List _generateSyntheticEmbedding(int sector) {
+    // Generate a reproducible unit-normalized 512-D embedding for demo/fallback
+    final random = Random(42 + sector * 107);
+    final list = Float32List(512);
+    double sumSq = 0.0;
+    for (int i = 0; i < 512; i++) {
+      final val = random.nextDouble() * 2.0 - 1.0;
+      list[i] = val;
+      sumSq += val * val;
+    }
+    final norm = sqrt(sumSq);
+    if (norm > 0) {
+      for (int i = 0; i < 512; i++) {
+        list[i] /= norm;
+      }
+    }
+    return list;
+  }
+
   void _checkSectorAutoCapture() {
-    if (_isProcessing || _isCompletedAnimation) return;
+    if (_isProcessing || _isCompletedAnimation || _isAutoFilling) return;
 
     // Check if full circle is completed (>= 34 of 36 ticks)
     if (_completedTicks.length >= 34) {
@@ -326,6 +349,7 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
     if (controller == null ||
         !controller.value.isInitialized ||
         _isProcessing ||
+        _isAutoFilling ||
         _capturedSectors.contains(sector)) {
       return;
     }
@@ -382,23 +406,45 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
         setState(() {
           _isCompletedAnimation = true;
         });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+                '3D Face Scan Complete! Enter student roll no above and tap Save.'),
+            backgroundColor: AppTheme.discordPurple,
+            duration: Duration(seconds: 3),
+          ),
+        );
       }
+      return;
+    }
+
+    final isDuplicate = _enrolledStudents.any(
+      (s) =>
+          (s['name'] as String? ?? '').trim().toLowerCase() ==
+          name.toLowerCase(),
+    );
+    if (isDuplicate) {
+      setState(() => _error = 'Student "$name" is already enrolled.');
       return;
     }
 
     setState(() {
       _isProcessing = true;
       _isCompletedAnimation = true;
+      _error = null;
     });
     HapticFeedback.heavyImpact();
 
     try {
       final studentId = DateTime.now().millisecondsSinceEpoch.toString();
-      final embeddingsToSave = _faceIdEmbeddings.isNotEmpty
-          ? _faceIdEmbeddings
-          : [
-              Float32List(512),
-            ];
+      final embeddingsToSave = <Float32List>[];
+      if (_faceIdEmbeddings.isNotEmpty) {
+        embeddingsToSave.addAll(_faceIdEmbeddings);
+      } else {
+        embeddingsToSave.add(_generateSyntheticEmbedding(0));
+        embeddingsToSave.add(_generateSyntheticEmbedding(1));
+        embeddingsToSave.add(_generateSyntheticEmbedding(2));
+      }
 
       await widget.engine.enrollStudentWithEmbeddings(
         studentId: studentId,
@@ -408,6 +454,10 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
 
       await _loadEnrolledStudents();
       if (!mounted) return;
+
+      setState(() {
+        _isEnrolledSuccessfully = true;
+      });
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -436,24 +486,128 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
   }
 
   Future<void> _autoFillCircle() async {
-    for (int i = 0; i < 36; i++) {
-      if (!mounted) return;
-      setState(() {
-        _completedTicks.add(i);
-        _motionAngle = (i * 2 * pi / 36) - (pi / 2);
-        _tiltX = cos(_motionAngle) * 0.85;
-        _tiltY = sin(_motionAngle) * 0.85;
-        _motionIntensity = 0.9;
-      });
-      HapticFeedback.selectionClick();
-      await Future.delayed(const Duration(milliseconds: 25));
+    if (_isProcessing || _isAutoFilling) return;
+
+    setState(() {
+      _isAutoFilling = true;
+      _completedTicks.clear();
+      _capturedSectors.clear();
+      _faceIdEmbeddings.clear();
+      _faceIdPoses.clear();
+      _isCompletedAnimation = false;
+      _isEnrolledSuccessfully = false;
+      _error = null;
+    });
+
+    // Attempt to capture a camera frame for real biometrics
+    XFile? capturedPhoto;
+    if (_controller != null && _controller!.value.isInitialized) {
+      try {
+        capturedPhoto = await _controller!.takePicture();
+      } catch (_) {}
     }
 
-    if (!_capturedSectors.contains(0)) await _autoCapturePoseForSector(0);
-    if (!_capturedSectors.contains(1)) await _autoCapturePoseForSector(1);
-    if (!_capturedSectors.contains(2)) await _autoCapturePoseForSector(2);
+    Embedding? realEmbedding;
+    if (capturedPhoto != null) {
+      try {
+        realEmbedding =
+            await widget.engine.processFacePhoto(capturedPhoto.path);
+      } catch (_) {}
+    }
 
-    await _finalizeFaceIdEnrollment();
+    for (int i = 0; i < 36; i++) {
+      if (!mounted) {
+        _isAutoFilling = false;
+        return;
+      }
+      final tickAngle = (i * 2 * pi / 36) - (pi / 2);
+      setState(() {
+        _completedTicks.add(i);
+        _motionAngle = tickAngle;
+        _tiltX = cos(tickAngle) * 0.85;
+        _tiltY = sin(tickAngle) * 0.85;
+        _motionIntensity = 0.95;
+
+        // Register Sector 0 (Frontal) at top (tick 0)
+        if (i == 0 && !_capturedSectors.contains(0)) {
+          _capturedSectors.add(0);
+          final emb = realEmbedding?.vector ?? _generateSyntheticEmbedding(0);
+          _faceIdEmbeddings.add(emb);
+          _faceIdPoses.add(const FacePose(
+              pitch: 0.0,
+              yaw: 0.0,
+              roll: 0.0,
+              tx: 0,
+              ty: 0,
+              tz: 50,
+              frontalityScore: 0.98));
+          _faceIdStep = 1;
+        }
+
+        // Register Sector 2 (Right Profile) at 3 o'clock (tick 9)
+        if (i == 9 && !_capturedSectors.contains(2)) {
+          _capturedSectors.add(2);
+          final emb = realEmbedding?.vector ?? _generateSyntheticEmbedding(2);
+          _faceIdEmbeddings.add(emb);
+          _faceIdPoses.add(const FacePose(
+              pitch: 1.2,
+              yaw: 16.0,
+              roll: -0.6,
+              tx: 5,
+              ty: 0,
+              tz: 50,
+              frontalityScore: 0.88));
+          _faceIdStep = 2;
+        }
+
+        // Register Sector 1 (Left Profile) at 9 o'clock (tick 27)
+        if (i == 27 && !_capturedSectors.contains(1)) {
+          _capturedSectors.add(1);
+          final emb = realEmbedding?.vector ?? _generateSyntheticEmbedding(1);
+          _faceIdEmbeddings.add(emb);
+          _faceIdPoses.add(const FacePose(
+              pitch: 1.5,
+              yaw: -15.2,
+              roll: 0.8,
+              tx: -5,
+              ty: 0,
+              tz: 50,
+              frontalityScore: 0.89));
+          _faceIdStep = 2;
+        }
+      });
+      HapticFeedback.selectionClick();
+      await Future.delayed(const Duration(milliseconds: 30));
+    }
+
+    _isAutoFilling = false;
+
+    setState(() {
+      for (int i = 0; i < 36; i++) {
+        _completedTicks.add(i);
+      }
+      _capturedSectors.addAll({0, 1, 2});
+      _isCompletedAnimation = true;
+    });
+
+    HapticFeedback.heavyImpact();
+
+    // If student name was entered, finalize enrollment immediately
+    final name = _nameController.text.trim();
+    if (name.isNotEmpty) {
+      await _finalizeFaceIdEnrollment();
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+                '3D Face Scan Complete! Enter student roll no above and tap Save.'),
+            backgroundColor: AppTheme.discordPurple,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _captureFaceIdPose() async {
@@ -541,12 +695,14 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
   void _resetFaceId() {
     widget.engine.resetPendingFaceId();
     setState(() {
+      _isAutoFilling = false;
       _completedTicks.clear();
       _capturedSectors.clear();
       _faceIdStep = 0;
       _faceIdEmbeddings.clear();
       _faceIdPoses.clear();
       _isCompletedAnimation = false;
+      _isEnrolledSuccessfully = false;
       _error = null;
     });
   }
@@ -1126,7 +1282,7 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
                   if (_isFaceIdMode)
                     Column(
                       children: [
-                        if (_isCompletedAnimation)
+                        if (_isEnrolledSuccessfully)
                           FilledButton.icon(
                             style: FilledButton.styleFrom(
                               backgroundColor: const Color(0xFF34C759),
@@ -1147,44 +1303,64 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
                                 style: TextStyle(
                                     fontSize: 15, fontWeight: FontWeight.bold)),
                           )
-                        else
+                        else if (_isCompletedAnimation || _completedTicks.length >= 34)
                           FilledButton.icon(
                             style: FilledButton.styleFrom(
-                              backgroundColor: _completedTicks.length >= 32
-                                  ? const Color(0xFF34C759)
-                                  : AppTheme.discordPurple,
+                              backgroundColor: const Color(0xFF34C759),
                               foregroundColor: Colors.white,
                               minimumSize: const Size(double.infinity, 52),
                               shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(16)),
                               elevation: 4,
-                              shadowColor: (_completedTicks.length >= 32
-                                      ? const Color(0xFF34C759)
-                                      : AppTheme.discordPurple)
+                              shadowColor: const Color(0xFF34C759)
                                   .withValues(alpha: 0.4),
                             ),
-                            onPressed: _isProcessing
-                                ? null
-                                : (_completedTicks.length >= 32
-                                    ? _finalizeFaceIdEnrollment
-                                    : _captureFaceIdPose),
+                            onPressed: _isProcessing ? null : _finalizeFaceIdEnrollment,
                             icon: _isProcessing
                                 ? const SizedBox(
                                     width: 18,
                                     height: 18,
                                     child: CircularProgressIndicator(
                                         strokeWidth: 2, color: Colors.white))
-                                : Icon(_completedTicks.length >= 32
-                                    ? Icons.check_rounded
-                                    : Icons.rotate_90_degrees_cw_rounded),
+                                : const Icon(Icons.save_rounded),
+                            label: Text(
+                              _isProcessing
+                                  ? 'Saving 3D Biometrics…'
+                                  : (_nameController.text.trim().isEmpty
+                                      ? 'Enter Roll No to Save Enrollment'
+                                      : 'Save Face ID Enrollment'),
+                              style: const TextStyle(
+                                  fontSize: 15, fontWeight: FontWeight.bold),
+                            ),
+                          )
+                        else
+                          FilledButton.icon(
+                            style: FilledButton.styleFrom(
+                              backgroundColor: AppTheme.discordPurple,
+                              foregroundColor: Colors.white,
+                              minimumSize: const Size(double.infinity, 52),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16)),
+                              elevation: 4,
+                              shadowColor: AppTheme.discordPurple
+                                  .withValues(alpha: 0.4),
+                            ),
+                            onPressed: _isProcessing || _isAutoFilling
+                                ? null
+                                : _captureFaceIdPose,
+                            icon: _isProcessing
+                                ? const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                        strokeWidth: 2, color: Colors.white))
+                                : const Icon(Icons.rotate_90_degrees_cw_rounded),
                             label: Text(
                               _isProcessing
                                   ? 'Analyzing 3D Biometrics…'
                                   : (_nameController.text.trim().isEmpty
                                       ? 'Enter Roll No Above to Enroll'
-                                      : (_completedTicks.length >= 32
-                                          ? 'Finish Face ID Enrollment'
-                                          : 'Move Head in Circle (${_completedTicks.length}/36)')),
+                                      : 'Move Head in Circle (${_completedTicks.length}/36)'),
                               style: const TextStyle(
                                   fontSize: 15, fontWeight: FontWeight.bold),
                             ),
@@ -1194,19 +1370,35 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             TextButton.icon(
-                              onPressed: _isProcessing ? null : _autoFillCircle,
-                              icon: const Icon(Icons.play_circle_outline_rounded,
-                                  size: 16, color: Color(0xFF34C759)),
-                              label: const Text('Auto-Fill Circle (Demo)',
-                                  style: TextStyle(
+                              onPressed: _isProcessing || _isAutoFilling
+                                  ? null
+                                  : _autoFillCircle,
+                              icon: _isAutoFilling
+                                  ? const SizedBox(
+                                      width: 14,
+                                      height: 14,
+                                      child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: Color(0xFF34C759)))
+                                  : const Icon(Icons.play_circle_outline_rounded,
+                                      size: 16, color: Color(0xFF34C759)),
+                              label: Text(
+                                  _isAutoFilling
+                                      ? 'Auto-Filling 360°…'
+                                      : 'Auto-Fill Circle (Demo)',
+                                  style: const TextStyle(
                                       fontSize: 12,
                                       fontWeight: FontWeight.w600,
                                       color: Color(0xFF34C759))),
                             ),
-                            if (_completedTicks.isNotEmpty || _faceIdStep > 0 || _isCompletedAnimation) ...[
+                            if (_completedTicks.isNotEmpty ||
+                                _faceIdStep > 0 ||
+                                _isCompletedAnimation) ...[
                               const SizedBox(width: 8),
                               TextButton.icon(
-                                onPressed: _isProcessing ? null : _resetFaceId,
+                                onPressed: _isProcessing || _isAutoFilling
+                                    ? null
+                                    : _resetFaceId,
                                 icon: const Icon(Icons.restart_alt_rounded,
                                     size: 16, color: AppTheme.discordPurple),
                                 label: const Text('Reset Scan',
