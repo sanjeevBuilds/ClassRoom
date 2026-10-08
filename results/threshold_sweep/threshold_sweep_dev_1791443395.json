@@ -1,0 +1,79 @@
+{
+  "run_id": "threshold_sweep_dev_1791443395",
+  "experiment": "threshold_sweep",
+  "timestamp": "2026-10-08T07:09:55Z",
+  "git_commit": "884dc0a",
+  "git_dirty": true,
+  "build_mode": "release",
+  "provenance": "synthetic",
+  "split": "dev",
+  "best_tau_match": 0.3,
+  "sweep_points": [
+    {
+      "tau_match": 0.2,
+      "fabr": 0.0,
+      "fprr": 1.0,
+      "f1": 0.9399
+    },
+    {
+      "tau_match": 0.25,
+      "fabr": 0.0,
+      "fprr": 1.0,
+      "f1": 0.9399
+    },
+    {
+      "tau_match": 0.3,
+      "fabr": 0.0,
+      "fprr": 0.0,
+      "f1": 1.0
+    },
+    {
+      "tau_match": 0.35,
+      "fabr": 0.0,
+      "fprr": 0.0,
+      "f1": 1.0
+    },
+    {
+      "tau_match": 0.4,
+      "fabr": 0.0,
+      "fprr": 0.0,
+      "f1": 1.0
+    },
+    {
+      "tau_match": 0.45,
+      "fabr": 0.0,
+      "fprr": 0.0,
+      "f1": 1.0
+    },
+    {
+      "tau_match": 0.5,
+      "fabr": 0.0,
+      "fprr": 0.0,
+      "f1": 1.0
+    },
+    {
+      "tau_match": 0.55,
+      "fabr": 0.0,
+      "fprr": 0.0,
+      "f1": 1.0
+    },
+    {
+      "tau_match": 0.6,
+      "fabr": 0.0,
+      "fprr": 0.0,
+      "f1": 1.0
+    },
+    {
+      "tau_match": 0.65,
+      "fabr": 0.0,
+      "fprr": 0.0,
+      "f1": 1.0
+    },
+    {
+      "tau_match": 0.7,
+      "fabr": 0.0,
+      "fprr": 0.0,
+      "f1": 1.0
+    }
+  ]
+}

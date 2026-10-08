@@ -5,6 +5,9 @@
 #include <memory>
 #include <stdexcept>
 
+#include "classroom/face_frontalization.h"
+#include "classroom/masked_attention.h"
+
 namespace classroom {
 
 const std::array<std::array<double, 2>, 5> ArcFaceEmbedder::kReferenceLandmarks = {{
@@ -15,38 +18,57 @@ const std::array<std::array<double, 2>, 5> ArcFaceEmbedder::kReferenceLandmarks 
     {70.7299, 92.2041},
 }};
 
+void ArcFaceEmbedder::InitFromSession(Ort::Session* session) {
+  if (!session) return;
+  external_session_ = session;
+
+  Ort::AllocatorWithDefaultOptions allocator;
+  input_name_ = external_session_->GetInputNameAllocated(0, allocator).get();
+  output_name_ = external_session_->GetOutputNameAllocated(0, allocator).get();
+}
+
 void ArcFaceEmbedder::Init(const std::string& model_path) {
   Ort::SessionOptions options;
-  // Same reasoning as the Dart version's fix: a single face embedding is
-  // small work, doesn't need a full per-core thread pool, and on iOS an
-  // oversized thread pool spun up during app launch was implicated in a
-  // (later found to be intermittent) SIGKILL — limiting this here costs
-  // nothing and avoids the same risk in the C++ engine.
   options.SetIntraOpNumThreads(1);
   options.SetInterOpNumThreads(1);
 
   session_ = std::make_unique<Ort::Session>(env_, model_path.c_str(), options);
-
-  Ort::AllocatorWithDefaultOptions allocator;
-  input_name_ = session_->GetInputNameAllocated(0, allocator).get();
-  output_name_ = session_->GetOutputNameAllocated(0, allocator).get();
+  InitFromSession(session_.get());
 }
 
 Embedding ArcFaceEmbedder::ExtractEmbedding(const cv::Mat& frame,
                                              const Detection& detection) {
-  if (!session_) {
+  Ort::Session* active_session =
+      external_session_ ? external_session_ : session_.get();
+  if (!active_session) {
     throw std::runtime_error(
-        "ArcFaceEmbedder::Init() must be called before ExtractEmbedding().");
+        "ArcFaceEmbedder::Init() or InitFromSession() must be called before ExtractEmbedding().");
   }
 
-  cv::Mat aligned = detection.landmarks.size() == 5
-                         ? NormCrop(frame, detection.landmarks)
-                         : CropAndResize(frame, detection.bbox);
+  // Stage A: 3D Facial Frontalization & Alignment
+  cv::Mat aligned;
+  if (detection.landmarks.size() == 5) {
+    FaceFrontalizer frontalizer;
+    auto front_res = frontalizer.Frontalize(frame, detection.landmarks);
+    aligned = front_res.frontalized_crop;
+  } else {
+    aligned = CropAndResize(frame, detection.bbox);
+  }
 
   cv::Mat rgb;
   cv::cvtColor(aligned, rgb, cv::COLOR_BGR2RGB);
 
+  // Stage B: To NCHW Float Vector
   std::vector<float> input_data = ToNchwFloatVector(rgb);
+
+  // Stage C: Masked ArcFace Spatial Attention Weighting
+  if (detection.landmarks.size() == 5) {
+    MaskedAttention masked_att;
+    auto att_res = masked_att.AnalyzeAndBuildAttentionMap(rgb, detection.landmarks);
+    if (att_res.is_masked) {
+      masked_att.ApplyAttentionToNchwInput(input_data, att_res.attention_map);
+    }
+  }
 
   const int64_t shape[] = {1, 3, kInputSize, kInputSize};
   Ort::MemoryInfo mem_info =
@@ -56,7 +78,7 @@ Embedding ArcFaceEmbedder::ExtractEmbedding(const cv::Mat& frame,
 
   const char* input_names[] = {input_name_.c_str()};
   const char* output_names[] = {output_name_.c_str()};
-  auto outputs = session_->Run(Ort::RunOptions{nullptr}, input_names,
+  auto outputs = active_session->Run(Ort::RunOptions{nullptr}, input_names,
                                 &input_tensor, 1, output_names, 1);
 
   const float* raw = outputs[0].GetTensorData<float>();

@@ -1,0 +1,13 @@
+{
+  "id": "S04",
+  "name": "FrontRow_ProjectorOn",
+  "description": "Front row with projector on and overhead lights off",
+  "num_students": 25,
+  "num_frames": 5,
+  "brightness": 62,
+  "blur_sigma": 0.0,
+  "yaw_deg": 0.0,
+  "occlusion_frac": 0.0,
+  "pan_pixels_per_frame": 18,
+  "ground_truth_csv": "ground_truth.csv"
+}

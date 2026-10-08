@@ -21,6 +21,7 @@ class YuNetDetector : public DetectorBase {
   // bundled model asset to a real path before calling this.
   void Init(const std::string& model_path, double score_threshold = 0.6,
             double nms_threshold = 0.3);
+  void InitFromDetector(cv::Ptr<cv::FaceDetectorYN> detector);
 
   std::vector<Detection> Detect(const cv::Mat& frame, int frame_id,
                                  double timestamp_sec, double scale_x = 1.0,

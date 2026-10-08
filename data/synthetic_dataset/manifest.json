@@ -1,0 +1,77 @@
+{
+  "generator": "ClassRoom synthetic dataset v1.0",
+  "frame_size": "1280x720",
+  "frames_per_scenario": 5,
+  "scenarios": [
+    {
+      "id": "S01",
+      "name": "FrontRow_FullLight",
+      "dir": "S01_FrontRow_FullLight",
+      "num_students": 25,
+      "description": "Front-row students under full fluorescent lighting"
+    },
+    {
+      "id": "S02",
+      "name": "RearRow_FullLight",
+      "dir": "S02_RearRow_FullLight",
+      "num_students": 30,
+      "description": "Rear-row students (8\u201310 m distance), small face pixels"
+    },
+    {
+      "id": "S03",
+      "name": "MixedRows_FullLight",
+      "dir": "S03_MixedRows_FullLight",
+      "num_students": 40,
+      "description": "Full lecture hall sweep \u2014 mixed row distances"
+    },
+    {
+      "id": "S04",
+      "name": "FrontRow_ProjectorOn",
+      "dir": "S04_FrontRow_ProjectorOn",
+      "num_students": 25,
+      "description": "Front row with projector on and overhead lights off"
+    },
+    {
+      "id": "S05",
+      "name": "RearRow_ProjectorOn",
+      "dir": "S05_RearRow_ProjectorOn",
+      "num_students": 30,
+      "description": "Rear row with projector on \u2014 worst-case low light + small faces"
+    },
+    {
+      "id": "S06",
+      "name": "LeftCornerSweep",
+      "dir": "S06_LeftCornerSweep",
+      "num_students": 35,
+      "description": "Sweep starting from left corner of hall (steep yaw ~35\u00b0)"
+    },
+    {
+      "id": "S07",
+      "name": "RightCornerSweep",
+      "dir": "S07_RightCornerSweep",
+      "num_students": 35,
+      "description": "Sweep starting from right corner of hall (steep yaw ~-35\u00b0)"
+    },
+    {
+      "id": "S08",
+      "name": "FastPan_MotionBlur",
+      "dir": "S08_FastPan_MotionBlur",
+      "num_students": 30,
+      "description": "Fast handheld pan causing motion blur \u2014 gyroscope warning triggers"
+    },
+    {
+      "id": "S09",
+      "name": "PartialOcclusion_35pct",
+      "dir": "S09_PartialOcclusion_35pct",
+      "num_students": 30,
+      "description": "Students with 35% face occlusion (hands, masks, scarves)"
+    },
+    {
+      "id": "S10",
+      "name": "HeavyOcclusion_60pct",
+      "dir": "S10_HeavyOcclusion_60pct",
+      "num_students": 25,
+      "description": "Heavy occlusion 60% (worst-case medical masks)"
+    }
+  ]
+}

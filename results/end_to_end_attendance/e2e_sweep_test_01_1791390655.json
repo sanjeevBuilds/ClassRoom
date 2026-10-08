@@ -1,0 +1,27 @@
+{
+  "run_id": "e2e_sweep_test_01_1791390655",
+  "experiment": "end_to_end_attendance",
+  "timestamp": "2026-10-07T16:30:55Z",
+  "git_commit": "884dc0a",
+  "git_dirty": true,
+  "build_mode": "release",
+  "provenance": "synthetic",
+  "sweep_id": "sweep_test_01",
+  "split": "test",
+  "metrics": {
+    "tp": 20,
+    "fp": 0,
+    "fn": 2,
+    "tn": 3,
+    "fabr": 0.09090909090909091,
+    "fprr": 0.0,
+    "accuracy": 0.92,
+    "precision": 1.0,
+    "recall": 0.9090909090909091,
+    "f1": 0.9523809523809523,
+    "unknown_guests": 0,
+    "total_enrolled": 25,
+    "total_present": 22,
+    "total_absent": 3
+  }
+}

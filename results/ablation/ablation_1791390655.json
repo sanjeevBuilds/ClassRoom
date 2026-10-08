@@ -1,0 +1,75 @@
+{
+  "run_id": "ablation_1791390655",
+  "experiment": "ablation",
+  "timestamp": "2026-10-07T16:30:55Z",
+  "git_commit": "884dc0a",
+  "git_dirty": true,
+  "build_mode": "release",
+  "provenance": "synthetic",
+  "ablation_results": [
+    {
+      "feature": "Baseline (Standard 2D)",
+      "f1": 0.812,
+      "fabr": 0.185,
+      "delta_f1": 0.0,
+      "added_latency_ms": 0.0,
+      "helps": true
+    },
+    {
+      "feature": "+Tracklets",
+      "f1": 0.845,
+      "fabr": 0.15,
+      "delta_f1": 0.033,
+      "added_latency_ms": 1.2,
+      "helps": true
+    },
+    {
+      "feature": "+Homography Motion Comp",
+      "f1": 0.872,
+      "fabr": 0.12,
+      "delta_f1": 0.06,
+      "added_latency_ms": 4.5,
+      "helps": true
+    },
+    {
+      "feature": "+CLAHE Contrast",
+      "f1": 0.895,
+      "fabr": 0.098,
+      "delta_f1": 0.083,
+      "added_latency_ms": 1.8,
+      "helps": true
+    },
+    {
+      "feature": "+3D Facial Frontalization",
+      "f1": 0.932,
+      "fabr": 0.065,
+      "delta_f1": 0.12,
+      "added_latency_ms": 3.2,
+      "helps": true
+    },
+    {
+      "feature": "+Masked ArcFace Attention",
+      "f1": 0.95,
+      "fabr": 0.048,
+      "delta_f1": 0.138,
+      "added_latency_ms": 2.1,
+      "helps": true
+    },
+    {
+      "feature": "+Progressive EMA Roster Updates",
+      "f1": 0.962,
+      "fabr": 0.035,
+      "delta_f1": 0.15,
+      "added_latency_ms": 0.5,
+      "helps": true
+    },
+    {
+      "feature": "+Passive Anti-Spoofing",
+      "f1": 0.96,
+      "fabr": 0.038,
+      "delta_f1": 0.148,
+      "added_latency_ms": 2.8,
+      "helps": true
+    }
+  ]
+}

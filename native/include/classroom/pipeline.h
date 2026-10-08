@@ -113,6 +113,29 @@ CLASSROOM_EXPORT int ClassroomSaveStudentEmbeddings(const char* student_id, cons
 // Deletes a student and their face embeddings by student_id. Returns 1 on success, -1 on error.
 CLASSROOM_EXPORT int ClassroomDeleteStudent(const char* student_id, const char* roster_db_path);
 
+// Pre-warms in-memory ONNX Runtime & OpenCV sessions with chosen hardware Execution Provider (cpu/nnapi/coreml).
+CLASSROOM_EXPORT int ClassroomInitEngine(const char* yunet_model_path,
+                                         const char* arcface_model_path,
+                                         const char* execution_provider);
+
+// Releases all cached in-memory sessions.
+CLASSROOM_EXPORT void ClassroomReleaseEngine();
+
+// Zero-copy live camera frame face detection + embedding extraction.
+// Returns JSON array of detections or {"error":"..."}. Caller MUST call ClassroomFreeString().
+CLASSROOM_EXPORT const char* ClassroomProcessRawFrame(
+    const uint8_t* plane0, const uint8_t* plane1, const uint8_t* plane2,
+    int width, int height, int stride0, int stride1, int stride2, int format,
+    const char* yunet_model_path, const char* arcface_model_path);
+
+// Zero-copy live camera frame student face enrollment.
+// Returns 1 on success, 0 if no face detected, -1 on error.
+CLASSROOM_EXPORT int ClassroomEnrollFromRawFrame(
+    const uint8_t* plane0, const uint8_t* plane1, const uint8_t* plane2,
+    int width, int height, int stride0, int stride1, int stride2, int format,
+    const char* student_id, const char* name, const char* yunet_model_path,
+    const char* arcface_model_path, const char* roster_db_path);
+
 // Valid only immediately after a ClassroomEnrollStudentFromPhoto() call
 // that returned -1. Result is owned by the library, do not free.
 CLASSROOM_EXPORT const char* ClassroomGetLastError();

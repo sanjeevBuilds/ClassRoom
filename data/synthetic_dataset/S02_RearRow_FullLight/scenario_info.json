@@ -1,0 +1,13 @@
+{
+  "id": "S02",
+  "name": "RearRow_FullLight",
+  "description": "Rear-row students (8\u201310 m distance), small face pixels",
+  "num_students": 30,
+  "num_frames": 5,
+  "brightness": 175,
+  "blur_sigma": 0.0,
+  "yaw_deg": 0.0,
+  "occlusion_frac": 0.0,
+  "pan_pixels_per_frame": 20,
+  "ground_truth_csv": "ground_truth.csv"
+}

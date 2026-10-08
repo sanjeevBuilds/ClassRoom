@@ -16,14 +16,14 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # which uses OpenCV 4.x via opencv_dart and still has Haar Cascade.
 # Download: https://github.com/opencv/opencv/releases/download/4.14.0/opencv-4.14.0-ios-framework.zip
 # Expected to be unpacked at native/third_party/opencv2.framework
-set(OPENCV_FRAMEWORK_DIR "${CMAKE_SOURCE_DIR}/third_party/opencv2.framework")
-
-if(NOT EXISTS "${OPENCV_FRAMEWORK_DIR}")
-  message(FATAL_ERROR
-    "OpenCV iOS framework not found at ${OPENCV_FRAMEWORK_DIR}. "
-    "Download and unzip opencv-4.14.0-ios-framework.zip from "
-    "https://github.com/opencv/opencv/releases/tag/4.14.0 into native/third_party/ first."
-  )
+find_package(OpenCV QUIET)
+if(NOT OpenCV_FOUND)
+  set(OPENCV_FRAMEWORK_DIR "${CMAKE_SOURCE_DIR}/third_party/opencv2.framework")
+  if(NOT EXISTS "${OPENCV_FRAMEWORK_DIR}")
+    message(FATAL_ERROR
+      "OpenCV not found via find_package(OpenCV) or at ${OPENCV_FRAMEWORK_DIR}."
+    )
+  endif()
 endif()
 
 # --- ONNX Runtime ---
@@ -34,7 +34,7 @@ endif()
 # use — compiling and running the smoke tests locally on macOS), point
 # ONNXRUNTIME_DIR at the downloaded onnxruntime-osx-arm64 package instead.
 set(ONNXRUNTIME_DIR
-    "${CMAKE_SOURCE_DIR}/third_party/onnxruntime-osx-arm64-1.29.0"
+    "${CMAKE_SOURCE_DIR}/third_party/onnxruntime-osx-arm64-1.20.1"
     CACHE PATH "Path to an extracted ONNX Runtime distribution (headers + lib)")
 
 if(NOT EXISTS "${ONNXRUNTIME_DIR}/include/onnxruntime_cxx_api.h")
@@ -48,6 +48,7 @@ if(NOT EXISTS "${ONNXRUNTIME_DIR}/include/onnxruntime_cxx_api.h")
 endif()
 
 set(SOURCES
+  src/anti_spoof.cpp
   src/frame_sampler.cpp
   src/blur_filter.cpp
   src/yunet_detector.cpp
@@ -57,6 +58,13 @@ set(SOURCES
   src/cosine_matcher.cpp
   src/arcface_embedder.cpp
   src/retinaface_detector.cpp
+  src/tracklet_tracker.cpp
+  src/homography_estimator.cpp
+  src/yolov8_face_detector.cpp
+  src/session_manager.cpp
+  src/frame_bridge.cpp
+  src/face_frontalization.cpp
+  src/masked_attention.cpp
   src/pipeline.cpp
 )
 
@@ -70,27 +78,34 @@ find_library(ONNXRUNTIME_LIBRARY
 
 add_library(classroom_engine STATIC ${SOURCES})
 
-target_include_directories(classroom_engine
-  PUBLIC
-    include
-    ${ONNXRUNTIME_DIR}/include
-)
-
-# Framework-style include (#include <opencv2/opencv.hpp>) needs a framework
-# search path (-F), not a plain header search path, since opencv2.framework
-# resolves the opencv2/ prefix itself via Xcode's framework machinery.
-# PUBLIC so both the compile flag (needed by anything including our headers)
-# and the link flag (needed by anything linking classroom_engine, e.g. the
-# smoketest executable, and later the Flutter iOS build) propagate to
-# consumers — a static library itself has no link step, so target_link_options
-# alone on this target wouldn't do anything without that propagation.
-target_compile_options(classroom_engine PRIVATE -Wall -Wextra)
-target_compile_options(classroom_engine PUBLIC -F${CMAKE_SOURCE_DIR}/third_party)
-target_link_libraries(classroom_engine PUBLIC
-  "-F${CMAKE_SOURCE_DIR}/third_party" "-framework opencv2"
-  ${SQLITE3_LIBRARY}
-  ${ONNXRUNTIME_LIBRARY}
-)
+if(OpenCV_FOUND)
+  target_include_directories(classroom_engine
+    PUBLIC
+      include
+      ${ONNXRUNTIME_DIR}/include
+      ${OpenCV_INCLUDE_DIRS}
+  )
+  target_compile_options(classroom_engine PRIVATE -Wall -Wextra)
+  target_link_libraries(classroom_engine PUBLIC
+    ${OpenCV_LIBS}
+    ${SQLITE3_LIBRARY}
+    ${ONNXRUNTIME_LIBRARY}
+  )
+else()
+  target_include_directories(classroom_engine
+    PUBLIC
+      include
+      ${ONNXRUNTIME_DIR}/include
+      ${OPENCV_FRAMEWORK_DIR}/Headers
+  )
+  target_compile_options(classroom_engine PRIVATE -Wall -Wextra)
+  target_compile_options(classroom_engine PUBLIC -F${CMAKE_SOURCE_DIR}/third_party)
+  target_link_libraries(classroom_engine PUBLIC
+    "-F${CMAKE_SOURCE_DIR}/third_party" "-framework opencv2"
+    ${SQLITE3_LIBRARY}
+    ${ONNXRUNTIME_LIBRARY}
+  )
+endif()
 
 # --- Tests ---
 enable_testing()
@@ -119,3 +134,9 @@ target_link_libraries(classroom_engine_integration_test PRIVATE classroom_engine
 
 add_executable(classroom_engine_pipeline_c_api_test test/pipeline_c_api_test.cpp)
 target_link_libraries(classroom_engine_pipeline_c_api_test PRIVATE classroom_engine)
+
+add_executable(classroom_engine_detector_benchmark test/detector_benchmark.cpp)
+target_link_libraries(classroom_engine_detector_benchmark PRIVATE classroom_engine)
+
+add_executable(classroom_bench_runner test/bench_runner.cpp)
+target_link_libraries(classroom_bench_runner PRIVATE classroom_engine)

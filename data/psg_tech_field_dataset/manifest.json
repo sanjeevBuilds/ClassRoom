@@ -1,0 +1,43 @@
+{
+  "dataset_name": "PSG Tech Physical Lecture Hall Field Dataset",
+  "sweeps_count": 5,
+  "total_sampled_frames": 95,
+  "total_annotations": 185,
+  "sweeps": [
+    {
+      "sweep_id": "PSG_LH01_FrontRow",
+      "sampled_frames": 19,
+      "total_annotations": 15,
+      "video_path": "sweeps/PSG_LH01_FrontRow/sweep.mp4",
+      "csv_path": "sweeps/PSG_LH01_FrontRow/ground_truth_roll.csv"
+    },
+    {
+      "sweep_id": "PSG_LH02_RearRow",
+      "sampled_frames": 19,
+      "total_annotations": 42,
+      "video_path": "sweeps/PSG_LH02_RearRow/sweep.mp4",
+      "csv_path": "sweeps/PSG_LH02_RearRow/ground_truth_roll.csv"
+    },
+    {
+      "sweep_id": "PSG_LH03_MixedRows",
+      "sampled_frames": 19,
+      "total_annotations": 15,
+      "video_path": "sweeps/PSG_LH03_MixedRows/sweep.mp4",
+      "csv_path": "sweeps/PSG_LH03_MixedRows/ground_truth_roll.csv"
+    },
+    {
+      "sweep_id": "PSG_LH04_ProjectorOn",
+      "sampled_frames": 19,
+      "total_annotations": 52,
+      "video_path": "sweeps/PSG_LH04_ProjectorOn/sweep.mp4",
+      "csv_path": "sweeps/PSG_LH04_ProjectorOn/ground_truth_roll.csv"
+    },
+    {
+      "sweep_id": "PSG_LH05_CornerSweep",
+      "sampled_frames": 19,
+      "total_annotations": 61,
+      "video_path": "sweeps/PSG_LH05_CornerSweep/sweep.mp4",
+      "csv_path": "sweeps/PSG_LH05_CornerSweep/ground_truth_roll.csv"
+    }
+  ]
+}

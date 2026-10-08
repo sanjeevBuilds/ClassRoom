@@ -1,0 +1,13 @@
+{
+  "id": "S03",
+  "name": "MixedRows_FullLight",
+  "description": "Full lecture hall sweep \u2014 mixed row distances",
+  "num_students": 40,
+  "num_frames": 5,
+  "brightness": 195,
+  "blur_sigma": 0.0,
+  "yaw_deg": 0.0,
+  "occlusion_frac": 0.0,
+  "pan_pixels_per_frame": 16,
+  "ground_truth_csv": "ground_truth.csv"
+}

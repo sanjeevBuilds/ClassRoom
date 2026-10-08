@@ -1,0 +1,12 @@
+{
+  "dataset": "synthetic_classroom_v1",
+  "provenance": "synthetic",
+  "sweeps": [
+    "sweep_dev_01",
+    "sweep_dev_02",
+    "sweep_dev_03",
+    "sweep_dev_04",
+    "sweep_test_01",
+    "sweep_test_02"
+  ]
+}

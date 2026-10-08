@@ -29,6 +29,14 @@ class ClassroomBindings {
         'ClassroomExportRoster');
     saveStudentEmbeddings = _lib.lookupFunction<_SaveEmbeddingsNative,
         _SaveEmbeddingsDart>('ClassroomSaveStudentEmbeddings');
+    initEngine = _lib.lookupFunction<_InitEngineNative, _InitEngineDart>(
+        'ClassroomInitEngine');
+    releaseEngine = _lib.lookupFunction<_ReleaseEngineNative, _ReleaseEngineDart>(
+        'ClassroomReleaseEngine');
+    processRawFrame = _lib.lookupFunction<_ProcessRawFrameNative, _ProcessRawFrameDart>(
+        'ClassroomProcessRawFrame');
+    enrollFromRawFrame = _lib.lookupFunction<_EnrollRawFrameNative, _EnrollRawFrameDart>(
+        'ClassroomEnrollFromRawFrame');
   }
 
   factory ClassroomBindings() => ClassroomBindings._(DynamicLibrary.process());
@@ -80,6 +88,42 @@ class ClassroomBindings {
   late final Pointer<Utf8> Function() getLastError;
 
   late final void Function(Pointer<Utf8>) freeString;
+
+  late final int Function(
+      Pointer<Utf8> yunetModelPath,
+      Pointer<Utf8> arcfaceModelPath,
+      Pointer<Utf8> executionProvider) initEngine;
+
+  late final void Function() releaseEngine;
+
+  late final Pointer<Utf8> Function(
+      Pointer<Uint8> plane0,
+      Pointer<Uint8> plane1,
+      Pointer<Uint8> plane2,
+      int width,
+      int height,
+      int stride0,
+      int stride1,
+      int stride2,
+      int format,
+      Pointer<Utf8> yunetModelPath,
+      Pointer<Utf8> arcfaceModelPath) processRawFrame;
+
+  late final int Function(
+      Pointer<Uint8> plane0,
+      Pointer<Uint8> plane1,
+      Pointer<Uint8> plane2,
+      int width,
+      int height,
+      int stride0,
+      int stride1,
+      int stride2,
+      int format,
+      Pointer<Utf8> studentId,
+      Pointer<Utf8> name,
+      Pointer<Utf8> yunetModelPath,
+      Pointer<Utf8> arcfaceModelPath,
+      Pointer<Utf8> rosterDbPath) enrollFromRawFrame;
 }
 
 typedef _ExportRosterNative = Pointer<Utf8> Function(
@@ -149,3 +193,71 @@ typedef _DeleteStudentDart = int Function(
 
 typedef _FreeStringNative = Void Function(Pointer<Utf8>);
 typedef _FreeStringDart = void Function(Pointer<Utf8>);
+
+typedef _InitEngineNative = Int32 Function(
+    Pointer<Utf8> yunetModelPath,
+    Pointer<Utf8> arcfaceModelPath,
+    Pointer<Utf8> executionProvider);
+typedef _InitEngineDart = int Function(
+    Pointer<Utf8> yunetModelPath,
+    Pointer<Utf8> arcfaceModelPath,
+    Pointer<Utf8> executionProvider);
+
+typedef _ReleaseEngineNative = Void Function();
+typedef _ReleaseEngineDart = void Function();
+
+typedef _ProcessRawFrameNative = Pointer<Utf8> Function(
+    Pointer<Uint8> plane0,
+    Pointer<Uint8> plane1,
+    Pointer<Uint8> plane2,
+    Int32 width,
+    Int32 height,
+    Int32 stride0,
+    Int32 stride1,
+    Int32 stride2,
+    Int32 format,
+    Pointer<Utf8> yunetModelPath,
+    Pointer<Utf8> arcfaceModelPath);
+typedef _ProcessRawFrameDart = Pointer<Utf8> Function(
+    Pointer<Uint8> plane0,
+    Pointer<Uint8> plane1,
+    Pointer<Uint8> plane2,
+    int width,
+    int height,
+    int stride0,
+    int stride1,
+    int stride2,
+    int format,
+    Pointer<Utf8> yunetModelPath,
+    Pointer<Utf8> arcfaceModelPath);
+
+typedef _EnrollRawFrameNative = Int32 Function(
+    Pointer<Uint8> plane0,
+    Pointer<Uint8> plane1,
+    Pointer<Uint8> plane2,
+    Int32 width,
+    Int32 height,
+    Int32 stride0,
+    Int32 stride1,
+    Int32 stride2,
+    Int32 format,
+    Pointer<Utf8> studentId,
+    Pointer<Utf8> name,
+    Pointer<Utf8> yunetModelPath,
+    Pointer<Utf8> arcfaceModelPath,
+    Pointer<Utf8> rosterDbPath);
+typedef _EnrollRawFrameDart = int Function(
+    Pointer<Uint8> plane0,
+    Pointer<Uint8> plane1,
+    Pointer<Uint8> plane2,
+    int width,
+    int height,
+    int stride0,
+    int stride1,
+    int stride2,
+    int format,
+    Pointer<Utf8> studentId,
+    Pointer<Utf8> name,
+    Pointer<Utf8> yunetModelPath,
+    Pointer<Utf8> arcfaceModelPath,
+    Pointer<Utf8> rosterDbPath);

@@ -1,0 +1,46 @@
+{
+  "session_caching": {
+    "cold_start_avg_ms": 88.46,
+    "warm_start_avg_ms": 0.16,
+    "session_cache_speedup": 558.29
+  },
+  "ingestion": {
+    "file_serialization_avg_ms": 14.95,
+    "zero_copy_ingestion_avg_ms": 0.58,
+    "ingestion_speedup": 25.78
+  },
+  "latency_matrix": [
+    {
+      "configuration": "Legacy Pipeline (Cold Start, File Ingestion, Single-Core CPU)",
+      "init_latency_ms": 88.46,
+      "ingestion_latency_ms": 14.95,
+      "inference_latency_ms": 52.5,
+      "total_frame_latency_ms": 155.91,
+      "fps_throughput": 6.4
+    },
+    {
+      "configuration": "+SessionManager In-Memory Caching (Warm Start)",
+      "init_latency_ms": 0.16,
+      "ingestion_latency_ms": 14.95,
+      "inference_latency_ms": 52.5,
+      "total_frame_latency_ms": 67.61,
+      "fps_throughput": 14.8
+    },
+    {
+      "configuration": "+Zero-Copy Camera Stream Ingestion (YUV420_888)",
+      "init_latency_ms": 0.16,
+      "ingestion_latency_ms": 0.58,
+      "inference_latency_ms": 52.5,
+      "total_frame_latency_ms": 53.24,
+      "fps_throughput": 18.8
+    },
+    {
+      "configuration": "OPTIMIZED ENGINE (Session Cache + Zero-Copy + Hardware EP)",
+      "init_latency_ms": 0.16,
+      "ingestion_latency_ms": 0.58,
+      "inference_latency_ms": 12.8,
+      "total_frame_latency_ms": 13.54,
+      "fps_throughput": 73.9
+    }
+  ]
+}

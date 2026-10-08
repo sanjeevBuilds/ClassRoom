@@ -1,0 +1,7 @@
+{
+  "tau_match": 0.3,
+  "tau_blur": 15.0,
+  "tau_cluster": 0.35,
+  "frozen_at": "2026-10-08T07:10:37Z",
+  "source_split": "dev"
+}

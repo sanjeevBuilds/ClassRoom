@@ -25,6 +25,7 @@ class ArcFaceEmbedder {
   ArcFaceEmbedder() : env_(ORT_LOGGING_LEVEL_WARNING, "classroom") {}
 
   void Init(const std::string& model_path);
+  void InitFromSession(Ort::Session* session);
 
   // frame must be the full-resolution frame detection's bbox/landmarks are
   // expressed in — same contract as the Dart version.
@@ -33,6 +34,7 @@ class ArcFaceEmbedder {
  private:
   Ort::Env env_;
   std::unique_ptr<Ort::Session> session_;
+  Ort::Session* external_session_ = nullptr;
   std::string input_name_;
   std::string output_name_;
 

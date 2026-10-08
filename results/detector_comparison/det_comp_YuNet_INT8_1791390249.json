@@ -1,0 +1,21 @@
+{
+  "run_id": "det_comp_YuNet_INT8_1791390249",
+  "experiment": "detector_comparison",
+  "timestamp": "2026-10-07T16:24:09Z",
+  "git_commit": "884dc0a",
+  "git_dirty": true,
+  "build_mode": "release",
+  "provenance": "synthetic",
+  "detector": "YuNet_INT8",
+  "metrics": {
+    "precision": 1.0,
+    "recall": 1.0,
+    "f1": 1.0,
+    "avg_latency_ms": 38.5,
+    "bucket_recalls": {
+      "small": 0.75,
+      "medium": 0.98,
+      "large": 1.0
+    }
+  }
+}

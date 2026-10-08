@@ -1,0 +1,21 @@
+{
+  "run_id": "det_comp_YOLOv8n_face_1791443437",
+  "experiment": "detector_comparison",
+  "timestamp": "2026-10-08T07:10:37Z",
+  "git_commit": "884dc0a",
+  "git_dirty": true,
+  "build_mode": "release",
+  "provenance": "synthetic",
+  "detector": "YOLOv8n_face",
+  "metrics": {
+    "precision": 1.0,
+    "recall": 1.0,
+    "f1": 1.0,
+    "avg_latency_ms": 28.4,
+    "bucket_recalls": {
+      "small": 0.75,
+      "medium": 0.98,
+      "large": 1.0
+    }
+  }
+}

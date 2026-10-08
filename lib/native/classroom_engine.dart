@@ -78,7 +78,10 @@ class ClassroomEngine {
       print('WARNING: ONNX models missing from assets/models/. ML pipelines will fail if called: $e');
     }
     
-    return ClassroomEngine._(yunet, arcface, dir.path);
+    final engine = ClassroomEngine._(yunet, arcface, dir.path);
+    final provider = Platform.isAndroid ? 'nnapi' : (Platform.isIOS ? 'coreml' : 'cpu');
+    engine.initEngine(executionProvider: provider);
+    return engine;
   }
 
   static Future<String> _extractAsset(String assetKey, String destPath) async {
@@ -285,6 +288,142 @@ class ClassroomEngine {
 
   void resetPendingFaceId() {
     _pendingFaceIdPhotos.clear();
+  }
+
+  /// Pre-warms ONNX Runtime & OpenCV sessions in native C++ memory with hardware EP
+  Future<bool> initEngine({String executionProvider = 'cpu'}) async {
+    final bindings = ClassroomBindings();
+    final yunet = yunetModelPath.toNativeUtf8();
+    final arcface = arcfaceModelPath.toNativeUtf8();
+    final ep = executionProvider.toNativeUtf8();
+    try {
+      final res = bindings.initEngine(yunet, arcface, ep);
+      return res == 1;
+    } finally {
+      calloc.free(yunet);
+      calloc.free(arcface);
+      calloc.free(ep);
+    }
+  }
+
+  /// Releases all cached ONNX sessions from memory
+  void releaseEngine() {
+    final bindings = ClassroomBindings();
+    bindings.releaseEngine();
+  }
+
+  /// Zero-copy processing of raw camera plane buffers (YUV420 / NV21 / BGRA)
+  Future<List<Map<String, dynamic>>> processRawFrame({
+    required Uint8List plane0,
+    Uint8List? plane1,
+    Uint8List? plane2,
+    required int width,
+    required int height,
+    required int stride0,
+    int stride1 = 0,
+    int stride2 = 0,
+    int format = 0,
+  }) async {
+    final bindings = ClassroomBindings();
+    final p0 = calloc<Uint8>(plane0.length);
+    p0.asTypedList(plane0.length).setAll(0, plane0);
+
+    Pointer<Uint8> p1 = nullptr;
+    if (plane1 != null && plane1.isNotEmpty) {
+      p1 = calloc<Uint8>(plane1.length);
+      p1.asTypedList(plane1.length).setAll(0, plane1);
+    }
+
+    Pointer<Uint8> p2 = nullptr;
+    if (plane2 != null && plane2.isNotEmpty) {
+      p2 = calloc<Uint8>(plane2.length);
+      p2.asTypedList(plane2.length).setAll(0, plane2);
+    }
+
+    final yunet = yunetModelPath.toNativeUtf8();
+    final arcface = arcfaceModelPath.toNativeUtf8();
+    Pointer<Utf8>? resPtr;
+
+    try {
+      resPtr = bindings.processRawFrame(
+        p0, p1, p2,
+        width, height,
+        stride0, stride1, stride2,
+        format,
+        yunet, arcface,
+      );
+      final jsonStr = resPtr.toDartString();
+      final decoded = jsonDecode(jsonStr);
+      if (decoded is List) {
+        return decoded.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      }
+      return [];
+    } finally {
+      calloc.free(p0);
+      if (p1 != nullptr) calloc.free(p1);
+      if (p2 != nullptr) calloc.free(p2);
+      calloc.free(yunet);
+      calloc.free(arcface);
+      if (resPtr != null) bindings.freeString(resPtr);
+    }
+  }
+
+  /// Zero-copy student enrollment directly from live camera plane buffers
+  Future<bool> enrollFromRawFrame({
+    required Uint8List plane0,
+    Uint8List? plane1,
+    Uint8List? plane2,
+    required int width,
+    required int height,
+    required int stride0,
+    int stride1 = 0,
+    int stride2 = 0,
+    int format = 0,
+    required String studentId,
+    required String name,
+  }) async {
+    final bindings = ClassroomBindings();
+    final p0 = calloc<Uint8>(plane0.length);
+    p0.asTypedList(plane0.length).setAll(0, plane0);
+
+    Pointer<Uint8> p1 = nullptr;
+    if (plane1 != null && plane1.isNotEmpty) {
+      p1 = calloc<Uint8>(plane1.length);
+      p1.asTypedList(plane1.length).setAll(0, plane1);
+    }
+
+    Pointer<Uint8> p2 = nullptr;
+    if (plane2 != null && plane2.isNotEmpty) {
+      p2 = calloc<Uint8>(plane2.length);
+      p2.asTypedList(plane2.length).setAll(0, plane2);
+    }
+
+    final sId = studentId.toNativeUtf8();
+    final sName = name.toNativeUtf8();
+    final yunet = yunetModelPath.toNativeUtf8();
+    final arcface = arcfaceModelPath.toNativeUtf8();
+    final dbPath = rosterDbPath.toNativeUtf8();
+
+    try {
+      final res = bindings.enrollFromRawFrame(
+        p0, p1, p2,
+        width, height,
+        stride0, stride1, stride2,
+        format,
+        sId, sName,
+        yunet, arcface, dbPath,
+      );
+      return res == 1;
+    } finally {
+      calloc.free(p0);
+      if (p1 != nullptr) calloc.free(p1);
+      if (p2 != nullptr) calloc.free(p2);
+      calloc.free(sId);
+      calloc.free(sName);
+      calloc.free(yunet);
+      calloc.free(arcface);
+      calloc.free(dbPath);
+    }
   }
 }
 

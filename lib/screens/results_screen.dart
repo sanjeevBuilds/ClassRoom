@@ -6,6 +6,8 @@ import 'package:share_plus/share_plus.dart';
 import '../models/attendance_result.dart';
 import '../theme/app_theme.dart';
 import '../widgets/glass_card.dart';
+import '../services/lms_sync_service.dart';
+import 'lms_sync_screen.dart';
 
 class ResultsScreen extends StatefulWidget {
   final List<AttendanceResult> initialResults;
@@ -80,6 +82,27 @@ class _ResultsScreenState extends State<ResultsScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.cloud_upload_outlined, color: AppTheme.discordGreen),
+            tooltip: 'Sync to LMS',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => LmsSyncScreen(
+                  records: _knownResults.map((r) => AttendanceSyncRecord(
+                    studentId: r.studentId!,
+                    studentName: r.name!,
+                    isPresent: _overrides[r.studentId!] ?? (r.status == AttendanceStatus.present),
+                    similarityScore: r.similarityScore,
+                    timestamp: DateTime.now(),
+                  )).toList(),
+                  classLabel: widget.initialResults
+                      .where((r) => r.studentId == '__pipeline_debug__')
+                      .firstOrNull?.name?.split(',').first ?? 'Attendance Session',
+                ),
+              ),
+            ),
+          ),
           Padding(
             padding: const EdgeInsets.only(right: 8.0),
             child: IconButton(

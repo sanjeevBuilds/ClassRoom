@@ -30,6 +30,12 @@ class RosterDB {
 
   std::vector<RosterEntry> GetAllEntries() const;
 
+  // Progressive Roster Learning: Updates stored reference embedding via EMA
+  // e_stored <- L2Norm((1 - alpha) * e_stored + alpha * e_sweep)
+  void UpdateEmbeddingEMA(const std::string& student_id,
+                          const std::array<float, 512>& sweep_embedding,
+                          float alpha = 0.10f);
+
   void DeleteStudent(const std::string& student_id);
 
   void Close();

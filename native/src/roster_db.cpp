@@ -156,6 +156,54 @@ std::vector<RosterEntry> RosterDB::GetAllEntries() const {
   return entries;
 }
 
+void RosterDB::UpdateEmbeddingEMA(const std::string& student_id,
+                                  const std::array<float, 512>& sweep_embedding,
+                                  float alpha) {
+  RequireDb();
+  int target_id = -1;
+  std::array<float, 512> stored_vec{};
+
+  {
+    Statement stmt(db_,
+                    "SELECT id, embedding FROM embeddings WHERE student_id = ? LIMIT 1");
+    sqlite3_bind_text(stmt.get(), 1, student_id.c_str(), -1, SQLITE_TRANSIENT);
+    if (sqlite3_step(stmt.get()) == SQLITE_ROW) {
+      target_id = sqlite3_column_int(stmt.get(), 0);
+      const void* blob = sqlite3_column_blob(stmt.get(), 1);
+      const int size = sqlite3_column_bytes(stmt.get(), 1);
+      if (size == static_cast<int>(sizeof(stored_vec))) {
+        std::memcpy(stored_vec.data(), blob, sizeof(stored_vec));
+      } else {
+        target_id = -1;
+      }
+    }
+  }
+
+  if (target_id < 0) return;
+
+  // EMA update: e_stored <- (1 - alpha) * e_stored + alpha * e_sweep
+  std::array<float, 512> updated_vec{};
+  double norm = 0.0;
+  for (size_t i = 0; i < 512; ++i) {
+    float val = (1.0f - alpha) * stored_vec[i] + alpha * sweep_embedding[i];
+    updated_vec[i] = val;
+    norm += static_cast<double>(val) * val;
+  }
+  norm = std::sqrt(norm);
+  if (norm > 0.0) {
+    for (size_t i = 0; i < 512; ++i) {
+      updated_vec[i] = static_cast<float>(updated_vec[i] / norm);
+    }
+  }
+
+  // Save back to SQLite
+  Statement update_stmt(db_, "UPDATE embeddings SET embedding = ? WHERE id = ?");
+  sqlite3_bind_blob(update_stmt.get(), 1, updated_vec.data(),
+                    static_cast<int>(sizeof(updated_vec)), SQLITE_TRANSIENT);
+  sqlite3_bind_int(update_stmt.get(), 2, target_id);
+  sqlite3_step(update_stmt.get());
+}
+
 void RosterDB::DeleteStudent(const std::string& student_id) {
   RequireDb();
   CheckExec(db_, "BEGIN TRANSACTION");

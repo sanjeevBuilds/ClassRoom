@@ -1,0 +1,13 @@
+{
+  "id": "S06",
+  "name": "LeftCornerSweep",
+  "description": "Sweep starting from left corner of hall (steep yaw ~35\u00b0)",
+  "num_students": 35,
+  "num_frames": 5,
+  "brightness": 185,
+  "blur_sigma": 0.0,
+  "yaw_deg": 35.0,
+  "occlusion_frac": 0.0,
+  "pan_pixels_per_frame": 22,
+  "ground_truth_csv": "ground_truth.csv"
+}

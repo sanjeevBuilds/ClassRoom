@@ -1,0 +1,13 @@
+{
+  "id": "S09",
+  "name": "PartialOcclusion_35pct",
+  "description": "Students with 35% face occlusion (hands, masks, scarves)",
+  "num_students": 30,
+  "num_frames": 5,
+  "brightness": 195,
+  "blur_sigma": 0.0,
+  "yaw_deg": 0.0,
+  "occlusion_frac": 0.35,
+  "pan_pixels_per_frame": 16,
+  "ground_truth_csv": "ground_truth.csv"
+}

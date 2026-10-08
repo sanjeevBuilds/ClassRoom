@@ -1,0 +1,13 @@
+{
+  "id": "S08",
+  "name": "FastPan_MotionBlur",
+  "description": "Fast handheld pan causing motion blur \u2014 gyroscope warning triggers",
+  "num_students": 30,
+  "num_frames": 5,
+  "brightness": 190,
+  "blur_sigma": 2.5,
+  "yaw_deg": 0.0,
+  "occlusion_frac": 0.0,
+  "pan_pixels_per_frame": 40,
+  "ground_truth_csv": "ground_truth.csv"
+}

@@ -1,0 +1,13 @@
+{
+  "sweep_id": "sweep_dev_02",
+  "date": "2026-10-07",
+  "room": "LH102",
+  "lighting": "dim",
+  "distance": "mid",
+  "angle": "15deg",
+  "device": "MacBookPro_M3_SyntheticSimulator",
+  "split": "dev",
+  "provenance": "synthetic",
+  "consent_obtained": true,
+  "notes": "synthetic_classroom_v1 benchmark sweep"
+}

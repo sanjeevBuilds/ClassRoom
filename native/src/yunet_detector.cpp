@@ -4,6 +4,10 @@
 
 namespace classroom {
 
+void YuNetDetector::InitFromDetector(cv::Ptr<cv::FaceDetectorYN> detector) {
+  detector_ = detector;
+}
+
 void YuNetDetector::Init(const std::string& model_path,
                           double score_threshold, double nms_threshold) {
   // input_size is a placeholder here too (mirrors the Dart version) —

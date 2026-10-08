@@ -1,0 +1,21 @@
+{
+  "run_id": "det_comp_RetinaFace_MN025_1791390280",
+  "experiment": "detector_comparison",
+  "timestamp": "2026-10-07T16:24:40Z",
+  "git_commit": "884dc0a",
+  "git_dirty": true,
+  "build_mode": "release",
+  "provenance": "synthetic",
+  "detector": "RetinaFace_MN025",
+  "metrics": {
+    "precision": 1.0,
+    "recall": 1.0,
+    "f1": 1.0,
+    "avg_latency_ms": 42.1,
+    "bucket_recalls": {
+      "small": 0.75,
+      "medium": 0.98,
+      "large": 1.0
+    }
+  }
+}

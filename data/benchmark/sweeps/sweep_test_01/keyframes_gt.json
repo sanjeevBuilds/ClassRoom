@@ -1,0 +1,2472 @@
+{
+  "sweep_id": "sweep_test_01",
+  "images": [
+    {
+      "id": 0,
+      "file_name": "frame_0000.jpg",
+      "width": 1280,
+      "height": 720
+    },
+    {
+      "id": 1,
+      "file_name": "frame_0001.jpg",
+      "width": 1280,
+      "height": 720
+    },
+    {
+      "id": 2,
+      "file_name": "frame_0002.jpg",
+      "width": 1280,
+      "height": 720
+    },
+    {
+      "id": 3,
+      "file_name": "frame_0003.jpg",
+      "width": 1280,
+      "height": 720
+    },
+    {
+      "id": 4,
+      "file_name": "frame_0004.jpg",
+      "width": 1280,
+      "height": 720
+    },
+    {
+      "id": 5,
+      "file_name": "frame_0005.jpg",
+      "width": 1280,
+      "height": 720
+    },
+    {
+      "id": 6,
+      "file_name": "frame_0006.jpg",
+      "width": 1280,
+      "height": 720
+    },
+    {
+      "id": 7,
+      "file_name": "frame_0007.jpg",
+      "width": 1280,
+      "height": 720
+    },
+    {
+      "id": 8,
+      "file_name": "frame_0008.jpg",
+      "width": 1280,
+      "height": 720
+    },
+    {
+      "id": 9,
+      "file_name": "frame_0009.jpg",
+      "width": 1280,
+      "height": 720
+    }
+  ],
+  "annotations": [
+    {
+      "id": 1,
+      "frame_id": 0,
+      "student_id": "23Z001",
+      "bbox": [
+        120,
+        120,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 2,
+      "frame_id": 0,
+      "student_id": "23Z002",
+      "bbox": [
+        340,
+        120,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 3,
+      "frame_id": 0,
+      "student_id": "23Z003",
+      "bbox": [
+        560,
+        120,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 4,
+      "frame_id": 0,
+      "student_id": "23Z004",
+      "bbox": [
+        780,
+        120,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 5,
+      "frame_id": 0,
+      "student_id": "23Z005",
+      "bbox": [
+        1000,
+        120,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 6,
+      "frame_id": 0,
+      "student_id": "23Z006",
+      "bbox": [
+        120,
+        280,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 7,
+      "frame_id": 0,
+      "student_id": "23Z008",
+      "bbox": [
+        340,
+        280,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 8,
+      "frame_id": 0,
+      "student_id": "23Z009",
+      "bbox": [
+        560,
+        280,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 9,
+      "frame_id": 0,
+      "student_id": "23Z010",
+      "bbox": [
+        780,
+        280,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 10,
+      "frame_id": 0,
+      "student_id": "23Z011",
+      "bbox": [
+        1000,
+        280,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 11,
+      "frame_id": 0,
+      "student_id": "23Z012",
+      "bbox": [
+        120,
+        440,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 12,
+      "frame_id": 0,
+      "student_id": "23Z013",
+      "bbox": [
+        340,
+        440,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 13,
+      "frame_id": 0,
+      "student_id": "23Z015",
+      "bbox": [
+        560,
+        440,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 14,
+      "frame_id": 0,
+      "student_id": "23Z016",
+      "bbox": [
+        780,
+        440,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 15,
+      "frame_id": 0,
+      "student_id": "23Z017",
+      "bbox": [
+        1000,
+        440,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 16,
+      "frame_id": 0,
+      "student_id": "23Z018",
+      "bbox": [
+        120,
+        600,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 17,
+      "frame_id": 0,
+      "student_id": "23Z019",
+      "bbox": [
+        340,
+        600,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 18,
+      "frame_id": 0,
+      "student_id": "23Z020",
+      "bbox": [
+        560,
+        600,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 19,
+      "frame_id": 0,
+      "student_id": "23Z022",
+      "bbox": [
+        780,
+        600,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 20,
+      "frame_id": 0,
+      "student_id": "23Z023",
+      "bbox": [
+        1000,
+        600,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 21,
+      "frame_id": 0,
+      "student_id": "23Z024",
+      "bbox": [
+        120,
+        760,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 22,
+      "frame_id": 0,
+      "student_id": "23Z025",
+      "bbox": [
+        340,
+        760,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 23,
+      "frame_id": 1,
+      "student_id": "23Z001",
+      "bbox": [
+        76,
+        120,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 24,
+      "frame_id": 1,
+      "student_id": "23Z002",
+      "bbox": [
+        296,
+        120,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 25,
+      "frame_id": 1,
+      "student_id": "23Z003",
+      "bbox": [
+        516,
+        120,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 26,
+      "frame_id": 1,
+      "student_id": "23Z004",
+      "bbox": [
+        736,
+        120,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 27,
+      "frame_id": 1,
+      "student_id": "23Z005",
+      "bbox": [
+        956,
+        120,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 28,
+      "frame_id": 1,
+      "student_id": "23Z006",
+      "bbox": [
+        76,
+        280,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 29,
+      "frame_id": 1,
+      "student_id": "23Z008",
+      "bbox": [
+        296,
+        280,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 30,
+      "frame_id": 1,
+      "student_id": "23Z009",
+      "bbox": [
+        516,
+        280,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 31,
+      "frame_id": 1,
+      "student_id": "23Z010",
+      "bbox": [
+        736,
+        280,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 32,
+      "frame_id": 1,
+      "student_id": "23Z011",
+      "bbox": [
+        956,
+        280,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 33,
+      "frame_id": 1,
+      "student_id": "23Z012",
+      "bbox": [
+        76,
+        440,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 34,
+      "frame_id": 1,
+      "student_id": "23Z013",
+      "bbox": [
+        296,
+        440,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 35,
+      "frame_id": 1,
+      "student_id": "23Z015",
+      "bbox": [
+        516,
+        440,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 36,
+      "frame_id": 1,
+      "student_id": "23Z016",
+      "bbox": [
+        736,
+        440,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 37,
+      "frame_id": 1,
+      "student_id": "23Z017",
+      "bbox": [
+        956,
+        440,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 38,
+      "frame_id": 1,
+      "student_id": "23Z018",
+      "bbox": [
+        76,
+        600,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 39,
+      "frame_id": 1,
+      "student_id": "23Z019",
+      "bbox": [
+        296,
+        600,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 40,
+      "frame_id": 1,
+      "student_id": "23Z020",
+      "bbox": [
+        516,
+        600,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 41,
+      "frame_id": 1,
+      "student_id": "23Z022",
+      "bbox": [
+        736,
+        600,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 42,
+      "frame_id": 1,
+      "student_id": "23Z023",
+      "bbox": [
+        956,
+        600,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 43,
+      "frame_id": 1,
+      "student_id": "23Z024",
+      "bbox": [
+        76,
+        760,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 44,
+      "frame_id": 1,
+      "student_id": "23Z025",
+      "bbox": [
+        296,
+        760,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 45,
+      "frame_id": 2,
+      "student_id": "23Z001",
+      "bbox": [
+        32,
+        120,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 46,
+      "frame_id": 2,
+      "student_id": "23Z002",
+      "bbox": [
+        252,
+        120,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 47,
+      "frame_id": 2,
+      "student_id": "23Z003",
+      "bbox": [
+        472,
+        120,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 48,
+      "frame_id": 2,
+      "student_id": "23Z004",
+      "bbox": [
+        692,
+        120,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 49,
+      "frame_id": 2,
+      "student_id": "23Z005",
+      "bbox": [
+        912,
+        120,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 50,
+      "frame_id": 2,
+      "student_id": "23Z006",
+      "bbox": [
+        32,
+        280,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 51,
+      "frame_id": 2,
+      "student_id": "23Z008",
+      "bbox": [
+        252,
+        280,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 52,
+      "frame_id": 2,
+      "student_id": "23Z009",
+      "bbox": [
+        472,
+        280,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 53,
+      "frame_id": 2,
+      "student_id": "23Z010",
+      "bbox": [
+        692,
+        280,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 54,
+      "frame_id": 2,
+      "student_id": "23Z011",
+      "bbox": [
+        912,
+        280,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 55,
+      "frame_id": 2,
+      "student_id": "23Z012",
+      "bbox": [
+        32,
+        440,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 56,
+      "frame_id": 2,
+      "student_id": "23Z013",
+      "bbox": [
+        252,
+        440,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 57,
+      "frame_id": 2,
+      "student_id": "23Z015",
+      "bbox": [
+        472,
+        440,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 58,
+      "frame_id": 2,
+      "student_id": "23Z016",
+      "bbox": [
+        692,
+        440,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 59,
+      "frame_id": 2,
+      "student_id": "23Z017",
+      "bbox": [
+        912,
+        440,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 60,
+      "frame_id": 2,
+      "student_id": "23Z018",
+      "bbox": [
+        32,
+        600,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 61,
+      "frame_id": 2,
+      "student_id": "23Z019",
+      "bbox": [
+        252,
+        600,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 62,
+      "frame_id": 2,
+      "student_id": "23Z020",
+      "bbox": [
+        472,
+        600,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 63,
+      "frame_id": 2,
+      "student_id": "23Z022",
+      "bbox": [
+        692,
+        600,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 64,
+      "frame_id": 2,
+      "student_id": "23Z023",
+      "bbox": [
+        912,
+        600,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 65,
+      "frame_id": 2,
+      "student_id": "23Z024",
+      "bbox": [
+        32,
+        760,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 66,
+      "frame_id": 2,
+      "student_id": "23Z025",
+      "bbox": [
+        252,
+        760,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 67,
+      "frame_id": 3,
+      "student_id": "23Z001",
+      "bbox": [
+        -13,
+        120,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 68,
+      "frame_id": 3,
+      "student_id": "23Z002",
+      "bbox": [
+        207,
+        120,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 69,
+      "frame_id": 3,
+      "student_id": "23Z003",
+      "bbox": [
+        427,
+        120,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 70,
+      "frame_id": 3,
+      "student_id": "23Z004",
+      "bbox": [
+        647,
+        120,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 71,
+      "frame_id": 3,
+      "student_id": "23Z005",
+      "bbox": [
+        867,
+        120,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 72,
+      "frame_id": 3,
+      "student_id": "23Z006",
+      "bbox": [
+        -13,
+        280,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 73,
+      "frame_id": 3,
+      "student_id": "23Z008",
+      "bbox": [
+        207,
+        280,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 74,
+      "frame_id": 3,
+      "student_id": "23Z009",
+      "bbox": [
+        427,
+        280,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 75,
+      "frame_id": 3,
+      "student_id": "23Z010",
+      "bbox": [
+        647,
+        280,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 76,
+      "frame_id": 3,
+      "student_id": "23Z011",
+      "bbox": [
+        867,
+        280,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 77,
+      "frame_id": 3,
+      "student_id": "23Z012",
+      "bbox": [
+        -13,
+        440,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 78,
+      "frame_id": 3,
+      "student_id": "23Z013",
+      "bbox": [
+        207,
+        440,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 79,
+      "frame_id": 3,
+      "student_id": "23Z015",
+      "bbox": [
+        427,
+        440,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 80,
+      "frame_id": 3,
+      "student_id": "23Z016",
+      "bbox": [
+        647,
+        440,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 81,
+      "frame_id": 3,
+      "student_id": "23Z017",
+      "bbox": [
+        867,
+        440,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 82,
+      "frame_id": 3,
+      "student_id": "23Z018",
+      "bbox": [
+        -13,
+        600,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 83,
+      "frame_id": 3,
+      "student_id": "23Z019",
+      "bbox": [
+        207,
+        600,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 84,
+      "frame_id": 3,
+      "student_id": "23Z020",
+      "bbox": [
+        427,
+        600,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 85,
+      "frame_id": 3,
+      "student_id": "23Z022",
+      "bbox": [
+        647,
+        600,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 86,
+      "frame_id": 3,
+      "student_id": "23Z023",
+      "bbox": [
+        867,
+        600,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 87,
+      "frame_id": 3,
+      "student_id": "23Z024",
+      "bbox": [
+        -13,
+        760,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 88,
+      "frame_id": 3,
+      "student_id": "23Z025",
+      "bbox": [
+        207,
+        760,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 89,
+      "frame_id": 4,
+      "student_id": "23Z002",
+      "bbox": [
+        163,
+        120,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 90,
+      "frame_id": 4,
+      "student_id": "23Z003",
+      "bbox": [
+        383,
+        120,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 91,
+      "frame_id": 4,
+      "student_id": "23Z004",
+      "bbox": [
+        603,
+        120,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 92,
+      "frame_id": 4,
+      "student_id": "23Z005",
+      "bbox": [
+        823,
+        120,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 93,
+      "frame_id": 4,
+      "student_id": "23Z008",
+      "bbox": [
+        163,
+        280,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 94,
+      "frame_id": 4,
+      "student_id": "23Z009",
+      "bbox": [
+        383,
+        280,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 95,
+      "frame_id": 4,
+      "student_id": "23Z010",
+      "bbox": [
+        603,
+        280,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 96,
+      "frame_id": 4,
+      "student_id": "23Z011",
+      "bbox": [
+        823,
+        280,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 97,
+      "frame_id": 4,
+      "student_id": "23Z013",
+      "bbox": [
+        163,
+        440,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 98,
+      "frame_id": 4,
+      "student_id": "23Z015",
+      "bbox": [
+        383,
+        440,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 99,
+      "frame_id": 4,
+      "student_id": "23Z016",
+      "bbox": [
+        603,
+        440,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 100,
+      "frame_id": 4,
+      "student_id": "23Z017",
+      "bbox": [
+        823,
+        440,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 101,
+      "frame_id": 4,
+      "student_id": "23Z019",
+      "bbox": [
+        163,
+        600,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 102,
+      "frame_id": 4,
+      "student_id": "23Z020",
+      "bbox": [
+        383,
+        600,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 103,
+      "frame_id": 4,
+      "student_id": "23Z022",
+      "bbox": [
+        603,
+        600,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 104,
+      "frame_id": 4,
+      "student_id": "23Z023",
+      "bbox": [
+        823,
+        600,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 105,
+      "frame_id": 4,
+      "student_id": "23Z025",
+      "bbox": [
+        163,
+        760,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 106,
+      "frame_id": 5,
+      "student_id": "23Z002",
+      "bbox": [
+        118,
+        120,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 107,
+      "frame_id": 5,
+      "student_id": "23Z003",
+      "bbox": [
+        338,
+        120,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 108,
+      "frame_id": 5,
+      "student_id": "23Z004",
+      "bbox": [
+        558,
+        120,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 109,
+      "frame_id": 5,
+      "student_id": "23Z005",
+      "bbox": [
+        778,
+        120,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 110,
+      "frame_id": 5,
+      "student_id": "23Z008",
+      "bbox": [
+        118,
+        280,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 111,
+      "frame_id": 5,
+      "student_id": "23Z009",
+      "bbox": [
+        338,
+        280,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 112,
+      "frame_id": 5,
+      "student_id": "23Z010",
+      "bbox": [
+        558,
+        280,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 113,
+      "frame_id": 5,
+      "student_id": "23Z011",
+      "bbox": [
+        778,
+        280,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 114,
+      "frame_id": 5,
+      "student_id": "23Z013",
+      "bbox": [
+        118,
+        440,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 115,
+      "frame_id": 5,
+      "student_id": "23Z015",
+      "bbox": [
+        338,
+        440,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 116,
+      "frame_id": 5,
+      "student_id": "23Z016",
+      "bbox": [
+        558,
+        440,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 117,
+      "frame_id": 5,
+      "student_id": "23Z017",
+      "bbox": [
+        778,
+        440,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 118,
+      "frame_id": 5,
+      "student_id": "23Z019",
+      "bbox": [
+        118,
+        600,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 119,
+      "frame_id": 5,
+      "student_id": "23Z020",
+      "bbox": [
+        338,
+        600,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 120,
+      "frame_id": 5,
+      "student_id": "23Z022",
+      "bbox": [
+        558,
+        600,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 121,
+      "frame_id": 5,
+      "student_id": "23Z023",
+      "bbox": [
+        778,
+        600,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 122,
+      "frame_id": 5,
+      "student_id": "23Z025",
+      "bbox": [
+        118,
+        760,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 123,
+      "frame_id": 6,
+      "student_id": "23Z002",
+      "bbox": [
+        74,
+        120,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 124,
+      "frame_id": 6,
+      "student_id": "23Z003",
+      "bbox": [
+        294,
+        120,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 125,
+      "frame_id": 6,
+      "student_id": "23Z004",
+      "bbox": [
+        514,
+        120,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 126,
+      "frame_id": 6,
+      "student_id": "23Z005",
+      "bbox": [
+        734,
+        120,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 127,
+      "frame_id": 6,
+      "student_id": "23Z008",
+      "bbox": [
+        74,
+        280,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 128,
+      "frame_id": 6,
+      "student_id": "23Z009",
+      "bbox": [
+        294,
+        280,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 129,
+      "frame_id": 6,
+      "student_id": "23Z010",
+      "bbox": [
+        514,
+        280,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 130,
+      "frame_id": 6,
+      "student_id": "23Z011",
+      "bbox": [
+        734,
+        280,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 131,
+      "frame_id": 6,
+      "student_id": "23Z013",
+      "bbox": [
+        74,
+        440,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 132,
+      "frame_id": 6,
+      "student_id": "23Z015",
+      "bbox": [
+        294,
+        440,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 133,
+      "frame_id": 6,
+      "student_id": "23Z016",
+      "bbox": [
+        514,
+        440,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 134,
+      "frame_id": 6,
+      "student_id": "23Z017",
+      "bbox": [
+        734,
+        440,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 135,
+      "frame_id": 6,
+      "student_id": "23Z019",
+      "bbox": [
+        74,
+        600,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 136,
+      "frame_id": 6,
+      "student_id": "23Z020",
+      "bbox": [
+        294,
+        600,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 137,
+      "frame_id": 6,
+      "student_id": "23Z022",
+      "bbox": [
+        514,
+        600,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 138,
+      "frame_id": 6,
+      "student_id": "23Z023",
+      "bbox": [
+        734,
+        600,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 139,
+      "frame_id": 6,
+      "student_id": "23Z025",
+      "bbox": [
+        74,
+        760,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 140,
+      "frame_id": 7,
+      "student_id": "23Z002",
+      "bbox": [
+        29,
+        120,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 141,
+      "frame_id": 7,
+      "student_id": "23Z003",
+      "bbox": [
+        249,
+        120,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 142,
+      "frame_id": 7,
+      "student_id": "23Z004",
+      "bbox": [
+        469,
+        120,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 143,
+      "frame_id": 7,
+      "student_id": "23Z005",
+      "bbox": [
+        689,
+        120,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 144,
+      "frame_id": 7,
+      "student_id": "23Z008",
+      "bbox": [
+        29,
+        280,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 145,
+      "frame_id": 7,
+      "student_id": "23Z009",
+      "bbox": [
+        249,
+        280,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 146,
+      "frame_id": 7,
+      "student_id": "23Z010",
+      "bbox": [
+        469,
+        280,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 147,
+      "frame_id": 7,
+      "student_id": "23Z011",
+      "bbox": [
+        689,
+        280,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 148,
+      "frame_id": 7,
+      "student_id": "23Z013",
+      "bbox": [
+        29,
+        440,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 149,
+      "frame_id": 7,
+      "student_id": "23Z015",
+      "bbox": [
+        249,
+        440,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 150,
+      "frame_id": 7,
+      "student_id": "23Z016",
+      "bbox": [
+        469,
+        440,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 151,
+      "frame_id": 7,
+      "student_id": "23Z017",
+      "bbox": [
+        689,
+        440,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 152,
+      "frame_id": 7,
+      "student_id": "23Z019",
+      "bbox": [
+        29,
+        600,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 153,
+      "frame_id": 7,
+      "student_id": "23Z020",
+      "bbox": [
+        249,
+        600,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 154,
+      "frame_id": 7,
+      "student_id": "23Z022",
+      "bbox": [
+        469,
+        600,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 155,
+      "frame_id": 7,
+      "student_id": "23Z023",
+      "bbox": [
+        689,
+        600,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 156,
+      "frame_id": 7,
+      "student_id": "23Z025",
+      "bbox": [
+        29,
+        760,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 157,
+      "frame_id": 8,
+      "student_id": "23Z002",
+      "bbox": [
+        -15,
+        120,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 158,
+      "frame_id": 8,
+      "student_id": "23Z003",
+      "bbox": [
+        205,
+        120,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 159,
+      "frame_id": 8,
+      "student_id": "23Z004",
+      "bbox": [
+        425,
+        120,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 160,
+      "frame_id": 8,
+      "student_id": "23Z005",
+      "bbox": [
+        645,
+        120,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 161,
+      "frame_id": 8,
+      "student_id": "23Z008",
+      "bbox": [
+        -15,
+        280,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 162,
+      "frame_id": 8,
+      "student_id": "23Z009",
+      "bbox": [
+        205,
+        280,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 163,
+      "frame_id": 8,
+      "student_id": "23Z010",
+      "bbox": [
+        425,
+        280,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 164,
+      "frame_id": 8,
+      "student_id": "23Z011",
+      "bbox": [
+        645,
+        280,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 165,
+      "frame_id": 8,
+      "student_id": "23Z013",
+      "bbox": [
+        -15,
+        440,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 166,
+      "frame_id": 8,
+      "student_id": "23Z015",
+      "bbox": [
+        205,
+        440,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 167,
+      "frame_id": 8,
+      "student_id": "23Z016",
+      "bbox": [
+        425,
+        440,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 168,
+      "frame_id": 8,
+      "student_id": "23Z017",
+      "bbox": [
+        645,
+        440,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 169,
+      "frame_id": 8,
+      "student_id": "23Z019",
+      "bbox": [
+        -15,
+        600,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 170,
+      "frame_id": 8,
+      "student_id": "23Z020",
+      "bbox": [
+        205,
+        600,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 171,
+      "frame_id": 8,
+      "student_id": "23Z022",
+      "bbox": [
+        425,
+        600,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 172,
+      "frame_id": 8,
+      "student_id": "23Z023",
+      "bbox": [
+        645,
+        600,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 173,
+      "frame_id": 8,
+      "student_id": "23Z025",
+      "bbox": [
+        -15,
+        760,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 174,
+      "frame_id": 9,
+      "student_id": "23Z003",
+      "bbox": [
+        160,
+        120,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 175,
+      "frame_id": 9,
+      "student_id": "23Z004",
+      "bbox": [
+        380,
+        120,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 176,
+      "frame_id": 9,
+      "student_id": "23Z005",
+      "bbox": [
+        600,
+        120,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 177,
+      "frame_id": 9,
+      "student_id": "23Z009",
+      "bbox": [
+        160,
+        280,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 178,
+      "frame_id": 9,
+      "student_id": "23Z010",
+      "bbox": [
+        380,
+        280,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 179,
+      "frame_id": 9,
+      "student_id": "23Z011",
+      "bbox": [
+        600,
+        280,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 180,
+      "frame_id": 9,
+      "student_id": "23Z015",
+      "bbox": [
+        160,
+        440,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 181,
+      "frame_id": 9,
+      "student_id": "23Z016",
+      "bbox": [
+        380,
+        440,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 182,
+      "frame_id": 9,
+      "student_id": "23Z017",
+      "bbox": [
+        600,
+        440,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 183,
+      "frame_id": 9,
+      "student_id": "23Z020",
+      "bbox": [
+        160,
+        600,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 184,
+      "frame_id": 9,
+      "student_id": "23Z022",
+      "bbox": [
+        380,
+        600,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    },
+    {
+      "id": 185,
+      "frame_id": 9,
+      "student_id": "23Z023",
+      "bbox": [
+        600,
+        600,
+        90,
+        112
+      ],
+      "size_bucket": "large",
+      "category": "face"
+    }
+  ]
+}
