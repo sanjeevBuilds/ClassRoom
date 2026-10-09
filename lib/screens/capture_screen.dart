@@ -19,15 +19,48 @@ class CaptureScreen extends StatefulWidget {
   State<CaptureScreen> createState() => _CaptureScreenState();
 }
 
+/// Immutable snapshot of device motion for zero-jank 120Hz guideline rendering.
+class GyroGuidelineState {
+  final double panPosition;   // 0.0 to 1.0 (horizontal position across reticle)
+  final double rollAngle;     // radians (tilt left/right)
+  final double pitchOffset;   // pixels (tilt up/down)
+  final double panVelocity;   // rad/s (instantaneous yaw rate)
+  final bool isMovingTooFast; // speed > 1.5 rad/s
+  final bool isLevel;         // rollAngle.abs() < 0.035 (~2 degrees)
+
+  const GyroGuidelineState({
+    this.panPosition = 0.5,
+    this.rollAngle = 0.0,
+    this.pitchOffset = 0.0,
+    this.panVelocity = 0.0,
+    this.isMovingTooFast = false,
+    this.isLevel = true,
+  });
+}
+
 class _CaptureScreenState extends State<CaptureScreen>
     with SingleTickerProviderStateMixin {
   CameraController? _controller;
   StreamSubscription? _gyroSubscription;
+  StreamSubscription? _accelSubscription;
   late AnimationController _guideAnimController;
+  final ValueNotifier<GyroGuidelineState> _gyroGuidelineNotifier =
+      ValueNotifier<GyroGuidelineState>(const GyroGuidelineState());
+
   bool _isMovingTooFast = false;
   bool _isRecording = false;
   bool _isTorchOn = false;
   bool _isPickingVideo = false;
+
+  // Real-time motion tracking state
+  int _lastGyroTime = 0;
+  double _panPosition = 0.5;
+  double _previewPanAngle = 0.0;
+  double _recordingPanAngle = 0.0;
+  double _currentYawVelocity = 0.0;
+  double _smoothedRoll = 0.0;
+  double _pitchOffset = 0.0;
+  bool _isDeviceLevel = true;
 
   @override
   void initState() {
@@ -77,24 +110,77 @@ class _CaptureScreenState extends State<CaptureScreen>
 
   void _initSensors() {
     _gyroSubscription = gyroscopeEventStream().listen((GyroscopeEvent event) {
-      // Calculate angular velocity magnitude
       final speed = sqrt(event.x * event.x + event.y * event.y + event.z * event.z);
-
-      // Threshold in rad/s (approx 85 degrees per second)
       final tooFast = speed > 1.5;
 
-      if (tooFast != _isMovingTooFast) {
-        setState(() {
-          _isMovingTooFast = tooFast;
-        });
+      final now = DateTime.now().microsecondsSinceEpoch;
+      if (_lastGyroTime == 0) {
+        _lastGyroTime = now;
+        return;
       }
+      final dt = ((now - _lastGyroTime) / 1000000.0).clamp(0.001, 0.05);
+      _lastGyroTime = now;
+
+      // In portrait orientation:
+      // event.y is rotational rate around vertical axis (yaw)
+      // Turning to the right (clockwise) produces negative event.y in iOS CoreMotion
+      final yawRate = -event.y;
+      _currentYawVelocity = yawRate;
+
+      if (_isRecording) {
+        // Accumulate pan motion across the classroom sweep
+        _recordingPanAngle += yawRate * dt;
+        // ~55 degrees (0.95 rad) represents sweeping a standard classroom row
+        _panPosition = (0.15 + (_recordingPanAngle / 0.95) * 0.70).clamp(0.05, 0.95);
+      } else {
+        // In preview mode: moves guideline dynamically in the physical direction of rotation
+        _previewPanAngle += yawRate * dt;
+        // Natural spring damping back to center
+        _previewPanAngle *= (1.0 - 0.8 * dt);
+        _previewPanAngle = _previewPanAngle.clamp(-0.55, 0.55);
+        _panPosition = (0.5 + (_previewPanAngle / 0.55) * 0.44).clamp(0.05, 0.95);
+      }
+
+      if (tooFast != _isMovingTooFast) {
+        setState(() => _isMovingTooFast = tooFast);
+      }
+
+      _notifyGyroUpdate();
     });
+
+    _accelSubscription = accelerometerEventStream().listen((AccelerometerEvent event) {
+      // 1. Roll angle (left/right tilt)
+      final rawRoll = atan2(event.x, -event.y);
+      _smoothedRoll += (rawRoll - _smoothedRoll) * 0.28;
+      final isLevel = _smoothedRoll.abs() < 0.035; // ~2 degrees
+
+      // 2. Pitch angle (up/down elevation tilt)
+      final rawPitch = atan2(event.z, sqrt(event.x * event.x + event.y * event.y));
+      final pitchDelta = rawPitch - 0.08; // Natural upright holding angle offset
+      _pitchOffset = (pitchDelta * 45.0).clamp(-22.0, 22.0);
+      _isDeviceLevel = isLevel;
+
+      _notifyGyroUpdate();
+    });
+  }
+
+  void _notifyGyroUpdate() {
+    _gyroGuidelineNotifier.value = GyroGuidelineState(
+      panPosition: _panPosition,
+      rollAngle: _smoothedRoll,
+      pitchOffset: _pitchOffset,
+      panVelocity: _currentYawVelocity,
+      isMovingTooFast: _isMovingTooFast,
+      isLevel: _isDeviceLevel,
+    );
   }
 
   @override
   void dispose() {
     _guideAnimController.dispose();
     _gyroSubscription?.cancel();
+    _accelSubscription?.cancel();
+    _gyroGuidelineNotifier.dispose();
     _controller?.dispose();
     super.dispose();
   }
@@ -157,8 +243,11 @@ class _CaptureScreenState extends State<CaptureScreen>
         );
       }
     } else {
+      _recordingPanAngle = 0.0; // Reset pan accumulator for fresh row sweep
+      _panPosition = 0.15;      // Start near left edge to sweep towards right
       await _controller!.startVideoRecording();
       setState(() => _isRecording = true);
+      _notifyGyroUpdate();
     }
   }
 
@@ -204,17 +293,23 @@ class _CaptureScreenState extends State<CaptureScreen>
           // Fullscreen Distortion-Free Camera Preview
           _buildFullscreenCameraPreview(context, _controller!),
 
-          // Sweep Reticle & Guidelines Overlay
+          // Sweep Reticle & Guidelines Overlay (driven directly by Gyroscope & Accelerometer)
           Positioned.fill(
             child: IgnorePointer(
               child: AnimatedBuilder(
-                animation: _guideAnimController,
+                animation: Listenable.merge([_gyroGuidelineNotifier, _guideAnimController]),
                 builder: (context, _) {
+                  final gyroState = _gyroGuidelineNotifier.value;
                   return CustomPaint(
                     painter: ClassroomSweepGuidelinePainter(
-                      animationValue: _guideAnimController.value,
+                      panPosition: gyroState.panPosition,
+                      rollAngle: gyroState.rollAngle,
+                      pitchOffset: gyroState.pitchOffset,
+                      panVelocity: gyroState.panVelocity,
+                      animShimmer: _guideAnimController.value,
                       isRecording: _isRecording,
-                      isMovingTooFast: _isMovingTooFast,
+                      isMovingTooFast: gyroState.isMovingTooFast,
+                      isLevel: gyroState.isLevel,
                     ),
                   );
                 },
@@ -222,46 +317,67 @@ class _CaptureScreenState extends State<CaptureScreen>
             ),
           ),
 
-          // Guideline Instruction HUD Pill
+          // Guideline Instruction HUD Pill (Real-Time Motion Feedback)
           Positioned(
             left: 0,
             right: 0,
             top: (MediaQuery.of(context).size.height * 0.72) - 15,
             child: Center(
               child: IgnorePointer(
-                child: GlassCard(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  borderRadius: 20,
-                  borderColor: (_isRecording
-                          ? const Color(0xFF57F287)
-                          : AppTheme.discordPurple)
-                      .withValues(alpha: 0.4),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        _isRecording
-                            ? Icons.fiber_manual_record_rounded
-                            : Icons.straighten_rounded,
-                        size: 14,
-                        color: _isRecording
-                            ? const Color(0xFF57F287)
-                            : AppTheme.discordLightPurple,
+                child: ValueListenableBuilder<GyroGuidelineState>(
+                  valueListenable: _gyroGuidelineNotifier,
+                  builder: (context, gyroState, _) {
+                    final isMovingTooFast = gyroState.isMovingTooFast;
+                    final isLevel = gyroState.isLevel;
+                    final isPanning = gyroState.panVelocity.abs() > 0.15;
+
+                    IconData icon;
+                    String text;
+                    Color color;
+
+                    if (isMovingTooFast) {
+                      icon = Icons.warning_amber_rounded;
+                      text = 'Slow down • Panning too fast';
+                      color = AppTheme.discordRed;
+                    } else if (!isLevel) {
+                      final deg = (gyroState.rollAngle * 180 / pi).abs().round();
+                      icon = Icons.screen_rotation_rounded;
+                      text = 'Tilt phone $deg° to level with desk rows';
+                      color = AppTheme.discordYellow;
+                    } else if (_isRecording) {
+                      icon = Icons.fiber_manual_record_rounded;
+                      text = isPanning
+                          ? 'Sweeping row • Keep steady'
+                          : 'Sweep across row from left to right';
+                      color = const Color(0xFF57F287);
+                    } else {
+                      icon = Icons.straighten_rounded;
+                      text = 'Phone level • Sweep across classroom rows';
+                      color = AppTheme.discordLightPurple;
+                    }
+
+                    return GlassCard(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      borderRadius: 20,
+                      borderColor: color.withValues(alpha: 0.4),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(icon, size: 14, color: color),
+                          const SizedBox(width: 8),
+                          Text(
+                            text,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 0.2,
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: 8),
-                      Text(
-                        _isRecording
-                            ? 'Align desk rows along guide • Pan smoothly'
-                            : 'Align desk rows along horizontal line • Tap record to sweep',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 0.2,
-                        ),
-                      ),
-                    ],
-                  ),
+                    );
+                  },
                 ),
               ),
             ),
@@ -521,16 +637,26 @@ class _CaptureScreenState extends State<CaptureScreen>
 }
 
 /// Custom painter for the classroom sweep viewfinder, horizontal row alignment guide,
-/// sweep direction arrows, and animated scanning line.
+/// sweep direction arrows, and animated scanning line driven by device gyroscope and accelerometer.
 class ClassroomSweepGuidelinePainter extends CustomPainter {
-  final double animationValue;
+  final double panPosition; // 0.0 to 1.0 driven by gyroscope
+  final double rollAngle; // radians (device roll tilt)
+  final double pitchOffset; // pixels (elevation up/down)
+  final double panVelocity; // rad/s (instantaneous yaw rate)
+  final double animShimmer; // 0.0 to 1.0 (subtle breathing animation)
   final bool isRecording;
   final bool isMovingTooFast;
+  final bool isLevel;
 
   ClassroomSweepGuidelinePainter({
-    required this.animationValue,
+    required this.panPosition,
+    required this.rollAngle,
+    required this.pitchOffset,
+    required this.panVelocity,
+    required this.animShimmer,
     required this.isRecording,
     required this.isMovingTooFast,
+    required this.isLevel,
   });
 
   @override
@@ -541,6 +667,7 @@ class ClassroomSweepGuidelinePainter extends CustomPainter {
     final top = (size.height - frameHeight) / 2 - 30;
     final right = left + frameWidth;
     final bottom = top + frameHeight;
+    final center = Offset(size.width / 2, top + frameHeight / 2);
 
     final primaryColor = isMovingTooFast
         ? AppTheme.discordRed
@@ -589,43 +716,73 @@ class ClassroomSweepGuidelinePainter extends CustomPainter {
       ..lineTo(right, bottom - bracketLen);
     canvas.drawPath(brPath, bracketPaint);
 
-    // 2. Horizontal Center Horizon Guide (for leveling student desk rows)
-    final centerY = top + frameHeight / 2;
+    // 2. Gyroscope-Driven Leveled Horizon Guideline
+    // Rotates with device roll & moves with pitch offset
+    final centerY = center.dy + pitchOffset;
+    canvas.save();
+    canvas.translate(center.dx, centerY);
+    // Rotate counter to roll to show real-world level alignment
+    canvas.rotate(-rollAngle);
+
+    final horizonColor = isLevel
+        ? const Color(0xFF57F287).withValues(alpha: 0.9)
+        : Colors.white.withValues(alpha: 0.4);
+
     final horizonPaint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.35)
-      ..strokeWidth = 1.2
+      ..color = horizonColor
+      ..strokeWidth = isLevel ? 1.8 : 1.2
       ..style = PaintingStyle.stroke;
 
     const dashWidth = 8.0;
     const dashSpace = 6.0;
-    double currentX = left + 16;
-    final maxX = right - 16;
-    while (currentX < maxX) {
-      final endX = min(currentX + dashWidth, maxX);
-      final centerDist = (currentX - size.width / 2).abs();
-      if (centerDist > 30) {
-        canvas.drawLine(Offset(currentX, centerY), Offset(endX, centerY), horizonPaint);
+    final halfW = frameWidth / 2 - 16;
+    double curX = -halfW;
+    while (curX < halfW) {
+      final endX = min(curX + dashWidth, halfW);
+      if (curX.abs() > 32) {
+        canvas.drawLine(Offset(curX, 0), Offset(endX, 0), horizonPaint);
       }
-      currentX += dashWidth + dashSpace;
+      curX += dashWidth + dashSpace;
     }
 
-    // 3. Center Level Crosshair Target
+    // Level indicator dots at ends of horizon line
+    if (isLevel) {
+      final dotPaint = Paint()
+        ..color = const Color(0xFF57F287)
+        ..style = PaintingStyle.fill;
+      canvas.drawCircle(Offset(-halfW + 6, 0), 3.5, dotPaint);
+      canvas.drawCircle(Offset(halfW - 6, 0), 3.5, dotPaint);
+    }
+
+    // Center Crosshair Target
+    final crosshairColor = isLevel ? const Color(0xFF57F287) : accentColor.withValues(alpha: 0.75);
     final crosshairPaint = Paint()
-      ..color = accentColor.withValues(alpha: 0.75)
+      ..color = crosshairColor
       ..strokeWidth = 1.8
       ..style = PaintingStyle.stroke;
 
-    final centerX = size.width / 2;
-    canvas.drawCircle(Offset(centerX, centerY), 6.0, crosshairPaint);
-    canvas.drawLine(Offset(centerX - 16, centerY), Offset(centerX - 8, centerY), crosshairPaint);
-    canvas.drawLine(Offset(centerX + 8, centerY), Offset(centerX + 16, centerY), crosshairPaint);
-    canvas.drawLine(Offset(centerX, centerY - 16), Offset(centerX, centerY - 8), crosshairPaint);
-    canvas.drawLine(Offset(centerX, centerY + 8), Offset(centerX, centerY + 16), crosshairPaint);
+    canvas.drawCircle(Offset.zero, 6.0, crosshairPaint);
+    canvas.drawLine(const Offset(-16, 0), const Offset(-8, 0), crosshairPaint);
+    canvas.drawLine(const Offset(8, 0), const Offset(16, 0), crosshairPaint);
+    canvas.drawLine(const Offset(0, -16), const Offset(0, -8), crosshairPaint);
+    canvas.drawLine(const Offset(0, 8), const Offset(0, 16), crosshairPaint);
 
-    // 4. Directional Sweep Chevrons
-    final chevronPaint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.5)
-      ..strokeWidth = 2.0
+    if (isLevel) {
+      final centerDotPaint = Paint()
+        ..color = const Color(0xFF57F287)
+        ..style = PaintingStyle.fill;
+      canvas.drawCircle(Offset.zero, 2.2, centerDotPaint);
+    }
+
+    canvas.restore();
+
+    // 3. Directional Sweep Chevrons (< and >)
+    final isPanningLeft = panVelocity < -0.15;
+    final isPanningRight = panVelocity > 0.15;
+
+    final leftChevronPaint = Paint()
+      ..color = isPanningLeft ? accentColor : Colors.white.withValues(alpha: 0.4)
+      ..strokeWidth = isPanningLeft ? 2.8 : 1.8
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round;
@@ -635,51 +792,94 @@ class ClassroomSweepGuidelinePainter extends CustomPainter {
       ..moveTo(leftChevronX + 6, centerY - 8)
       ..lineTo(leftChevronX, centerY)
       ..lineTo(leftChevronX + 6, centerY + 8);
-    canvas.drawPath(lPath, chevronPaint);
+    canvas.drawPath(lPath, leftChevronPaint);
+
+    final rightChevronPaint = Paint()
+      ..color = isPanningRight ? accentColor : Colors.white.withValues(alpha: 0.4)
+      ..strokeWidth = isPanningRight ? 2.8 : 1.8
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
 
     final rightChevronX = right - 18.0;
     final rPath = Path()
       ..moveTo(rightChevronX - 6, centerY - 8)
       ..lineTo(rightChevronX, centerY)
       ..lineTo(rightChevronX - 6, centerY + 8);
-    canvas.drawPath(rPath, chevronPaint);
+    canvas.drawPath(rPath, rightChevronPaint);
 
-    // 5. Smooth Animated Horizontal Scanning Sweep Line
-    final scanX = left + (right - left) * animationValue;
+    // 4. Gyroscope-Driven Vertical Sweep Scanning Beam
+    // Physical position across the screen corresponds directly to yaw rotation
+    final scanX = left + frameWidth * panPosition;
+
     final beamPaint = Paint()
       ..shader = LinearGradient(
         begin: Alignment.topCenter,
         end: Alignment.bottomCenter,
         colors: [
           Colors.transparent,
-          accentColor.withValues(alpha: 0.4),
-          accentColor.withValues(alpha: 0.8),
-          accentColor.withValues(alpha: 0.4),
+          accentColor.withValues(alpha: 0.35),
+          accentColor.withValues(alpha: 0.9),
+          accentColor.withValues(alpha: 0.35),
           Colors.transparent,
         ],
         stops: const [0.0, 0.25, 0.5, 0.75, 1.0],
-      ).createShader(Rect.fromLTRB(scanX - 1, top, scanX + 1, bottom))
-      ..strokeWidth = 2.0;
+      ).createShader(Rect.fromLTRB(scanX - 1.5, top, scanX + 1.5, bottom))
+      ..strokeWidth = 2.4;
 
-    canvas.drawLine(Offset(scanX, top + 4), Offset(scanX, bottom - 4), beamPaint);
+    canvas.drawLine(Offset(scanX, top + 6), Offset(scanX, bottom - 6), beamPaint);
 
+    // Motion trail glow in the direction of panning
+    final trailOffset = (panVelocity * 16.0).clamp(-24.0, 24.0);
+    final glowRect = Rect.fromLTRB(
+      min(scanX, scanX - trailOffset) - 16,
+      top + 10,
+      max(scanX, scanX - trailOffset) + 16,
+      bottom - 10,
+    );
     final glowPaint = Paint()
       ..shader = RadialGradient(
         center: Alignment.center,
-        radius: 0.5,
+        radius: 0.6,
         colors: [
-          accentColor.withValues(alpha: 0.16),
+          accentColor.withValues(alpha: 0.22),
           Colors.transparent,
         ],
-      ).createShader(Rect.fromCenter(center: Offset(scanX, centerY), width: 60, height: frameHeight))
+      ).createShader(glowRect)
       ..style = PaintingStyle.fill;
-    canvas.drawRect(Rect.fromLTRB(scanX - 20, top, scanX + 20, bottom), glowPaint);
+    canvas.drawRect(glowRect, glowPaint);
+
+    // Triangular indicator nibs at top and bottom of the scanning beam
+    final nibPaint = Paint()
+      ..color = accentColor
+      ..style = PaintingStyle.fill;
+
+    // Top nib (pointing downward)
+    final topNib = Path()
+      ..moveTo(scanX - 5, top)
+      ..lineTo(scanX + 5, top)
+      ..lineTo(scanX, top + 7)
+      ..close();
+    canvas.drawPath(topNib, nibPaint);
+
+    // Bottom nib (pointing upward)
+    final bottomNib = Path()
+      ..moveTo(scanX - 5, bottom)
+      ..lineTo(scanX + 5, bottom)
+      ..lineTo(scanX, bottom - 7)
+      ..close();
+    canvas.drawPath(bottomNib, nibPaint);
   }
 
   @override
   bool shouldRepaint(covariant ClassroomSweepGuidelinePainter oldDelegate) {
-    return oldDelegate.animationValue != animationValue ||
+    return oldDelegate.panPosition != panPosition ||
+        oldDelegate.rollAngle != rollAngle ||
+        oldDelegate.pitchOffset != pitchOffset ||
+        oldDelegate.panVelocity != panVelocity ||
+        oldDelegate.animShimmer != animShimmer ||
         oldDelegate.isRecording != isRecording ||
-        oldDelegate.isMovingTooFast != isMovingTooFast;
+        oldDelegate.isMovingTooFast != isMovingTooFast ||
+        oldDelegate.isLevel != isLevel;
   }
 }
