@@ -13,6 +13,7 @@ import '../modules/pose_estimation/face_pose.dart';
 import '../native/classroom_engine.dart';
 import '../theme/app_theme.dart';
 import '../widgets/glass_card.dart';
+import '../widgets/ambient_background.dart';
 
 /// Enrollment screen — adds a student to the local roster from a captured
 /// photo. MVP simplification: one reference photo per student, taken here
@@ -1091,8 +1092,12 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      extendBodyBehindAppBar: true,
       appBar: AppBar(
         titleSpacing: 0,
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        scrolledUnderElevation: 0,
         title: const Text(
           'Enroll Student',
           style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
@@ -1157,10 +1162,12 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
           ),
         ],
       ),
-      body: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          child: Builder(
+      body: AmbientBackground(
+        child: SafeArea(
+          child: SingleChildScrollView(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Builder(
             builder: (context) {
               final isDark = Theme.of(context).brightness == Brightness.dark;
               return Column(
@@ -1517,7 +1524,9 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
           ),
         ),
       ),
-    );
+    ),
+  ),
+);
   }
 
   /// Scales the camera preview to fill any container with BoxFit.cover

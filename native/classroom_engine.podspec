@@ -35,7 +35,7 @@ Pod::Spec.new do |s|
   s.pod_target_xcconfig = {
     'CLANG_CXX_LANGUAGE_STANDARD' => 'c++17',
     'CLANG_CXX_LIBRARY' => 'libc++',
-    'HEADER_SEARCH_PATHS' => '"$(PODS_TARGET_SRCROOT)/include" "$(PODS_ROOT)/onnxruntime-c/Headers"',
+    'HEADER_SEARCH_PATHS' => '"$(PODS_TARGET_SRCROOT)/include" "$(PODS_ROOT)/onnxruntime-c/Headers" "$(PODS_TARGET_SRCROOT)/third_party/opencv2.framework/Headers"',
     'FRAMEWORK_SEARCH_PATHS' => '"$(PODS_TARGET_SRCROOT)/third_party"',
     # Keep the extern "C" API's symbols exported even though nothing
     # Objective-C/Swift-side calls them — Dart FFI is the only caller,

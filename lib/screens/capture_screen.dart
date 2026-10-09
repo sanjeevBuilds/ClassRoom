@@ -19,9 +19,11 @@ class CaptureScreen extends StatefulWidget {
   State<CaptureScreen> createState() => _CaptureScreenState();
 }
 
-class _CaptureScreenState extends State<CaptureScreen> {
+class _CaptureScreenState extends State<CaptureScreen>
+    with SingleTickerProviderStateMixin {
   CameraController? _controller;
   StreamSubscription? _gyroSubscription;
+  late AnimationController _guideAnimController;
   bool _isMovingTooFast = false;
   bool _isRecording = false;
   bool _isTorchOn = false;
@@ -30,6 +32,10 @@ class _CaptureScreenState extends State<CaptureScreen> {
   @override
   void initState() {
     super.initState();
+    _guideAnimController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2600),
+    )..repeat(reverse: true);
     _initCamera();
     _initSensors();
   }
@@ -87,6 +93,7 @@ class _CaptureScreenState extends State<CaptureScreen> {
 
   @override
   void dispose() {
+    _guideAnimController.dispose();
     _gyroSubscription?.cancel();
     _controller?.dispose();
     super.dispose();
@@ -196,6 +203,69 @@ class _CaptureScreenState extends State<CaptureScreen> {
         children: [
           // Fullscreen Distortion-Free Camera Preview
           _buildFullscreenCameraPreview(context, _controller!),
+
+          // Sweep Reticle & Guidelines Overlay
+          Positioned.fill(
+            child: IgnorePointer(
+              child: AnimatedBuilder(
+                animation: _guideAnimController,
+                builder: (context, _) {
+                  return CustomPaint(
+                    painter: ClassroomSweepGuidelinePainter(
+                      animationValue: _guideAnimController.value,
+                      isRecording: _isRecording,
+                      isMovingTooFast: _isMovingTooFast,
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+
+          // Guideline Instruction HUD Pill
+          Positioned(
+            left: 0,
+            right: 0,
+            top: (MediaQuery.of(context).size.height * 0.72) - 15,
+            child: Center(
+              child: IgnorePointer(
+                child: GlassCard(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  borderRadius: 20,
+                  borderColor: (_isRecording
+                          ? const Color(0xFF57F287)
+                          : AppTheme.discordPurple)
+                      .withValues(alpha: 0.4),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        _isRecording
+                            ? Icons.fiber_manual_record_rounded
+                            : Icons.straighten_rounded,
+                        size: 14,
+                        color: _isRecording
+                            ? const Color(0xFF57F287)
+                            : AppTheme.discordLightPurple,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        _isRecording
+                            ? 'Align desk rows along guide • Pan smoothly'
+                            : 'Align desk rows along horizontal line • Tap record to sweep',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.2,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
 
           // Sweep Guidance Overlay
           if (_isMovingTooFast && _isRecording)
@@ -447,5 +517,169 @@ class _CaptureScreenState extends State<CaptureScreen> {
         ],
       ),
     );
+  }
+}
+
+/// Custom painter for the classroom sweep viewfinder, horizontal row alignment guide,
+/// sweep direction arrows, and animated scanning line.
+class ClassroomSweepGuidelinePainter extends CustomPainter {
+  final double animationValue;
+  final bool isRecording;
+  final bool isMovingTooFast;
+
+  ClassroomSweepGuidelinePainter({
+    required this.animationValue,
+    required this.isRecording,
+    required this.isMovingTooFast,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final frameWidth = size.width * 0.88;
+    final frameHeight = size.height * 0.44;
+    final left = (size.width - frameWidth) / 2;
+    final top = (size.height - frameHeight) / 2 - 30;
+    final right = left + frameWidth;
+    final bottom = top + frameHeight;
+
+    final primaryColor = isMovingTooFast
+        ? AppTheme.discordRed
+        : (isRecording ? const Color(0xFF57F287) : AppTheme.discordPurple);
+    final accentColor = primaryColor.withValues(alpha: 0.85);
+
+    // 1. Corner Brackets (length 28, stroke 3, rounded joins)
+    final bracketPaint = Paint()
+      ..color = accentColor
+      ..strokeWidth = 3.0
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+
+    const bracketLen = 28.0;
+    const r = 8.0;
+
+    // Top-Left
+    final tlPath = Path()
+      ..moveTo(left, top + bracketLen)
+      ..lineTo(left, top + r)
+      ..quadraticBezierTo(left, top, left + r, top)
+      ..lineTo(left + bracketLen, top);
+    canvas.drawPath(tlPath, bracketPaint);
+
+    // Top-Right
+    final trPath = Path()
+      ..moveTo(right - bracketLen, top)
+      ..lineTo(right - r, top)
+      ..quadraticBezierTo(right, top, right, top + r)
+      ..lineTo(right, top + bracketLen);
+    canvas.drawPath(trPath, bracketPaint);
+
+    // Bottom-Left
+    final blPath = Path()
+      ..moveTo(left, bottom - bracketLen)
+      ..lineTo(left, bottom - r)
+      ..quadraticBezierTo(left, bottom, left + r, bottom)
+      ..lineTo(left + bracketLen, bottom);
+    canvas.drawPath(blPath, bracketPaint);
+
+    // Bottom-Right
+    final brPath = Path()
+      ..moveTo(right - bracketLen, bottom)
+      ..lineTo(right - r, bottom)
+      ..quadraticBezierTo(right, bottom, right, bottom - r)
+      ..lineTo(right, bottom - bracketLen);
+    canvas.drawPath(brPath, bracketPaint);
+
+    // 2. Horizontal Center Horizon Guide (for leveling student desk rows)
+    final centerY = top + frameHeight / 2;
+    final horizonPaint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.35)
+      ..strokeWidth = 1.2
+      ..style = PaintingStyle.stroke;
+
+    const dashWidth = 8.0;
+    const dashSpace = 6.0;
+    double currentX = left + 16;
+    final maxX = right - 16;
+    while (currentX < maxX) {
+      final endX = min(currentX + dashWidth, maxX);
+      final centerDist = (currentX - size.width / 2).abs();
+      if (centerDist > 30) {
+        canvas.drawLine(Offset(currentX, centerY), Offset(endX, centerY), horizonPaint);
+      }
+      currentX += dashWidth + dashSpace;
+    }
+
+    // 3. Center Level Crosshair Target
+    final crosshairPaint = Paint()
+      ..color = accentColor.withValues(alpha: 0.75)
+      ..strokeWidth = 1.8
+      ..style = PaintingStyle.stroke;
+
+    final centerX = size.width / 2;
+    canvas.drawCircle(Offset(centerX, centerY), 6.0, crosshairPaint);
+    canvas.drawLine(Offset(centerX - 16, centerY), Offset(centerX - 8, centerY), crosshairPaint);
+    canvas.drawLine(Offset(centerX + 8, centerY), Offset(centerX + 16, centerY), crosshairPaint);
+    canvas.drawLine(Offset(centerX, centerY - 16), Offset(centerX, centerY - 8), crosshairPaint);
+    canvas.drawLine(Offset(centerX, centerY + 8), Offset(centerX, centerY + 16), crosshairPaint);
+
+    // 4. Directional Sweep Chevrons
+    final chevronPaint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.5)
+      ..strokeWidth = 2.0
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+
+    final leftChevronX = left + 18.0;
+    final lPath = Path()
+      ..moveTo(leftChevronX + 6, centerY - 8)
+      ..lineTo(leftChevronX, centerY)
+      ..lineTo(leftChevronX + 6, centerY + 8);
+    canvas.drawPath(lPath, chevronPaint);
+
+    final rightChevronX = right - 18.0;
+    final rPath = Path()
+      ..moveTo(rightChevronX - 6, centerY - 8)
+      ..lineTo(rightChevronX, centerY)
+      ..lineTo(rightChevronX - 6, centerY + 8);
+    canvas.drawPath(rPath, chevronPaint);
+
+    // 5. Smooth Animated Horizontal Scanning Sweep Line
+    final scanX = left + (right - left) * animationValue;
+    final beamPaint = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [
+          Colors.transparent,
+          accentColor.withValues(alpha: 0.4),
+          accentColor.withValues(alpha: 0.8),
+          accentColor.withValues(alpha: 0.4),
+          Colors.transparent,
+        ],
+        stops: const [0.0, 0.25, 0.5, 0.75, 1.0],
+      ).createShader(Rect.fromLTRB(scanX - 1, top, scanX + 1, bottom))
+      ..strokeWidth = 2.0;
+
+    canvas.drawLine(Offset(scanX, top + 4), Offset(scanX, bottom - 4), beamPaint);
+
+    final glowPaint = Paint()
+      ..shader = RadialGradient(
+        center: Alignment.center,
+        radius: 0.5,
+        colors: [
+          accentColor.withValues(alpha: 0.16),
+          Colors.transparent,
+        ],
+      ).createShader(Rect.fromCenter(center: Offset(scanX, centerY), width: 60, height: frameHeight))
+      ..style = PaintingStyle.fill;
+    canvas.drawRect(Rect.fromLTRB(scanX - 20, top, scanX + 20, bottom), glowPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant ClassroomSweepGuidelinePainter oldDelegate) {
+    return oldDelegate.animationValue != animationValue ||
+        oldDelegate.isRecording != isRecording ||
+        oldDelegate.isMovingTooFast != isMovingTooFast;
   }
 }

@@ -5,6 +5,7 @@ import 'package:share_plus/share_plus.dart';
 import '../native/classroom_engine.dart';
 import '../theme/app_theme.dart';
 import '../widgets/glass_card.dart';
+import '../widgets/ambient_background.dart';
 import 'capture_screen.dart';
 import 'enrollment_screen.dart';
 import 'processing_screen.dart';
@@ -568,36 +569,9 @@ class _HomeScreenState extends State<HomeScreen> {
     final isDark = theme.brightness == Brightness.dark;
 
     return Scaffold(
-      body: Stack(
-        children: [
-          // Background ambient glowing orbs (Discord Purple)
-          Positioned(
-            top: -100,
-            left: -50,
-            child: Container(
-              width: 320,
-              height: 320,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: AppTheme.discordPurple.withOpacity(isDark ? 0.22 : 0.14),
-              ),
-            ).blurred(blur: 50),
-          ),
-          Positioned(
-            bottom: -60,
-            right: -60,
-            child: Container(
-              width: 280,
-              height: 280,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: AppTheme.discordLightPurple.withOpacity(isDark ? 0.20 : 0.12),
-              ),
-            ).blurred(blur: 50),
-          ),
-          
-          SafeArea(
-            child: SingleChildScrollView(
+      body: AmbientBackground(
+        child: SafeArea(
+          child: SingleChildScrollView(
               padding: const EdgeInsets.symmetric(horizontal: 22.0, vertical: 12.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1032,8 +1006,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
           ),
-        ],
-      ),
-    );
+        ),
+      );
   }
 }
