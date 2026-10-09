@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:camera/camera.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:sensors_plus/sensors_plus.dart';
@@ -61,10 +62,14 @@ class _CaptureScreenState extends State<CaptureScreen>
   double _smoothedRoll = 0.0;
   double _pitchOffset = 0.0;
   bool _isDeviceLevel = true;
+  double _lastAccelX = 0.0;
+  double _lastAccelY = -9.8;
+  double _lastAccelZ = 0.0;
 
   @override
   void initState() {
     super.initState();
+    SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
     _guideAnimController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 2600),
@@ -121,10 +126,16 @@ class _CaptureScreenState extends State<CaptureScreen>
       final dt = ((now - _lastGyroTime) / 1000000.0).clamp(0.001, 0.05);
       _lastGyroTime = now;
 
-      // In portrait orientation:
-      // event.y is rotational rate around vertical axis (yaw)
-      // Turning to the right (clockwise) produces negative event.y in iOS CoreMotion
-      final yawRate = -event.y;
+      // World-gravity projected yaw:
+      // Project angular velocity onto gravity normal vector so horizontal panning
+      // moves the guideline accurately in portrait, even when camera is angled downward at desks.
+      final gNorm = sqrt(_lastAccelX * _lastAccelX + _lastAccelY * _lastAccelY + _lastAccelZ * _lastAccelZ);
+      final double yawRate;
+      if (gNorm > 2.0) {
+        yawRate = -(_lastAccelX * event.x + _lastAccelY * event.y + _lastAccelZ * event.z) / gNorm;
+      } else {
+        yawRate = -event.y;
+      }
       _currentYawVelocity = yawRate;
 
       if (_isRecording) {
@@ -149,8 +160,19 @@ class _CaptureScreenState extends State<CaptureScreen>
     });
 
     _accelSubscription = accelerometerEventStream().listen((AccelerometerEvent event) {
+      _lastAccelX = event.x;
+      _lastAccelY = event.y;
+      _lastAccelZ = event.z;
+
       // 1. Roll angle (left/right tilt)
-      final rawRoll = atan2(event.x, -event.y);
+      // Only compute roll tilt when phone is held in portrait (downward gravity on Y axis)
+      // and strictly clamp to max ±9 degrees so guideline NEVER flips into landscape
+      final double rawRoll;
+      if (-event.y > 2.5) {
+        rawRoll = atan2(event.x, -event.y).clamp(-0.16, 0.16);
+      } else {
+        rawRoll = 0.0;
+      }
       _smoothedRoll += (rawRoll - _smoothedRoll) * 0.28;
       final isLevel = _smoothedRoll.abs() < 0.035; // ~2 degrees
 
@@ -721,8 +743,9 @@ class ClassroomSweepGuidelinePainter extends CustomPainter {
     final centerY = center.dy + pitchOffset;
     canvas.save();
     canvas.translate(center.dx, centerY);
-    // Rotate counter to roll to show real-world level alignment
-    canvas.rotate(-rollAngle);
+    // Tightly clamped tilt (max ±9 degrees) so line NEVER rotates sideways into landscape
+    final visualTilt = rollAngle.clamp(-0.16, 0.16);
+    canvas.rotate(-visualTilt);
 
     final horizonColor = isLevel
         ? const Color(0xFF57F287).withValues(alpha: 0.9)
