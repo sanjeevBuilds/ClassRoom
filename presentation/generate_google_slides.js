@@ -486,8 +486,12 @@ function generateClassRoomPresentation() {
     // Header Badge & Presenter
     var badgeBox = slide.insertShape(SlidesApp.ShapeType.RECTANGLE, 40, 20, 640, 24);
     badgeBox.getFill().setSolidFill(CARD_BG);
-    badgeBox.getBorder().getLineFill().setSolidFill(CARD_BORDER);
-    badgeBox.getBorder().setWeight(1);
+    try {
+      badgeBox.getBorder().getLineFill().setSolidFill(CARD_BORDER);
+      badgeBox.getBorder().setWeight(1);
+    } catch (e) {
+      // Border fallback
+    }
     var badgeText = badgeBox.getText();
     badgeText.setText(data.badge + "  |  PRESENTER: " + data.speaker.toUpperCase());
     badgeText.getTextStyle().setFontFamily("Consolas").setFontSize(9).setForegroundColor(ACCENT_INDIGO).setBold(true);
@@ -513,11 +517,20 @@ function generateClassRoomPresentation() {
       var cardInfo = data.cards[c];
       var cardX = startX + c * (cardWidth + gapX);
       
-      // Card Container
-      var cardShape = slide.insertShape(SlidesApp.ShapeType.ROUNDED_RECTANGLE, cardX, startY, cardWidth, cardHeight);
+      // Card Container (ROUND_RECTANGLE with safe fallback)
+      var cardShape;
+      try {
+        cardShape = slide.insertShape(SlidesApp.ShapeType.ROUND_RECTANGLE, cardX, startY, cardWidth, cardHeight);
+      } catch (e) {
+        cardShape = slide.insertShape(SlidesApp.ShapeType.RECTANGLE, cardX, startY, cardWidth, cardHeight);
+      }
       cardShape.getFill().setSolidFill(CARD_BG);
-      cardShape.getBorder().getLineFill().setSolidFill(CARD_BORDER);
-      cardShape.getBorder().setWeight(1);
+      try {
+        cardShape.getBorder().getLineFill().setSolidFill(CARD_BORDER);
+        cardShape.getBorder().setWeight(1);
+      } catch (err) {
+        // Border fallback
+      }
 
       // Card Title
       var cTitleBox = slide.insertTextBox(cardInfo.title, cardX + 10, startY + 10, cardWidth - 20, 32);
