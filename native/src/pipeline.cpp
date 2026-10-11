@@ -71,6 +71,29 @@ const Detection* LargestFace(const std::vector<Detection>& detections) {
   return &(*it);
 }
 
+// Computes Intersection over Union (IoU) between two bounding boxes [x1, y1, x2, y2].
+// Used for deduplicating detections across full-frame and SAHI horizon zoom passes.
+double ComputeIoU(const std::array<double, 4>& a, const std::array<double, 4>& b) {
+  const double inter_x1 = std::max(a[0], b[0]);
+  const double inter_y1 = std::max(a[1], b[1]);
+  const double inter_x2 = std::min(a[2], b[2]);
+  const double inter_y2 = std::min(a[3], b[3]);
+
+  if (inter_x2 <= inter_x1 || inter_y2 <= inter_y1) {
+    return 0.0;
+  }
+
+  const double inter_area = (inter_x2 - inter_x1) * (inter_y2 - inter_y1);
+  const double area_a = (a[2] - a[0]) * (a[3] - a[1]);
+  const double area_b = (b[2] - b[0]) * (b[3] - b[1]);
+  const double union_area = area_a + area_b - inter_area;
+
+  if (union_area <= 0.0) {
+    return 0.0;
+  }
+  return inter_area / union_area;
+}
+
 // Frees the previous PipelineConfig-derived model sessions each call would
 // otherwise reload — loading YuNet+ArcFace fresh per call is wasteful but
 // correctness-first for now; caching sessions across calls is a real
@@ -80,7 +103,7 @@ const Detection* LargestFace(const std::vector<Detection>& detections) {
 }  // namespace
 
 std::vector<AttendanceResult> ProcessSweepVideo(const std::string& video_path,
-                                                  const PipelineConfig& config) {
+                                                const PipelineConfig& config) {
   FrameSampler sampler(config.target_fps);
   auto frames = sampler.SampleFrames(video_path);
   const size_t n_sampled = frames.size();
@@ -89,24 +112,153 @@ std::vector<AttendanceResult> ProcessSweepVideo(const std::string& video_path,
   auto sharp_frames = blur_filter.FilterBlurryFrames(std::move(frames));
   const size_t n_sharp = sharp_frames.size();
 
+  // Full-frame YuNet detector: calibrated threshold 0.40
   YuNetDetector detector;
-  detector.Init(config.yunet_model_path, 0.45, 0.3);
+  detector.Init(config.yunet_model_path, 0.40, 0.3);
+
+  // SAHI Horizon YuNet detector: tuned sensitivity (0.35) for small distant rear-row faces (6-8m)
+  YuNetDetector horizon_detector;
+  horizon_detector.Init(config.yunet_model_path, 0.35, 0.3);
 
   ArcFaceEmbedder embedder;
   embedder.Init(config.arcface_model_path);
 
   size_t total_detections = 0;
+  size_t total_horizon_detections = 0;
   std::vector<Embedding> embeddings;
+
   for (const auto& f : sharp_frames) {
+    if (f.frame.empty() || f.frame_lowres.empty()) {
+      continue;
+    }
+
+    std::vector<Detection> frame_detections;
+
+    // 1. Full-frame sweep (detects foreground & middle rows 1-5, down to 14px)
     const double scale_x =
         static_cast<double>(f.frame.cols) / f.frame_lowres.cols;
     const double scale_y =
         static_cast<double>(f.frame.rows) / f.frame_lowres.rows;
-    auto detections = detector.Detect(f.frame_lowres, f.frame_id,
-                                       f.timestamp_sec, scale_x, scale_y);
-    total_detections += detections.size();
-    for (const auto& d : detections) {
-      embeddings.push_back(embedder.ExtractEmbedding(f.frame, d));
+    auto full_dets = detector.Detect(f.frame_lowres, f.frame_id,
+                                     f.timestamp_sec, scale_x, scale_y);
+
+    for (auto& d : full_dets) {
+      const double bw = d.bbox[2] - d.bbox[0];
+      const double bh = d.bbox[3] - d.bbox[1];
+      // Filter out degenerate artifacts smaller than 14px in original frame coordinates
+      if (bw >= 14.0 && bh >= 14.0) {
+        d.det_index = static_cast<int>(frame_detections.size());
+        frame_detections.push_back(d);
+        embeddings.push_back(embedder.ExtractEmbedding(f.frame, d));
+        total_detections++;
+      }
+    }
+
+    // 2. SAHI Horizon Zoom pass (2x magnification for rear rows 6-12 at 6-8 meters)
+    // In typical classroom seating, rear rows appear in the upper 10% to 65% vertical window.
+    const int horizon_y = std::max(0, static_cast<int>(f.frame.rows * 0.10));
+    const int horizon_h = std::min(static_cast<int>(f.frame.rows * 0.55),
+                                   f.frame.rows - horizon_y);
+
+    if (horizon_h > 50 && f.frame.cols > 50) {
+      std::vector<cv::Rect> horizon_crops;
+
+      if (f.frame.cols > f.frame.rows && f.frame.cols >= 960) {
+        // High-resolution landscape sweep: 3 overlapping tiles (Left, Center, Right)
+        // Each tile covers ~40% width with ~10% horizontal overlap, yielding ~2.5x optical zoom
+        const int tile_w = static_cast<int>(f.frame.cols * 0.40);
+        const int left_x = 0;
+        const int mid_x = static_cast<int>(f.frame.cols * 0.30);
+        const int right_x = f.frame.cols - tile_w;
+
+        horizon_crops.push_back(cv::Rect(left_x, horizon_y, tile_w, horizon_h));
+        horizon_crops.push_back(cv::Rect(mid_x, horizon_y, tile_w, horizon_h));
+        horizon_crops.push_back(cv::Rect(right_x, horizon_y, tile_w, horizon_h));
+      } else if (f.frame.cols >= f.frame.rows) {
+        // Standard landscape sweep: 2 overlapping tiles (Left, Right)
+        const int tile_w = static_cast<int>(f.frame.cols * 0.58);
+        const int right_x = f.frame.cols - tile_w;
+
+        horizon_crops.push_back(cv::Rect(0, horizon_y, tile_w, horizon_h));
+        horizon_crops.push_back(cv::Rect(right_x, horizon_y, tile_w, horizon_h));
+      } else {
+        // Portrait sweep: single upper horizon crop
+        horizon_crops.push_back(cv::Rect(0, horizon_y, f.frame.cols, horizon_h));
+      }
+
+      for (const auto& crop : horizon_crops) {
+        const int cx = std::clamp(crop.x, 0, f.frame.cols - 1);
+        const int cy = std::clamp(crop.y, 0, f.frame.rows - 1);
+        const int cw = std::clamp(crop.width, 1, f.frame.cols - cx);
+        const int ch = std::clamp(crop.height, 1, f.frame.rows - cy);
+        if (cw <= 50 || ch <= 50) continue;
+
+        const cv::Rect safe_crop(cx, cy, cw, ch);
+        cv::Mat sub_mat = f.frame(safe_crop);
+
+        // Scale crop to 640 standard detection resolution
+        const int max_dim = 640;
+        int low_w, low_h;
+        if (cw >= ch) {
+          low_w = max_dim;
+          low_h = std::max(1, static_cast<int>(std::lround(
+                                  ch * (static_cast<double>(max_dim) / cw))));
+        } else {
+          low_h = max_dim;
+          low_w = std::max(1, static_cast<int>(std::lround(
+                                  cw * (static_cast<double>(max_dim) / ch))));
+        }
+
+        cv::Mat crop_lowres;
+        cv::resize(sub_mat, crop_lowres, cv::Size(low_w, low_h));
+
+        const double c_scale_x = static_cast<double>(cw) / low_w;
+        const double c_scale_y = static_cast<double>(ch) / low_h;
+
+        auto crop_dets = horizon_detector.Detect(crop_lowres, f.frame_id,
+                                                 f.timestamp_sec, c_scale_x, c_scale_y);
+
+        for (auto& hd : crop_dets) {
+          // Remap coordinates back to the full high-res frame
+          hd.bbox[0] += cx;
+          hd.bbox[1] += cy;
+          hd.bbox[2] += cx;
+          hd.bbox[3] += cy;
+
+          for (auto& lm : hd.landmarks) {
+            lm[0] += cx;
+            lm[1] += cy;
+          }
+
+          // Boundary clamp
+          hd.bbox[0] = std::clamp(hd.bbox[0], 0.0, static_cast<double>(f.frame.cols - 1));
+          hd.bbox[1] = std::clamp(hd.bbox[1], 0.0, static_cast<double>(f.frame.rows - 1));
+          hd.bbox[2] = std::clamp(hd.bbox[2], hd.bbox[0] + 1.0, static_cast<double>(f.frame.cols));
+          hd.bbox[3] = std::clamp(hd.bbox[3], hd.bbox[1] + 1.0, static_cast<double>(f.frame.rows));
+
+          // Filter out noise < 14px in original frame
+          const double bw = hd.bbox[2] - hd.bbox[0];
+          const double bh = hd.bbox[3] - hd.bbox[1];
+          if (bw < 14.0 || bh < 14.0) continue;
+
+          // Deduplicate against already detected faces in this frame (IoU >= 0.35)
+          bool is_dup = false;
+          for (const auto& existing : frame_detections) {
+            if (ComputeIoU(hd.bbox, existing.bbox) >= 0.35) {
+              is_dup = true;
+              break;
+            }
+          }
+
+          if (!is_dup) {
+            hd.det_index = static_cast<int>(frame_detections.size());
+            frame_detections.push_back(hd);
+            embeddings.push_back(embedder.ExtractEmbedding(f.frame, hd));
+            total_detections++;
+            total_horizon_detections++;
+          }
+        }
+      }
     }
   }
 
@@ -124,13 +276,14 @@ std::vector<AttendanceResult> ProcessSweepVideo(const std::string& video_path,
   // Stash pipeline diagnostics in a synthetic "debug" result at the end
   // so we can see where the pipeline drops data without changing the
   // JSON schema (the Dart side just ignores unknown statuses).
-  // Format: "debug:sampled=N,sharp=N,dets=N,embeds=N,clusters=N,roster=N"
+  // Format: "debug:sampled=N,sharp=N,dets=N,horizon_dets=N,embeds=N,clusters=N,roster=N"
   AttendanceResult debug;
   debug.status = AttendanceStatus::kUnknownGuest;
   debug.student_id = "__pipeline_debug__";
   debug.name = "sampled=" + std::to_string(n_sampled) +
                ",sharp=" + std::to_string(n_sharp) +
                ",dets=" + std::to_string(total_detections) +
+               ",horizon_dets=" + std::to_string(total_horizon_detections) +
                ",embeds=" + std::to_string(embeddings.size()) +
                ",clusters=" + std::to_string(clusters.size()) +
                ",roster=" + std::to_string(roster.size()) +
