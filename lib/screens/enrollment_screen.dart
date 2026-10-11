@@ -1182,7 +1182,7 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
                                       mainAxisAlignment: MainAxisAlignment.center,
                                       children: [
                                         Icon(
-                                          Icons.camera_alt_rounded,
+                                          Icons.center_focus_strong_rounded,
                                           size: 15,
                                           color: !_isAutoEnrollMode
                                               ? Colors.white
@@ -1192,7 +1192,7 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
                                         ),
                                         const SizedBox(width: 5),
                                         Text(
-                                          'Normal (3 Poses)',
+                                          'Guided (3 Poses)',
                                           style: TextStyle(
                                             fontSize: 12,
                                             fontWeight: FontWeight.bold,
