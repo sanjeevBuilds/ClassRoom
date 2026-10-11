@@ -170,35 +170,46 @@ class _HomeScreenState extends State<HomeScreen> {
                   color: isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary,
                 ),
               ),
-              const SizedBox(height: 16),
-              if (classes.isEmpty)
-                Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Text(
-                    'No classes found',
-                    style: TextStyle(color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary),
+              ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.of(context).size.height * 0.35,
+                ),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (classes.isEmpty)
+                        Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Text(
+                            'No classes found',
+                            style: TextStyle(color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary),
+                          ),
+                        ),
+                      ...classes.map((c) => ListTile(
+                        title: Text(
+                          c,
+                          style: TextStyle(
+                            color: isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        trailing: selectedClass == c
+                            ? const Icon(Icons.check_circle_rounded, color: AppTheme.discordPurple)
+                            : null,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                        tileColor: selectedClass == c ? AppTheme.discordPurple.withOpacity(0.12) : Colors.transparent,
+                        onTap: () {
+                          Navigator.pop(context);
+                          setState(() => selectedClass = c);
+                          ClassroomEngine.instance.switchClass(selectedClass);
+                          _loadStudents();
+                        },
+                      )),
+                    ],
                   ),
                 ),
-              ...classes.map((c) => ListTile(
-                title: Text(
-                  c,
-                  style: TextStyle(
-                    color: isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                trailing: selectedClass == c
-                    ? const Icon(Icons.check_circle_rounded, color: AppTheme.discordPurple)
-                    : null,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                tileColor: selectedClass == c ? AppTheme.discordPurple.withOpacity(0.12) : Colors.transparent,
-                onTap: () {
-                  Navigator.pop(context);
-                  setState(() => selectedClass = c);
-                  ClassroomEngine.instance.switchClass(selectedClass);
-                  _loadStudents();
-                },
-              )),
+              ),
               const SizedBox(height: 20),
               FilledButton.icon(
                 onPressed: () {
@@ -572,7 +583,7 @@ class _HomeScreenState extends State<HomeScreen> {
       body: AmbientBackground(
         child: SafeArea(
           child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 22.0, vertical: 12.0),
+              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -581,7 +592,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     children: [
                       Expanded(
                         child: GlassCard(
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                           borderRadius: 20,
                           onTap: _showClassSelector,
                           child: Row(
@@ -591,7 +602,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 backgroundColor: AppTheme.discordPurple.withValues(alpha: 0.18),
                                 child: const Icon(Icons.class_rounded, size: 14, color: AppTheme.discordPurple),
                               ),
-                              const SizedBox(width: 10),
+                              const SizedBox(width: 8),
                               Expanded(
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -612,7 +623,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                       style: TextStyle(
-                                        fontSize: 15,
+                                        fontSize: 14,
                                         fontWeight: FontWeight.bold,
                                         color: isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary,
                                       ),
@@ -630,7 +641,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                         ),
                       ),
-                      const SizedBox(width: 10),
+                      const SizedBox(width: 8),
                       // Light / Dark Theme Switcher Button (Glass Card Pill)
                       GlassCard(
                         borderRadius: 18,
@@ -755,16 +766,16 @@ class _HomeScreenState extends State<HomeScreen> {
                   const SizedBox(height: 20),
 
                   // Actions Grid (Take Attendance & Enroll Students)
-                  SizedBox(
-                    height: 140,
+                  IntrinsicHeight(
                     child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         Expanded(
                           child: GlassCard(
                             hasGlow: true,
                             glowColor: AppTheme.discordPurple,
                             borderRadius: 22,
-                            padding: const EdgeInsets.all(12),
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 16),
                             onTap: _showAttendanceOptionsModal,
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
@@ -800,13 +811,13 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                           ),
                         ),
-                        const SizedBox(width: 14),
+                        const SizedBox(width: 12),
                         Expanded(
                           child: GlassCard(
                             hasGlow: true,
                             glowColor: AppTheme.discordDeepPurple,
                             borderRadius: 22,
-                            padding: const EdgeInsets.all(12),
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 16),
                             onTap: () async {
                               await Navigator.push(context, MaterialPageRoute(
                                 builder: (_) => EnrollmentScreen(engine: ClassroomEngine.instance),

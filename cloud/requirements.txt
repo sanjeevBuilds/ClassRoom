@@ -1,0 +1,17 @@
+# ClassRoom Cloud Inference & Heavyweight Model Benchmark Requirements
+# Requires Python 3.9+ and CUDA-enabled PyTorch for GPU acceleration
+
+torch>=2.0.0
+torchvision>=0.15.0
+ultralytics>=8.2.0
+insightface>=0.7.3
+onnxruntime-gpu>=1.16.0
+opencv-python>=4.8.0
+fastapi>=0.110.0
+uvicorn[standard]>=0.28.0
+python-multipart>=0.0.9
+pydantic>=2.0.0
+numpy>=1.23.0
+tqdm>=4.66.0
+matplotlib>=3.7.0
+scipy>=1.10.0
