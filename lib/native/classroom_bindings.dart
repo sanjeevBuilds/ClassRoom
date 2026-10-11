@@ -15,6 +15,8 @@ class ClassroomBindings {
         _ProcessSweepVideoDart>('ClassroomProcessSweepVideo');
     enrollStudentFromPhoto = _lib.lookupFunction<_EnrollNative, _EnrollDart>(
         'ClassroomEnrollStudentFromPhoto');
+    enrollStudentFromPhotos = _lib.lookupFunction<_EnrollNative, _EnrollDart>(
+        'ClassroomEnrollStudentFromPhotos');
     getLastError = _lib.lookupFunction<_GetLastErrorNative,
         _GetLastErrorDart>('ClassroomGetLastError');
     freeString =
@@ -23,6 +25,10 @@ class ClassroomBindings {
         _GetEnrolledDart>('ClassroomGetEnrolledStudents');
     deleteStudent = _lib.lookupFunction<_DeleteStudentNative,
         _DeleteStudentDart>('ClassroomDeleteStudent');
+    exportRoster = _lib.lookupFunction<_ExportRosterNative, _ExportRosterDart>(
+        'ClassroomExportRoster');
+    saveStudentEmbeddings = _lib.lookupFunction<_SaveEmbeddingsNative,
+        _SaveEmbeddingsDart>('ClassroomSaveStudentEmbeddings');
   }
 
   factory ClassroomBindings() => ClassroomBindings._(DynamicLibrary.process());
@@ -47,7 +53,26 @@ class ClassroomBindings {
       Pointer<Utf8> arcfaceModelPath,
       Pointer<Utf8> rosterDbPath) enrollStudentFromPhoto;
 
+  late final int Function(
+      Pointer<Utf8> photoPathsCsv,
+      Pointer<Utf8> studentId,
+      Pointer<Utf8> name,
+      Pointer<Utf8> yunetModelPath,
+      Pointer<Utf8> arcfaceModelPath,
+      Pointer<Utf8> rosterDbPath) enrollStudentFromPhotos;
+
   late final Pointer<Utf8> Function(Pointer<Utf8> rosterDbPath) getEnrolledStudents;
+
+  late final Pointer<Utf8> Function(
+      Pointer<Utf8> rosterDbPath, Pointer<Utf8> classId) exportRoster;
+
+  late final int Function(
+      Pointer<Utf8> studentId,
+      Pointer<Utf8> name,
+      Pointer<Float> embeddings,
+      int numEmbeddings,
+      int dim,
+      Pointer<Utf8> rosterDbPath) saveStudentEmbeddings;
 
   late final int Function(
       Pointer<Utf8> studentId, Pointer<Utf8> rosterDbPath) deleteStudent;
@@ -56,6 +81,26 @@ class ClassroomBindings {
 
   late final void Function(Pointer<Utf8>) freeString;
 }
+
+typedef _ExportRosterNative = Pointer<Utf8> Function(
+    Pointer<Utf8> rosterDbPath, Pointer<Utf8> classId);
+typedef _ExportRosterDart = Pointer<Utf8> Function(
+    Pointer<Utf8> rosterDbPath, Pointer<Utf8> classId);
+
+typedef _SaveEmbeddingsNative = Int32 Function(
+    Pointer<Utf8> studentId,
+    Pointer<Utf8> name,
+    Pointer<Float> embeddings,
+    Int32 numEmbeddings,
+    Int32 dim,
+    Pointer<Utf8> rosterDbPath);
+typedef _SaveEmbeddingsDart = int Function(
+    Pointer<Utf8> studentId,
+    Pointer<Utf8> name,
+    Pointer<Float> embeddings,
+    int numEmbeddings,
+    int dim,
+    Pointer<Utf8> rosterDbPath);
 
 typedef _ProcessSweepVideoNative = Pointer<Utf8> Function(
     Pointer<Utf8> videoPath,

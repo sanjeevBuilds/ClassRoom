@@ -23,9 +23,9 @@ struct PipelineConfig {
   std::string arcface_model_path;
   std::string roster_db_path;
   double target_fps = 4.0;
-  double tau_blur = 15.0;     // Calibrated for 640x360 downscaled classroom sweeps
+  double tau_blur = 100.0;
   double tau_cluster = 0.35;
-  double tau_match = 0.38;    // Calibrated for asymmetric classroom recognition
+  double tau_match = 0.45;
 };
 
 // Runs the full pipeline on a recorded sweep video and returns the
@@ -42,6 +42,14 @@ bool EnrollStudentFromPhoto(const std::string& photo_path,
                              const std::string& student_id,
                              const std::string& name,
                              const PipelineConfig& config);
+
+// Multi-angle 3D face enrollment: detects, aligns, and extracts 512-D embeddings
+// from multiple photos (e.g. Frontal, Left 15°, Right 15°) and saves all vectors
+// under the student's entry in SQLite. Returns number of faces successfully enrolled.
+int EnrollStudentFromPhotos(const std::vector<std::string>& photo_paths,
+                            const std::string& student_id,
+                            const std::string& name,
+                            const PipelineConfig& config);
 
 // Serializes attendance results to the same JSON shape the Dart app's
 // AttendanceResult.toJson() already produces, for a single, simple
@@ -82,9 +90,25 @@ CLASSROOM_EXPORT int ClassroomEnrollStudentFromPhoto(
     const char* yunet_model_path, const char* arcface_model_path,
     const char* roster_db_path);
 
+// Multi-angle photo enrollment: photo_paths is a null-terminated string of comma-separated or json file paths.
+CLASSROOM_EXPORT int ClassroomEnrollStudentFromPhotos(
+    const char* photo_paths_csv, const char* student_id, const char* name,
+    const char* yunet_model_path, const char* arcface_model_path,
+    const char* roster_db_path);
+
 // Returns a JSON list of enrolled students: [{"student_id":"...","name":"...","embeddings_count":1}]
 // Caller MUST call ClassroomFreeString() on the result.
 CLASSROOM_EXPORT const char* ClassroomGetEnrolledStudents(const char* roster_db_path);
+
+// Exports the entire classroom roster as a JSON package including all 512-D float vectors.
+// Caller MUST call ClassroomFreeString() on the result.
+CLASSROOM_EXPORT const char* ClassroomExportRoster(const char* roster_db_path, const char* class_id);
+
+// Inserts or replaces a student and their 512-D float reference embeddings in SQLite.
+// embeddings points to num_embeddings * dim contiguous floats.
+CLASSROOM_EXPORT int ClassroomSaveStudentEmbeddings(const char* student_id, const char* name,
+                                                    const float* embeddings, int num_embeddings,
+                                                    int dim, const char* roster_db_path);
 
 // Deletes a student and their face embeddings by student_id. Returns 1 on success, -1 on error.
 CLASSROOM_EXPORT int ClassroomDeleteStudent(const char* student_id, const char* roster_db_path);

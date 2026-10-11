@@ -5,8 +5,11 @@ import 'package:share_plus/share_plus.dart';
 import '../native/classroom_engine.dart';
 import '../theme/app_theme.dart';
 import '../widgets/glass_card.dart';
+import '../widgets/ambient_background.dart';
 import 'capture_screen.dart';
 import 'enrollment_screen.dart';
+import 'processing_screen.dart';
+import 'package:image_picker/image_picker.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -270,9 +273,17 @@ class _HomeScreenState extends State<HomeScreen> {
     }
     try {
       final file = await ClassroomEngine.instance.exportClassroomRoster();
+      if (!mounted) return;
+      final box = context.findRenderObject() as RenderBox?;
+      final origin = box != null
+          ? box.localToGlobal(Offset.zero) & box.size
+          : Rect.fromLTWH(0, 0, MediaQuery.of(context).size.width,
+              MediaQuery.of(context).size.height / 2);
+
       await Share.shareXFiles(
         [XFile(file.path)],
         text: 'Classroom Roster Export: $selectedClass (${enrolledStudents.length} Students with 512-d Face Embeddings)',
+        sharePositionOrigin: origin,
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -286,6 +297,146 @@ class _HomeScreenState extends State<HomeScreen> {
         );
       }
     }
+  }
+
+  Future<void> _pickAndProcessVideo() async {
+    try {
+      final picker = ImagePicker();
+      final picked = await picker.pickVideo(source: ImageSource.gallery);
+      if (picked != null && mounted) {
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => ProcessingScreen(
+              videoPath: picked.path,
+              engine: ClassroomEngine.instance,
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to load video: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _showAttendanceOptionsModal() async {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: isDark ? AppTheme.darkSurface : AppTheme.lightSurface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Center(
+                  child: Container(
+                    width: 36,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: isDark ? Colors.white24 : Colors.black12,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Take Attendance ($selectedClass)',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                ListTile(
+                  leading: Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: AppTheme.discordPurple.withValues(alpha: 0.15),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.videocam_rounded, color: AppTheme.discordPurple),
+                  ),
+                  title: Text(
+                    'Record Live Sweep Video',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary,
+                    ),
+                  ),
+                  subtitle: Text(
+                    'HD camera with slow-down motion guidance',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                    ),
+                  ),
+                  onTap: () async {
+                    Navigator.pop(ctx);
+                    final cameras = await availableCameras();
+                    if (cameras.isEmpty) {
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('No camera found on this device.')),
+                        );
+                      }
+                      return;
+                    }
+                    if (!mounted) return;
+                    await Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => CaptureScreen(cameras: cameras, engine: ClassroomEngine.instance),
+                      ),
+                    );
+                  },
+                ),
+                const Divider(),
+                ListTile(
+                  leading: Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: AppTheme.discordGreen.withValues(alpha: 0.15),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.video_library_rounded, color: AppTheme.discordGreen),
+                  ),
+                  title: Text(
+                    'Upload Video from Device',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary,
+                    ),
+                  ),
+                  subtitle: Text(
+                    'Pick an existing classroom recording from Photos / Files',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                    ),
+                  ),
+                  onTap: () async {
+                    Navigator.pop(ctx);
+                    await _pickAndProcessVideo();
+                  },
+                ),
+                const SizedBox(height: 8),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   Future<void> _clearDatabase() async {
@@ -418,36 +569,9 @@ class _HomeScreenState extends State<HomeScreen> {
     final isDark = theme.brightness == Brightness.dark;
 
     return Scaffold(
-      body: Stack(
-        children: [
-          // Background ambient glowing orbs (Discord Purple)
-          Positioned(
-            top: -100,
-            left: -50,
-            child: Container(
-              width: 320,
-              height: 320,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: AppTheme.discordPurple.withOpacity(isDark ? 0.22 : 0.14),
-              ),
-            ).blurred(blur: 50),
-          ),
-          Positioned(
-            bottom: -60,
-            right: -60,
-            child: Container(
-              width: 280,
-              height: 280,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: AppTheme.discordLightPurple.withOpacity(isDark ? 0.20 : 0.12),
-              ),
-            ).blurred(blur: 50),
-          ),
-          
-          SafeArea(
-            child: SingleChildScrollView(
+      body: AmbientBackground(
+        child: SafeArea(
+          child: SingleChildScrollView(
               padding: const EdgeInsets.symmetric(horizontal: 22.0, vertical: 12.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -641,21 +765,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             glowColor: AppTheme.discordPurple,
                             borderRadius: 22,
                             padding: const EdgeInsets.all(12),
-                            onTap: () async {
-                              final cameras = await availableCameras();
-                              if (cameras.isEmpty) {
-                                if (mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(content: Text('No camera found on this device.')),
-                                  );
-                                }
-                                return;
-                              }
-                              if (!context.mounted) return;
-                              await Navigator.push(context, MaterialPageRoute(
-                                builder: (_) => CaptureScreen(cameras: cameras, engine: ClassroomEngine.instance),
-                              ));
-                            },
+                            onTap: _showAttendanceOptionsModal,
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
@@ -896,8 +1006,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
           ),
-        ],
-      ),
-    );
+        ),
+      );
   }
 }

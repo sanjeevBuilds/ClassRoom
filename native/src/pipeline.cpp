@@ -9,14 +9,9 @@
 #include "classroom/arcface_embedder.h"
 #include "classroom/blur_filter.h"
 #include "classroom/cosine_matcher.h"
-#include "classroom/desk_tracker.h"
-#include "classroom/face_pose.h"
 #include "classroom/frame_sampler.h"
-#include "classroom/homography.h"
 #include "classroom/identity_clusterer.h"
-#include "classroom/lighting_enhancer.h"
 #include "classroom/roster_db.h"
-#include "classroom/sahi_slicing.h"
 #include "classroom/yunet_detector.h"
 
 namespace classroom {
@@ -95,76 +90,23 @@ std::vector<AttendanceResult> ProcessSweepVideo(const std::string& video_path,
   const size_t n_sharp = sharp_frames.size();
 
   YuNetDetector detector;
-  detector.Init(config.yunet_model_path, 0.30, 0.3);
+  detector.Init(config.yunet_model_path, 0.45, 0.3);
 
   ArcFaceEmbedder embedder;
   embedder.Init(config.arcface_model_path);
 
-  LightingEnhancer lighting_enhancer(85.0, 2.5);
-  HomographyEstimator homography_estimator(0.15);
-  FacePoseEstimator pose_estimator(45.0, 35.0, 50.0);
-  DeskTracker desk_tracker(90.0, 6);
-  SahiRearRowSlicer sahi_slicer(&detector, 0.60, 480, 360, 0.20, 0.45);
-
-  cv::Mat prev_frame;
   size_t total_detections = 0;
-  std::map<int, cv::Mat> frame_cache;
-
-  for (auto& f : sharp_frames) {
-    // 1. Adaptive Low-Light CLAHE
-    cv::Mat enhanced_full = lighting_enhancer.EnhanceIfNeeded(f.frame);
-    frame_cache[f.frame_id] = enhanced_full;
-
-    // 2. Inter-Frame Camera Motion Estimation
-    double dx = 0.0, dy = 0.0;
-    if (!prev_frame.empty()) {
-      homography_estimator.EstimateDisplacement(prev_frame, enhanced_full, dx, dy);
-    }
-    prev_frame = enhanced_full;
-
-    const double scale_x =
-        static_cast<double>(enhanced_full.cols) / f.frame_lowres.cols;
-    const double scale_y =
-        static_cast<double>(enhanced_full.rows) / f.frame_lowres.rows;
-
-    // 3. Primary YuNet detection on downscaled frame
-    auto global_detections = detector.Detect(f.frame_lowres, f.frame_id,
-                                             f.timestamp_sec, scale_x, scale_y);
-
-    // 4. SAHI Rear-Row Slicing for distant students (top 60% horizon)
-    auto all_detections = sahi_slicer.DetectWithSlicing(
-        enhanced_full, f.frame_id, f.timestamp_sec, global_detections);
-
-    // 5. 6-Axis Pose Filtering: drop non-usable profile angles (|yaw| > 45°)
-    std::vector<Detection> usable_detections;
-    for (const auto& det : all_detections) {
-      auto pose = pose_estimator.EstimatePose(det);
-      if (pose_estimator.IsUsablePose(pose)) {
-        usable_detections.push_back(det);
-      }
-    }
-
-    total_detections += usable_detections.size();
-
-    // 6. Spatial Desk-Tracklet Fusion
-    desk_tracker.UpdateFrame(f.frame_id, usable_detections, 100.0, dx, dy);
-  }
-
-  // 7. Desk-Tracklet Exemplar Selection (Cuts ArcFace inferences by 65–70%)
-  auto tracklets = desk_tracker.FinalizeTracklets();
   std::vector<Embedding> embeddings;
-
-  for (const auto& tracklet : tracklets) {
-    auto best_exemplars = tracklet.GetBestExemplars(2);
-    for (const auto& det : best_exemplars) {
-      auto it = frame_cache.find(det.frame_id);
-      if (it != frame_cache.end() && !it->second.empty()) {
-        try {
-          embeddings.push_back(embedder.ExtractEmbedding(it->second, det));
-        } catch (...) {
-          // Ignore invalid crops or alignment failures
-        }
-      }
+  for (const auto& f : sharp_frames) {
+    const double scale_x =
+        static_cast<double>(f.frame.cols) / f.frame_lowres.cols;
+    const double scale_y =
+        static_cast<double>(f.frame.rows) / f.frame_lowres.rows;
+    auto detections = detector.Detect(f.frame_lowres, f.frame_id,
+                                       f.timestamp_sec, scale_x, scale_y);
+    total_detections += detections.size();
+    for (const auto& d : detections) {
+      embeddings.push_back(embedder.ExtractEmbedding(f.frame, d));
     }
   }
 
@@ -179,14 +121,16 @@ std::vector<AttendanceResult> ProcessSweepVideo(const std::string& video_path,
   CosineMatcher matcher(config.tau_match);
   auto results = matcher.MatchClustersToRoster(clusters, roster);
 
-  // Append comprehensive diagnostic telemetry
+  // Stash pipeline diagnostics in a synthetic "debug" result at the end
+  // so we can see where the pipeline drops data without changing the
+  // JSON schema (the Dart side just ignores unknown statuses).
+  // Format: "debug:sampled=N,sharp=N,dets=N,embeds=N,clusters=N,roster=N"
   AttendanceResult debug;
   debug.status = AttendanceStatus::kUnknownGuest;
   debug.student_id = "__pipeline_debug__";
   debug.name = "sampled=" + std::to_string(n_sampled) +
                ",sharp=" + std::to_string(n_sharp) +
                ",dets=" + std::to_string(total_detections) +
-               ",desks=" + std::to_string(tracklets.size()) +
                ",embeds=" + std::to_string(embeddings.size()) +
                ",clusters=" + std::to_string(clusters.size()) +
                ",roster=" + std::to_string(roster.size()) +
@@ -195,6 +139,25 @@ std::vector<AttendanceResult> ProcessSweepVideo(const std::string& video_path,
   results.push_back(std::move(debug));
 
   return results;
+}
+
+// Detects face at 0°. If none found, tries 90° CW, 90° CCW, and 180° rotations to
+// guarantee reliable face detection regardless of mobile camera sensor orientation.
+std::vector<Detection> DetectWithRotations(YuNetDetector& detector, cv::Mat& frame) {
+  auto detections = detector.Detect(frame, 0, 0.0);
+  if (!detections.empty()) return detections;
+
+  const int rotations[] = {cv::ROTATE_90_CLOCKWISE, cv::ROTATE_90_COUNTERCLOCKWISE, cv::ROTATE_180};
+  for (int rot : rotations) {
+    cv::Mat rotated;
+    cv::rotate(frame, rotated, rot);
+    auto rot_dets = detector.Detect(rotated, 0, 0.0);
+    if (!rot_dets.empty()) {
+      frame = rotated;
+      return rot_dets;
+    }
+  }
+  return {};
 }
 
 bool EnrollStudentFromPhoto(const std::string& photo_path,
@@ -207,75 +170,13 @@ bool EnrollStudentFromPhoto(const std::string& photo_path,
                               photo_path);
   }
 
-  // 1. Aspect-ratio preserving downscale to max dimension 640 for fast detection
-  int det_w = 640;
-  int det_h = (640 * frame.rows) / frame.cols;
-  if (frame.rows > frame.cols) {
-    det_h = 640;
-    det_w = (640 * frame.cols) / frame.rows;
-  }
-  det_w = (det_w / 2) * 2;
-  det_h = (det_h / 2) * 2;
-
-  cv::Mat det_frame;
-  cv::resize(frame, det_frame, cv::Size(det_w, det_h));
-
   YuNetDetector detector;
   detector.Init(config.yunet_model_path, 0.45, 0.3);
-  auto detections = detector.Detect(det_frame, 0, 0.0);
-
-  // 2. Multi-rotation scan fallback if 0 faces found (handles 90°, 270°, 180° camera EXIF orientations)
-  int rotation_code = -1;
-  if (detections.empty()) {
-    const std::vector<cv::RotateFlags> candidate_rotations = {
-      cv::ROTATE_90_CLOCKWISE,
-      cv::ROTATE_90_COUNTERCLOCKWISE,
-      cv::ROTATE_180,
-    };
-    for (const auto rot : candidate_rotations) {
-      cv::Mat rotated_det;
-      cv::rotate(det_frame, rotated_det, rot);
-      auto candidate_dets = detector.Detect(rotated_det, 0, 0.0);
-      if (!candidate_dets.empty()) {
-        detections = std::move(candidate_dets);
-        rotation_code = rot;
-        break;
-      }
-    }
-  }
-
-  if (rotation_code != -1) {
-    cv::Mat rotated_full;
-    cv::rotate(frame, rotated_full, rotation_code);
-    frame = rotated_full;
-    if (rotation_code != cv::ROTATE_180) {
-      std::swap(det_w, det_h);
-    }
-  }
-
-  if (detections.empty()) {
-    return false;  // no face found — a normal case, not an error
-  }
-
-  // Scale detection coordinates back to full-res frame
-  const double scale_x = static_cast<double>(frame.cols) / det_w;
-  const double scale_y = static_cast<double>(frame.rows) / det_h;
-  for (auto& d : detections) {
-    d.bbox[0] *= scale_x;
-    d.bbox[1] *= scale_y;
-    d.bbox[2] *= scale_x;
-    d.bbox[3] *= scale_y;
-    for (auto& lm : d.landmarks) {
-      if (lm.size() >= 2) {
-        lm[0] *= scale_x;
-        lm[1] *= scale_y;
-      }
-    }
-  }
+  auto detections = DetectWithRotations(detector, frame);
 
   const Detection* largest = LargestFace(detections);
   if (largest == nullptr) {
-    return false;
+    return false;  // no face found — a normal case, not an error
   }
 
   ArcFaceEmbedder embedder;
@@ -293,6 +194,46 @@ bool EnrollStudentFromPhoto(const std::string& photo_path,
   roster_db.Close();
 
   return true;
+}
+
+int EnrollStudentFromPhotos(const std::vector<std::string>& photo_paths,
+                            const std::string& student_id,
+                            const std::string& name,
+                            const PipelineConfig& config) {
+  if (photo_paths.empty()) return 0;
+
+  YuNetDetector detector;
+  detector.Init(config.yunet_model_path, 0.45, 0.3);
+
+  ArcFaceEmbedder embedder;
+  embedder.Init(config.arcface_model_path);
+
+  RosterEntry entry;
+  entry.student_id = student_id;
+  entry.name = name;
+
+  int faces_enrolled = 0;
+  for (const auto& path : photo_paths) {
+    cv::Mat frame = cv::imread(path);
+    if (frame.empty()) continue;
+
+    auto detections = DetectWithRotations(detector, frame);
+    const Detection* largest = LargestFace(detections);
+    if (largest != nullptr) {
+      auto embedding = embedder.ExtractEmbedding(frame, *largest);
+      entry.reference_embeddings.push_back(embedding.vector);
+      faces_enrolled++;
+    }
+  }
+
+  if (faces_enrolled > 0) {
+    RosterDB roster_db;
+    roster_db.Init(config.roster_db_path);
+    roster_db.EnrollStudent(entry);
+    roster_db.Close();
+  }
+
+  return faces_enrolled;
 }
 
 std::string AttendanceResultsToJson(const std::vector<AttendanceResult>& results) {
@@ -390,6 +331,35 @@ int ClassroomEnrollStudentFromPhoto(const char* photo_path,
   }
 }
 
+int ClassroomEnrollStudentFromPhotos(const char* photo_paths_csv,
+                                     const char* student_id, const char* name,
+                                     const char* yunet_model_path,
+                                     const char* arcface_model_path,
+                                     const char* roster_db_path) {
+  try {
+    classroom::PipelineConfig config;
+    config.yunet_model_path = yunet_model_path;
+    config.arcface_model_path = arcface_model_path;
+    config.roster_db_path = roster_db_path;
+
+    std::vector<std::string> paths;
+    std::string csv_str(photo_paths_csv ? photo_paths_csv : "");
+    std::stringstream ss(csv_str);
+    std::string item;
+    while (std::getline(ss, item, ',')) {
+      if (!item.empty()) paths.push_back(item);
+    }
+
+    return classroom::EnrollStudentFromPhotos(paths, student_id, name, config);
+  } catch (const std::exception& e) {
+    g_last_error = e.what();
+    return -1;
+  } catch (...) {
+    g_last_error = "unknown native exception";
+    return -1;
+  }
+}
+
 const char* ClassroomGetEnrolledStudents(const char* roster_db_path) {
   try {
     classroom::RosterDB roster_db;
@@ -412,6 +382,79 @@ const char* ClassroomGetEnrolledStudents(const char* roster_db_path) {
     return CopyToHeap(err);
   } catch (...) {
     return CopyToHeap(std::string("{\"error\":\"unknown native exception\"}"));
+  }
+}
+
+const char* ClassroomExportRoster(const char* roster_db_path, const char* class_id) {
+  try {
+    classroom::RosterDB roster_db;
+    roster_db.Init(roster_db_path);
+    auto roster = roster_db.GetAllEntries();
+    roster_db.Close();
+
+    std::ostringstream os;
+    os << "{\n";
+    os << "  \"class_id\": \"" << classroom::JsonEscape(class_id ? class_id : "CS101") << "\",\n";
+    os << "  \"exported_at\": \"2026-10-03T00:00:00.000Z\",\n";
+    os << "  \"version\": \"1.0\",\n";
+    os << "  \"student_count\": " << roster.size() << ",\n";
+    os << "  \"students\": [\n";
+    for (size_t i = 0; i < roster.size(); ++i) {
+      const auto& s = roster[i];
+      if (i > 0) os << ",\n";
+      os << "    {\n";
+      os << "      \"student_id\": \"" << classroom::JsonEscape(s.student_id) << "\",\n";
+      os << "      \"name\": \"" << classroom::JsonEscape(s.name) << "\",\n";
+      os << "      \"reference_embeddings\": [\n";
+      for (size_t j = 0; j < s.reference_embeddings.size(); ++j) {
+        if (j > 0) os << ",\n";
+        os << "        [";
+        const auto& vec = s.reference_embeddings[j];
+        for (size_t k = 0; k < vec.size(); ++k) {
+          if (k > 0) os << ",";
+          os << vec[k];
+        }
+        os << "]";
+      }
+      os << "\n      ]\n";
+      os << "    }";
+    }
+    os << "\n  ]\n";
+    os << "}";
+    return CopyToHeap(os.str());
+  } catch (const std::exception& e) {
+    std::string err = std::string("{\"error\":\"") + classroom::JsonEscape(e.what()) + "\"}";
+    return CopyToHeap(err);
+  } catch (...) {
+    return CopyToHeap(std::string("{\"error\":\"unknown native exception\"}"));
+  }
+}
+
+int ClassroomSaveStudentEmbeddings(const char* student_id, const char* name,
+                                   const float* embeddings, int num_embeddings,
+                                   int dim, const char* roster_db_path) {
+  try {
+    classroom::RosterEntry entry;
+    entry.student_id = student_id ? student_id : "";
+    entry.name = name ? name : "";
+    for (int i = 0; i < num_embeddings; ++i) {
+      const float* start = embeddings + (i * dim);
+      std::array<float, classroom::kEmbeddingDim> arr{};
+      int copy_count = std::min(dim, static_cast<int>(classroom::kEmbeddingDim));
+      std::copy_n(start, copy_count, arr.begin());
+      entry.reference_embeddings.push_back(arr);
+    }
+    classroom::RosterDB roster_db;
+    roster_db.Init(roster_db_path);
+    roster_db.EnrollStudent(entry);
+    roster_db.Close();
+    return 1;
+  } catch (const std::exception& e) {
+    g_last_error = e.what();
+    return -1;
+  } catch (...) {
+    g_last_error = "unknown native exception";
+    return -1;
   }
 }
 
