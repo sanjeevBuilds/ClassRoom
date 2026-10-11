@@ -408,7 +408,7 @@ List<AttendanceResult> _processSweepVideo(_SweepArgs args) {
       15.0, // tau_blur — lowered from 100.0; handheld phone video is much
             // shakier than tripod footage, 100.0 drops nearly every frame.
       0.35, // tau_cluster
-      0.40, // tau_match — slightly more lenient for single-photo enrollment
+      0.38, // tau_match — calibrated asymmetric threshold from 11-point ROC analysis
     );
     final json = resultPtr.toDartString();
     final decoded = jsonDecode(json);
