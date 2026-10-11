@@ -55,14 +55,14 @@ class ClassroomEngine {
   );
 
   // Multi-face classroom sweep detector: configured for ultra-fast, high-density row detection
-  // minFaceSize 0.015 enables rear-row student detection down to ~20px without missing distant faces
+  // minFaceSize 0.010 enables rear-row student detection down to ~14px (rows 6-12 at 6-8m)
   final FaceDetector _videoDetector = FaceDetector(
     options: FaceDetectorOptions(
       enableLandmarks: false,
       enableContours: false,
       enableClassification: false,
       enableTracking: true,
-      minFaceSize: 0.015,
+      minFaceSize: 0.010,
       performanceMode: FaceDetectorMode.accurate,
     ),
   );
@@ -560,6 +560,18 @@ class ClassroomEngine {
     );
   }
 
+  bool _isOverlapDuplicate(Rect a, Rect b, {double iouThreshold = 0.35}) {
+    final interLeft = max(a.left, b.left);
+    final interTop = max(a.top, b.top);
+    final interRight = min(a.right, b.right);
+    final interBottom = min(a.bottom, b.bottom);
+    if (interRight <= interLeft || interBottom <= interTop) return false;
+    final interArea = (interRight - interLeft) * (interBottom - interTop);
+    final unionArea = (a.width * a.height) + (b.width * b.height) - interArea;
+    if (unionArea <= 0) return false;
+    return (interArea / unionArea) >= iouThreshold;
+  }
+
   /// Runs the full pipeline on a recorded sweep video and returns the
   /// attendance results using real face detection, ArcFace embeddings, and calibrated matching.
   Future<List<AttendanceResult>> processSweepVideo(String videoPath) async {
@@ -606,27 +618,65 @@ class ClassroomEngine {
       )).toList();
     }
 
-    // Detect faces across all extracted video frames
+    // Detect faces across all extracted video frames (including 2x horizon zoom crops)
     final detectedFaceEmbeddings = <Float32List>[];
 
     for (final fPath in framePaths) {
       try {
         final inputImage = InputImage.fromFilePath(fPath);
         final faces = await _videoDetector.processImage(inputImage);
-        if (faces.isNotEmpty) {
-          final bytes = await File(fPath).readAsBytes();
-          final raw = img.decodeImage(bytes);
-          final decoded = raw != null ? img.bakeOrientation(raw) : null;
-          if (decoded != null) {
-            for (final f in faces) {
-              if (f.boundingBox.width >= 20 && f.boundingBox.height >= 20) {
-                final emb = await _getFaceEmbeddingFromImage(
-                  imagePath: fPath,
-                  boundingBox: f.boundingBox,
-                  preloadedImage: decoded,
-                );
-                detectedFaceEmbeddings.add(emb);
+        final bytes = await File(fPath).readAsBytes();
+        final raw = img.decodeImage(bytes);
+        final decoded = raw != null ? img.bakeOrientation(raw) : null;
+        if (decoded != null) {
+          final processedBoxes = <Rect>[];
+
+          // 1. Process full-frame detections (front & middle rows 1-5, down to 14px)
+          for (final f in faces) {
+            if (f.boundingBox.width >= 14 && f.boundingBox.height >= 14) {
+              final emb = await _getFaceEmbeddingFromImage(
+                imagePath: fPath,
+                boundingBox: f.boundingBox,
+                preloadedImage: decoded,
+              );
+              detectedFaceEmbeddings.add(emb);
+              processedBoxes.add(f.boundingBox);
+            }
+          }
+
+          // 2. Horizon zoom crop (2x optical detail for rear rows 6-12 at 6-8 meters)
+          final hFile = File(fPath.replaceAll('.jpg', '_horizon.jpg'));
+          if (await hFile.exists()) {
+            try {
+              final hInput = InputImage.fromFilePath(hFile.path);
+              final hFaces = await _videoDetector.processImage(hInput);
+              final hY = (decoded.height * 0.12).round();
+
+              for (final hf in hFaces) {
+                if (hf.boundingBox.width >= 14 && hf.boundingBox.height >= 14) {
+                  final fullBox = Rect.fromLTWH(
+                    hf.boundingBox.left,
+                    hf.boundingBox.top + hY,
+                    hf.boundingBox.width,
+                    hf.boundingBox.height,
+                  );
+
+                  // Deduplicate against faces already detected in full frame
+                  final isDup = processedBoxes.any((b) => _isOverlapDuplicate(fullBox, b));
+                  if (!isDup) {
+                    final emb = await _getFaceEmbeddingFromImage(
+                      imagePath: fPath,
+                      boundingBox: fullBox,
+                      preloadedImage: decoded,
+                    );
+                    detectedFaceEmbeddings.add(emb);
+                    processedBoxes.add(fullBox);
+                    print('[SweepVideo] Horizon zoom caught rear face at 6-8m: w=${fullBox.width.round()}px, h=${fullBox.height.round()}px');
+                  }
+                }
               }
+            } catch (e) {
+              print('Horizon zoom error on ${hFile.path}: $e');
             }
           }
         }

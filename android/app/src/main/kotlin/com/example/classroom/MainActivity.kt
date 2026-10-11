@@ -52,6 +52,22 @@ class MainActivity : FlutterActivity() {
                                     bitmap.compress(Bitmap.CompressFormat.JPEG, 85, fos)
                                     fos.flush()
                                     fos.close()
+
+                                    // Horizon zoom crop (upper 12% to 67% where rear rows 6-12 sit)
+                                    val hY = (bitmap.height * 0.12).toInt().coerceAtLeast(0)
+                                    val hH = (bitmap.height * 0.55).toInt().coerceAtMost(bitmap.height - hY)
+                                    if (hH > 100 && bitmap.width > 100) {
+                                        try {
+                                            val horizonBitmap = Bitmap.createBitmap(bitmap, 0, hY, bitmap.width, hH)
+                                            val horizonFile = File(cacheDir, "frame_${frameIndex}_horizon.jpg")
+                                            val hFos = FileOutputStream(horizonFile)
+                                            horizonBitmap.compress(Bitmap.CompressFormat.JPEG, 85, hFos)
+                                            hFos.flush()
+                                            hFos.close()
+                                            horizonBitmap.recycle()
+                                        } catch (_: Exception) {}
+                                    }
+
                                     bitmap.recycle()
                                     framePaths.add(outFile.absolutePath)
                                     frameIndex++
