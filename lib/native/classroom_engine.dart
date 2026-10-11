@@ -239,7 +239,10 @@ class ClassroomEngine {
     if (decoded == null) {
       try {
         final bytes = await File(imagePath).readAsBytes();
-        decoded = img.decodeImage(bytes);
+        final raw = img.decodeImage(bytes);
+        if (raw != null) {
+          decoded = img.bakeOrientation(raw);
+        }
       } catch (e) {
         print('Error decoding image $imagePath: $e');
       }
@@ -247,6 +250,10 @@ class ClassroomEngine {
 
     if (decoded == null) {
       return Float32List(512);
+    }
+
+    if (_arcfaceSession == null) {
+      await _initArcFace(arcfaceModelPath);
     }
 
     // 1. ArcFace ONNX inference
@@ -278,7 +285,11 @@ class ClassroomEngine {
         final outName = _arcfaceSession!.outputNames.first;
         final inputTensor = await OrtValue.fromList(inputFloats, [1, 3, 112, 112]);
         final outputs = await _arcfaceSession!.run({inName: inputTensor});
-        final rawEmb = await outputs[outName]!.asList();
+        final rawEmb = await outputs[outName]!.asFlattenedList();
+        await inputTensor.dispose();
+        for (final out in outputs.values) {
+          await out.dispose();
+        }
 
         double sumSq = 0.0;
         for (final v in rawEmb) {
@@ -287,17 +298,19 @@ class ClassroomEngine {
         }
         final norm = sqrt(sumSq);
         final emb512 = Float32List(512);
-        if (norm > 0) {
+        if (rawEmb.length >= 512 && norm > 0) {
           for (int i = 0; i < 512; i++) {
             emb512[i] = (rawEmb[i] as num).toDouble() / norm;
           }
+          print('ArcFace ONNX extracted 512-D embedding successfully (norm=$norm)');
           return emb512;
         }
-      } catch (e) {
-        print('ArcFace ONNX inference error: $e');
+      } catch (e, stack) {
+        print('ArcFace ONNX inference error: $e\n$stack');
       }
     }
 
+    print('WARNING: Falling back to crop visual embedding for $imagePath');
     return _extractFallbackCropEmbedding(decoded, boundingBox);
   }
 
@@ -602,15 +615,18 @@ class ClassroomEngine {
         final faces = await _videoDetector.processImage(inputImage);
         if (faces.isNotEmpty) {
           final bytes = await File(fPath).readAsBytes();
-          final decoded = img.decodeImage(bytes);
-          for (final f in faces) {
-            if (f.boundingBox.width >= 20 && f.boundingBox.height >= 20) {
-              final emb = await _getFaceEmbeddingFromImage(
-                imagePath: fPath,
-                boundingBox: f.boundingBox,
-                preloadedImage: decoded,
-              );
-              detectedFaceEmbeddings.add(emb);
+          final raw = img.decodeImage(bytes);
+          final decoded = raw != null ? img.bakeOrientation(raw) : null;
+          if (decoded != null) {
+            for (final f in faces) {
+              if (f.boundingBox.width >= 20 && f.boundingBox.height >= 20) {
+                final emb = await _getFaceEmbeddingFromImage(
+                  imagePath: fPath,
+                  boundingBox: f.boundingBox,
+                  preloadedImage: decoded,
+                );
+                detectedFaceEmbeddings.add(emb);
+              }
             }
           }
         }
@@ -621,6 +637,7 @@ class ClassroomEngine {
 
     // If ZERO faces were detected in the entire sweep video, everyone is strictly ABSENT
     if (detectedFaceEmbeddings.isEmpty) {
+      print('[SweepVideo] 0 faces detected across ${framePaths.length} frames.');
       return enrolled.map((s) => AttendanceResult(
         studentId: s['student_id'] as String? ?? '',
         name: s['name'] as String? ?? 'Student',
@@ -631,13 +648,15 @@ class ClassroomEngine {
 
     // Cluster detected face embeddings (tau_cluster = 0.35)
     final clusters = _clusterEmbeddings(detectedFaceEmbeddings, tauCluster: 0.35);
+    final candidateEmbeddings = <Float32List>[...clusters, ...detectedFaceEmbeddings];
+    print('[SweepVideo] Extracted ${framePaths.length} frames, detected ${detectedFaceEmbeddings.length} faces, formed ${clusters.length} clusters');
 
-    // Match clusters against enrolled roster using calibrated tau_match = 0.38
+    // Match candidate embeddings against enrolled roster using calibrated tau_match = 0.38
     const double tauMatch = 0.38;
     final matchedStudentIds = <String>{};
     final studentScores = <String, double>{};
 
-    for (final clusterCentroid in clusters) {
+    for (final candidate in candidateEmbeddings) {
       double bestScore = -1.0;
       String? bestStudentId;
 
@@ -648,7 +667,7 @@ class ClassroomEngine {
         for (final rawEmb in rawEmbs) {
           if (rawEmb is List) {
             final refVec = Float32List.fromList(rawEmb.map((v) => (v as num).toDouble()).toList());
-            final sim = _cosineSimilarity(clusterCentroid, refVec);
+            final sim = _cosineSimilarity(candidate, refVec);
             if (sim > bestScore) {
               bestScore = sim;
               bestStudentId = sId;
@@ -665,6 +684,34 @@ class ClassroomEngine {
           matchedStudentIds.add(bestStudentId);
         }
       }
+    }
+
+    // Ensure all enrolled students have their true maximum score recorded
+    for (final s in enrolled) {
+      final sId = s['student_id'] as String? ?? '';
+      if (!studentScores.containsKey(sId)) {
+        double maxScore = 0.0;
+        final rawEmbs = (s['reference_embeddings'] as List?) ?? [];
+        for (final rawEmb in rawEmbs) {
+          if (rawEmb is List) {
+            final refVec = Float32List.fromList(rawEmb.map((v) => (v as num).toDouble()).toList());
+            for (final cand in candidateEmbeddings) {
+              final sim = _cosineSimilarity(cand, refVec);
+              if (sim > maxScore) maxScore = sim;
+            }
+          }
+        }
+        studentScores[sId] = maxScore;
+      }
+    }
+
+    print('[SweepVideo] Attendance results:');
+    for (final s in enrolled) {
+      final sId = s['student_id'] as String? ?? '';
+      final sName = s['name'] as String? ?? 'Student';
+      final score = studentScores[sId] ?? 0.0;
+      final isPres = matchedStudentIds.contains(sId);
+      print('  - $sName ($sId): score=${score.toStringAsFixed(4)}, matched=$isPres (tauMatch=$tauMatch)');
     }
 
     // Build final attendance results for each enrolled student
@@ -812,39 +859,33 @@ class ClassroomEngine {
   }
 
 
-  /// Enrolls student with accumulated 3D multi-pose photos into native C++ engine.
+  /// Enrolls student with accumulated 3D multi-pose photos and ArcFace embeddings.
   Future<bool> enrollStudentWithEmbeddings({
     required String studentId,
     required String name,
     required List<Float32List> embeddings,
   }) async {
+    final photoPaths = List<String>.from(_pendingFaceIdPhotos);
+    _pendingFaceIdPhotos.clear();
+
+    if (embeddings.isEmpty) {
+      print('enrollStudentWithEmbeddings error: embeddings list is empty!');
+      return false;
+    }
+
     try {
-      if (_pendingFaceIdPhotos.isNotEmpty) {
-        final count = await enrollStudentFromPhotos(
-          photoPaths: List<String>.from(_pendingFaceIdPhotos),
-          studentId: studentId,
-          name: name,
-        );
-        _pendingFaceIdPhotos.clear();
-        return count > 0;
-      } else {
-        await _persistStudentToJson(
-          classId: currentClassId,
-          studentId: studentId,
-          name: name,
-          embeddings: embeddings,
-        );
-        return true;
-      }
-    } catch (e) {
-      _pendingFaceIdPhotos.clear();
       await _persistStudentToJson(
         classId: currentClassId,
         studentId: studentId,
         name: name,
+        photoPaths: photoPaths.isNotEmpty ? photoPaths : null,
         embeddings: embeddings,
       );
+      print('Enrolled student "$name" ($studentId) with ${embeddings.length} ArcFace embeddings in class $currentClassId');
       return true;
+    } catch (e, stack) {
+      print('Error enrolling student $name: $e\n$stack');
+      return false;
     }
   }
 
