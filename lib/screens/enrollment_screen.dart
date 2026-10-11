@@ -1092,7 +1092,7 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      extendBodyBehindAppBar: true,
+      extendBodyBehindAppBar: false,
       appBar: AppBar(
         titleSpacing: 0,
         backgroundColor: Colors.transparent,
@@ -1449,49 +1449,52 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
                             ),
                           ),
                         const SizedBox(height: 6),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            TextButton.icon(
-                              onPressed: _isProcessing || _isAutoFilling
-                                  ? null
-                                  : _autoFillCircle,
-                              icon: _isAutoFilling
-                                  ? const SizedBox(
-                                      width: 14,
-                                      height: 14,
-                                      child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                          color: Color(0xFF34C759)))
-                                  : const Icon(Icons.play_circle_outline_rounded,
-                                      size: 16, color: Color(0xFF34C759)),
-                              label: Text(
-                                  _isAutoFilling
-                                      ? 'Scanning 360° Biometrics…'
-                                      : 'Auto-Fill Circle',
-                                  style: const TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w600,
-                                      color: Color(0xFF34C759))),
-                            ),
-                            if (_completedTicks.isNotEmpty ||
-                                _faceIdStep > 0 ||
-                                _isCompletedAnimation) ...[
-                              const SizedBox(width: 8),
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
                               TextButton.icon(
                                 onPressed: _isProcessing || _isAutoFilling
                                     ? null
-                                    : _resetFaceId,
-                                icon: const Icon(Icons.restart_alt_rounded,
-                                    size: 16, color: AppTheme.discordPurple),
-                                label: const Text('Reset Scan',
-                                    style: TextStyle(
+                                    : _autoFillCircle,
+                                icon: _isAutoFilling
+                                    ? const SizedBox(
+                                        width: 14,
+                                        height: 14,
+                                        child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            color: Color(0xFF34C759)))
+                                    : const Icon(Icons.play_circle_outline_rounded,
+                                        size: 16, color: Color(0xFF34C759)),
+                                label: Text(
+                                    _isAutoFilling
+                                        ? 'Scanning 360°…'
+                                        : 'Auto-Fill Circle',
+                                    style: const TextStyle(
                                         fontSize: 12,
                                         fontWeight: FontWeight.w600,
-                                        color: AppTheme.discordPurple)),
+                                        color: Color(0xFF34C759))),
                               ),
+                              if (_completedTicks.isNotEmpty ||
+                                  _faceIdStep > 0 ||
+                                  _isCompletedAnimation) ...[
+                                const SizedBox(width: 8),
+                                TextButton.icon(
+                                  onPressed: _isProcessing || _isAutoFilling
+                                      ? null
+                                      : _resetFaceId,
+                                  icon: const Icon(Icons.restart_alt_rounded,
+                                      size: 16, color: AppTheme.discordPurple),
+                                  label: const Text('Reset Scan',
+                                      style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
+                                          color: AppTheme.discordPurple)),
+                                ),
+                              ],
                             ],
-                          ],
+                          ),
                         ),
                       ],
                     )
@@ -1541,23 +1544,15 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final containerWidth = constraints.maxWidth;
-        final containerHeight = constraints.maxHeight;
-        final containerAspect = containerWidth / containerHeight;
-
-        double scale;
-        if (containerAspect > previewAspect) {
-          scale = containerAspect / previewAspect;
-        } else {
-          scale = previewAspect / containerAspect;
-        }
-
         return ClipRect(
-          child: Center(
-            child: Transform.scale(
-              scale: scale,
-              child: AspectRatio(
-                aspectRatio: previewAspect,
+          child: SizedBox(
+            width: constraints.maxWidth,
+            height: constraints.maxHeight,
+            child: FittedBox(
+              fit: BoxFit.cover,
+              child: SizedBox(
+                width: constraints.maxWidth,
+                height: constraints.maxWidth / previewAspect,
                 child: CameraPreview(controller),
               ),
             ),
@@ -1664,10 +1659,14 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
         AnimatedBuilder(
           animation: _scanController,
           builder: (context, _) {
+            final screenWidth = MediaQuery.of(context).size.width;
+            final ringSize = (screenWidth * 0.70).clamp(210.0, 270.0);
+            final innerSize = ringSize * (236.0 / 280.0);
+
             return Center(
               child: SizedBox(
-                width: 280,
-                height: 280,
+                width: ringSize,
+                height: ringSize,
                 child: GestureDetector(
                   behavior: HitTestBehavior.translucent,
                   onPanStart: (details) =>
@@ -1680,8 +1679,8 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
                       // Inner Circular Camera Preview with 1:1 natural aspect ratio
                       ClipOval(
                         child: SizedBox(
-                          width: 236,
-                          height: 236,
+                          width: innerSize,
+                          height: innerSize,
                           child: Stack(
                             fit: StackFit.expand,
                             children: [
@@ -1692,10 +1691,10 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
                                 child: Transform.translate(
                                   offset: Offset(_tiltX * 18, _tiltY * 18),
                                   child: Container(
-                                    width: 140,
-                                    height: 180,
+                                    width: innerSize * 0.60,
+                                    height: innerSize * 0.76,
                                     decoration: BoxDecoration(
-                                      borderRadius: BorderRadius.circular(70),
+                                      borderRadius: BorderRadius.circular(innerSize * 0.30),
                                       border: Border.all(
                                         color: _isCompletedAnimation
                                             ? const Color(0xFF34C759)
@@ -1723,7 +1722,7 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
 
                               // Biometric Landmark Mesh Overlay
                               CustomPaint(
-                                size: const Size(236, 236),
+                                size: Size(innerSize, innerSize),
                                 painter: BiometricFacialMeshPainter(
                                   tiltX: _tiltX,
                                   tiltY: _tiltY,
@@ -1737,9 +1736,9 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
                               // Animated Scanning Laser Shimmer Line
                               if (!_isCompletedAnimation)
                                 Positioned(
-                                  top: 236 * _scanController.value - 2,
-                                  left: 24,
-                                  right: 24,
+                                  top: innerSize * _scanController.value - 2,
+                                  left: 20,
+                                  right: 20,
                                   child: Container(
                                     height: 2.5,
                                     decoration: BoxDecoration(
@@ -1768,8 +1767,8 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
                               // Apple Face ID Completion Overlay
                               if (_isCompletedAnimation)
                                 Container(
-                                  width: 236,
-                                  height: 236,
+                                  width: innerSize,
+                                  height: innerSize,
                                   decoration: BoxDecoration(
                                     shape: BoxShape.circle,
                                     color: const Color(0xFF34C759)
@@ -1839,7 +1838,7 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
 
                       // Radial 36 Ticks Interactive Motion Painter
                       CustomPaint(
-                        size: const Size(280, 280),
+                        size: Size(ringSize, ringSize),
                         painter: FaceIdRingPainter(
                           completedTicks: _completedTicks,
                           motionAngle: _motionAngle,
@@ -1860,7 +1859,8 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
 
         // Guidance Prompt Pill (Separated, centered below the ring)
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width - 32),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
           decoration: BoxDecoration(
             color: (isDark ? Colors.black : Colors.white).withValues(alpha: 0.8),
             borderRadius: BorderRadius.circular(18),
@@ -1961,27 +1961,30 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
         const SizedBox(height: 12),
 
         // Pose Status Badges
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            _buildPoseBadge(
-              '1. Frontal',
-              _capturedSectors.contains(0) || _faceIdEmbeddings.isNotEmpty,
-              _faceIdStep == 0,
-            ),
-            const SizedBox(width: 8),
-            _buildPoseBadge(
-              '2. Left 15°',
-              _capturedSectors.contains(1) || _faceIdEmbeddings.length >= 2,
-              _faceIdStep == 1,
-            ),
-            const SizedBox(width: 8),
-            _buildPoseBadge(
-              '3. Right 15°',
-              _capturedSectors.contains(2) || _faceIdEmbeddings.length >= 3,
-              _faceIdStep == 2,
-            ),
-          ],
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              _buildPoseBadge(
+                '1. Frontal',
+                _capturedSectors.contains(0) || _faceIdEmbeddings.isNotEmpty,
+                _faceIdStep == 0,
+              ),
+              const SizedBox(width: 8),
+              _buildPoseBadge(
+                '2. Left 15°',
+                _capturedSectors.contains(1) || _faceIdEmbeddings.length >= 2,
+                _faceIdStep == 1,
+              ),
+              const SizedBox(width: 8),
+              _buildPoseBadge(
+                '3. Right 15°',
+                _capturedSectors.contains(2) || _faceIdEmbeddings.length >= 3,
+                _faceIdStep == 2,
+              ),
+            ],
+          ),
         ),
       ],
     );
@@ -2051,7 +2054,7 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
     return ClipRRect(
       borderRadius: BorderRadius.circular(20),
       child: Container(
-        height: 360,
+        height: (MediaQuery.of(context).size.height * 0.38).clamp(240.0, 360.0),
         decoration: BoxDecoration(
           color: isDark ? const Color(0xFF1E1F22) : Colors.black12,
           borderRadius: BorderRadius.circular(20),

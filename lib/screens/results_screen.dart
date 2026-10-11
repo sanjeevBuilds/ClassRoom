@@ -126,11 +126,11 @@ class _ResultsScreenState extends State<ResultsScreen> {
             children: [
               // Summary Header
               Padding(
-                padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+                padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
                 child: GlassCard(
                   hasGlow: true,
                   glowColor: AppTheme.discordPurple,
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceAround,
                     children: [
@@ -239,9 +239,13 @@ class _ResultsScreenState extends State<ResultsScreen> {
                                         const SizedBox(height: 3),
                                         Row(
                                           children: [
-                                            Text(
-                                              result.studentId!,
-                                              style: TextStyle(fontSize: 12, color: secondaryTextColor),
+                                            Expanded(
+                                              child: Text(
+                                                result.studentId!,
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: TextStyle(fontSize: 12, color: secondaryTextColor),
+                                              ),
                                             ),
                                             const SizedBox(width: 8),
                                             Container(

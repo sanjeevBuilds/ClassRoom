@@ -75,72 +75,76 @@ class _ProcessingScreenState extends State<ProcessingScreen> {
                   ? GlassCard(
                       padding: const EdgeInsets.all(24),
                       borderColor: AppTheme.discordRed.withValues(alpha: 0.3),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.error_outline_rounded, color: AppTheme.discordRed, size: 48),
-                          const SizedBox(height: 16),
-                          Text(
-                            'Processing Failed',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: primaryTextColor,
+                      child: SingleChildScrollView(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.error_outline_rounded, color: AppTheme.discordRed, size: 48),
+                            const SizedBox(height: 16),
+                            Text(
+                              'Processing Failed',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: primaryTextColor,
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            '$_error',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(fontSize: 13, color: secondaryTextColor),
-                          ),
-                          const SizedBox(height: 20),
-                          ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppTheme.discordPurple,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            const SizedBox(height: 8),
+                            Text(
+                              '$_error',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(fontSize: 13, color: secondaryTextColor),
                             ),
-                            onPressed: () => Navigator.pop(context),
-                            child: const Text('Go Back', style: TextStyle(color: Colors.white)),
-                          ),
-                        ],
+                            const SizedBox(height: 20),
+                            ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppTheme.discordPurple,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
+                              onPressed: () => Navigator.pop(context),
+                              child: const Text('Go Back', style: TextStyle(color: Colors.white)),
+                            ),
+                          ],
+                        ),
                       ),
                     )
                   : GlassCard(
                       hasGlow: true,
                       glowColor: AppTheme.discordPurple,
-                      padding: const EdgeInsets.symmetric(horizontal: 36, vertical: 32),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const SizedBox(
-                            width: 52,
-                            height: 52,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 3.5,
-                              valueColor: AlwaysStoppedAnimation<Color>(AppTheme.discordPurple),
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+                      child: SingleChildScrollView(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const SizedBox(
+                              width: 52,
+                              height: 52,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 3.5,
+                                valueColor: AlwaysStoppedAnimation<Color>(AppTheme.discordPurple),
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 24),
-                          Text(
-                            'Processing Sweep Video…',
-                            style: TextStyle(
-                              fontSize: 17,
-                              fontWeight: FontWeight.bold,
-                              color: primaryTextColor,
+                            const SizedBox(height: 24),
+                            Text(
+                              'Processing Sweep Video…',
+                              style: TextStyle(
+                                fontSize: 17,
+                                fontWeight: FontWeight.bold,
+                                color: primaryTextColor,
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Detecting faces, extracting features & clustering embeddings natively on-device',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: secondaryTextColor,
-                              height: 1.4,
+                            const SizedBox(height: 8),
+                            Text(
+                              'Detecting faces, extracting features & clustering embeddings natively on-device',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: secondaryTextColor,
+                                height: 1.4,
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
             ),

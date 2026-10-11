@@ -276,23 +276,26 @@ class _CaptureScreenState extends State<CaptureScreen>
   /// Scales camera preview to cover the entire screen while strictly preserving
   /// the true hardware sensor aspect ratio (zero squishing/distortion).
   Widget _buildFullscreenCameraPreview(BuildContext context, CameraController controller) {
-    final size = MediaQuery.of(context).size;
-    final double rawAspect = controller.value.aspectRatio;
-    final double previewAspect = rawAspect > 1.0 ? (1.0 / rawAspect) : rawAspect;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final double rawAspect = controller.value.aspectRatio;
+        final double previewAspect = rawAspect > 1.0 ? (1.0 / rawAspect) : rawAspect;
 
-    var scale = size.aspectRatio / previewAspect;
-    if (scale < 1) scale = 1 / scale;
-
-    return ClipRect(
-      child: Center(
-        child: Transform.scale(
-          scale: scale,
-          child: AspectRatio(
-            aspectRatio: previewAspect,
-            child: CameraPreview(controller),
+        return ClipRect(
+          child: SizedBox(
+            width: constraints.maxWidth,
+            height: constraints.maxHeight,
+            child: FittedBox(
+              fit: BoxFit.cover,
+              child: SizedBox(
+                width: constraints.maxWidth,
+                height: constraints.maxWidth / previewAspect,
+                child: CameraPreview(controller),
+              ),
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
@@ -341,8 +344,8 @@ class _CaptureScreenState extends State<CaptureScreen>
 
           // Guideline Instruction HUD Pill (Real-Time Motion Feedback)
           Positioned(
-            left: 0,
-            right: 0,
+            left: 16,
+            right: 16,
             top: (MediaQuery.of(context).size.height * 0.72) - 15,
             child: Center(
               child: IgnorePointer(
@@ -374,29 +377,37 @@ class _CaptureScreenState extends State<CaptureScreen>
                       color = const Color(0xFF57F287);
                     } else {
                       icon = Icons.straighten_rounded;
-                      text = 'Phone level • Sweep across classroom rows';
+                      text = 'Phone level • Sweep across rows';
                       color = AppTheme.discordLightPurple;
                     }
 
-                    return GlassCard(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      borderRadius: 20,
-                      borderColor: color.withValues(alpha: 0.4),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(icon, size: 14, color: color),
-                          const SizedBox(width: 8),
-                          Text(
-                            text,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              letterSpacing: 0.2,
-                            ),
+                    return ConstrainedBox(
+                      constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width - 32),
+                      child: GlassCard(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                        borderRadius: 20,
+                        borderColor: color.withValues(alpha: 0.4),
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(icon, size: 14, color: color),
+                              const SizedBox(width: 8),
+                              Text(
+                                text,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  letterSpacing: 0.2,
+                                ),
+                              ),
+                            ],
                           ),
-                        ],
+                        ),
                       ),
                     );
                   },
@@ -451,21 +462,22 @@ class _CaptureScreenState extends State<CaptureScreen>
             right: 0,
             child: SafeArea(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+                padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
                 child: Row(
                   children: [
                     GlassCard(
                       padding: const EdgeInsets.all(4),
                       borderRadius: 14,
                       child: IconButton(
-                        icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 20),
+                        icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 18),
                         onPressed: () => Navigator.pop(context),
+                        visualDensity: VisualDensity.compact,
                       ),
                     ),
-                    const SizedBox(width: 12),
+                    const SizedBox(width: 8),
                     Expanded(
                       child: GlassCard(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                         borderRadius: 14,
                         child: Row(
                           children: [
@@ -474,13 +486,13 @@ class _CaptureScreenState extends State<CaptureScreen>
                               size: 16,
                               color: _isRecording ? AppTheme.discordRed : AppTheme.discordPurple,
                             ),
-                            const SizedBox(width: 8),
+                            const SizedBox(width: 6),
                             Expanded(
                               child: Text(
                                 _isRecording ? 'Sweeping Classroom…' : 'Sweep across classroom',
                                 style: const TextStyle(
                                   color: Colors.white,
-                                  fontSize: 13,
+                                  fontSize: 12,
                                   fontWeight: FontWeight.w600,
                                 ),
                                 overflow: TextOverflow.ellipsis,
@@ -490,20 +502,20 @@ class _CaptureScreenState extends State<CaptureScreen>
                         ),
                       ),
                     ),
-                    const SizedBox(width: 10),
+                    const SizedBox(width: 8),
                     if (_isRecording)
                       GlassCard(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                         borderColor: AppTheme.discordRed.withValues(alpha: 0.5),
                         borderRadius: 14,
                         child: const Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.fiber_manual_record, color: AppTheme.discordRed, size: 14),
-                            SizedBox(width: 6),
+                            Icon(Icons.fiber_manual_record, color: AppTheme.discordRed, size: 12),
+                            SizedBox(width: 4),
                             Text(
                               'REC',
-                              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
                             ),
                           ],
                         ),
@@ -512,16 +524,16 @@ class _CaptureScreenState extends State<CaptureScreen>
                       GestureDetector(
                         onTap: _pickVideoFromGallery,
                         child: GlassCard(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                           borderRadius: 14,
                           child: const Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(Icons.upload_file_rounded, color: Colors.white, size: 16),
-                              SizedBox(width: 6),
+                              Icon(Icons.upload_file_rounded, color: Colors.white, size: 15),
+                              SizedBox(width: 4),
                               Text(
                                 'Upload',
-                                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11),
                               ),
                             ],
                           ),
