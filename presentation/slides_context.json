@@ -1,0 +1,297 @@
+{
+  "presentation_metadata": {
+    "title": "Automated Classroom Attendance from a Single Handheld Sweep Video",
+    "subtitle": "An Edge-Native, CPU-Oriented Benchmark of Face Detectors under Real Classroom Conditions",
+    "course_code": "23Z711 — Project Work I",
+    "institution": "Department of Computer Science and Engineering, PSG College of Technology, Coimbatore",
+    "academic_year": "2026–2027",
+    "faculty_supervisor": "Ms. Sneha C, Assistant Professor, Dept. of CSE",
+    "presentation_duration_minutes": 18,
+    "team_members": [
+      { "name": "Dileepan U S", "roll_no": "23Z319", "role": "Lead Architect & Edge Systems", "assigned_slides": [1, 2, 3, 4] },
+      { "name": "Sanjeev S", "roll_no": "23Z361", "role": "Native C++ Engine & Vision Front-End", "assigned_slides": [5, 6, 7, 8] },
+      { "name": "Sreeharini Ganishkaa S", "roll_no": "23Z370", "role": "Spatial Tracking, Homography & Exemplar Pruning", "assigned_slides": [9, 10, 11, 12] },
+      { "name": "Ananya R S", "roll_no": "23Z306", "role": "Decision Theory, Anti-Spoofing & Biometric Privacy", "assigned_slides": [13, 14, 15, 16] },
+      { "name": "Athish Pranav", "roll_no": "23Z310", "role": "Empirical Benchmarking, Hardware Profiling & LMS Sync", "assigned_slides": [17, 18, 19, 20] }
+    ],
+    "design_system": {
+      "theme": "Dark Academic Deep-Tech Glassmorphism",
+      "colors": {
+        "background": "#0B0F19",
+        "primary_accent": "#00E5FF",
+        "secondary_accent": "#818CF8",
+        "card_background": "#1E293B",
+        "card_border": "#334155",
+        "text_primary": "#F8FAFC",
+        "text_secondary": "#94A3B8",
+        "metric_positive": "#10B981",
+        "metric_warning": "#F59E0B"
+      },
+      "typography": {
+        "headings": "Outfit / Trebuchet MS",
+        "body": "Inter / Calibri",
+        "code_and_formulas": "JetBrains Mono / Consolas"
+      }
+    }
+  },
+  "slides": [
+    {
+      "slide_number": 1,
+      "speaker": { "name": "Dileepan U S", "roll_no": "23Z319" },
+      "category": "TITLE & ACADEMIC CONTEXT",
+      "title": "Automated Classroom Attendance from a Single Handheld Sweep Video",
+      "subtitle": "An Edge-Native, CPU-Oriented Benchmark of Face Detectors under Real Classroom Conditions",
+      "key_takeaways": [
+        "10-second handheld video sweep captures an entire 60-student lecture hall.",
+        "Delivers verified roll-call in 1.54 seconds on an unaccelerated smartphone CPU.",
+        "100% offline edge processing with zero cloud server cost and zero biometric privacy exposure."
+      ]
+    },
+    {
+      "slide_number": 2,
+      "speaker": { "name": "Dileepan U S", "roll_no": "23Z319" },
+      "category": "PROBLEM FORMULATION",
+      "title": "The Attendance Bottleneck in Higher Education",
+      "subtitle": "Operational Overhead, Proxy Inflation, and Practical Failure Modes",
+      "key_takeaways": [
+        "3 to 7 minutes lost per lecture period (10% to 14% of total semester teaching time).",
+        "8% to 12% proxy inflation across manual sign-in sheets and smartcard tapping.",
+        "Fixed CCTV arrays are cost-prohibitive (₹1.5L+ per hall), while static podium photos fail due to line-of-sight occlusion."
+      ]
+    },
+    {
+      "slide_number": 3,
+      "speaker": { "name": "Dileepan U S", "roll_no": "23Z319" },
+      "category": "ARCHITECTURAL COMPARISON",
+      "title": "Architectural Paradigms: Static vs CCTV vs Edge Sweep",
+      "subtitle": "Why Edge-Native Handheld Video Dominates Fixed Infrastructure",
+      "comparison_matrix": {
+        "fixed_cctv": { "cost": "₹1.5L+ per room", "latency": "30s-2m", "occlusion": "Moderate", "privacy": "High risk" },
+        "cloud_video": { "cost": "₹40k/month GPU", "latency": "15s-45s", "occlusion": "Low", "privacy": "Third-party risk" },
+        "classroom_edge": { "cost": "₹0.00", "latency": "1.54s", "occlusion": "Zero (Parallax)", "privacy": "Zero-Trust RAM" }
+      }
+    },
+    {
+      "slide_number": 4,
+      "speaker": { "name": "Dileepan U S", "roll_no": "23Z319" },
+      "category": "ALGORITHMIC NOVELTY 1",
+      "title": "Motion Parallax Occlusion Disentanglement",
+      "subtitle": "Mathematical Proof of Occlusion Decay Across a Handheld Sweep Trajectory",
+      "mathematical_formulation": {
+        "static_occlusion_rate": "P_static(Occlusion) > 0.40 in tiered classrooms",
+        "differential_motion_parallax": "Δθ_near >> Δθ_far across panning path C(t)",
+        "exponential_decay": "P_sweep(Occlusion) = Π P(Occluded_i, f) → 0"
+      }
+    },
+    {
+      "slide_number": 5,
+      "speaker": { "name": "Sanjeev S", "roll_no": "23Z361" },
+      "category": "SYSTEM ARCHITECTURE",
+      "title": "The 9-Stage Edge-Native C++ Pipeline",
+      "subtitle": "Deterministic Zero-Garbage-Collection Execution via Dart FFI",
+      "stages": [
+        "1. Temporal Subsampling (4 FPS, 60 frames)",
+        "2. Adaptive Laplacian Blur Rejection (tau=15)",
+        "3. Dual-Resolution Split (640x360 vs 1080p)",
+        "4. YuNet INT8 Face Detection + Horizon SAHI",
+        "5. ORB/RANSAC Homography Motion Compensation",
+        "6. Spatial Desk-Tracklet Fusion (Top-2 Exemplars)",
+        "7. ArcFace 512-D MobileFaceNet Feature Extraction",
+        "8. Average-Linkage HAC Clustering",
+        "9. Bayesian Asymmetric Cosine Roster Matching (tau=0.38)"
+      ]
+    },
+    {
+      "slide_number": 6,
+      "speaker": { "name": "Sanjeev S", "roll_no": "23Z361" },
+      "category": "ALGORITHMIC NOVELTY 2",
+      "title": "Dual-Resolution Processing & Adaptive Blur Recovery",
+      "subtitle": "Overcoming Frame Starvation in Handheld Classroom Video Sweeps",
+      "key_takeaways": [
+        "Panning motion drops Laplacian variance to 12-30; static tau=100 dropped 85% of frames.",
+        "Adaptive fallback: If < 35% of frames pass, dynamically retains top 65% sharpest frames.",
+        "Dual-resolution split: 640x360 for 38.5ms detection; 1080p native crops for ArcFace."
+      ]
+    },
+    {
+      "slide_number": 7,
+      "speaker": { "name": "Sanjeev S", "roll_no": "23Z361" },
+      "category": "ALGORITHMIC NOVELTY 3",
+      "title": "Perspective Vanishing-Line Projective Geometry Model",
+      "subtitle": "Constraining Face Scale and Eliminating Spurious Detections",
+      "key_takeaways": [
+        "Classroom vanishing horizon: y_horizon = f · tan(φ_camera).",
+        "Monotonic scale envelope: h(y) = k · (y - y_horizon)^γ rejects T-shirt and poster false positives.",
+        "Score stratification: tau_det=0.30 near horizon for rear rows, tau_det=0.55 for front rows."
+      ]
+    },
+    {
+      "slide_number": 8,
+      "speaker": { "name": "Sanjeev S", "roll_no": "23Z361" },
+      "category": "VISION FRONT-END",
+      "title": "Depth-Stratified Horizon SAHI & Dynamic Contrast",
+      "subtitle": "Resolving Distant Rear-Row Students Without 9x Grid Compute Penalty",
+      "key_takeaways": [
+        "Slices exclusively the narrow vanishing horizon band [0.15H, 0.55H] where rows 6-12 reside.",
+        "Cascaded dynamic trigger: Bypasses SAHI if initial pass detects expected student count.",
+        "2x2 CLAHE on luminance Y-channel provides +34% contrast boost under washed-out projector lighting."
+      ]
+    },
+    {
+      "slide_number": 9,
+      "speaker": { "name": "Sreeharini Ganishkaa S", "roll_no": "23Z370" },
+      "category": "ALGORITHMIC NOVELTY 4",
+      "title": "Spatial Desk-Tracklet Fusion (ST-DTF)",
+      "subtitle": "ORB/RANSAC Homography Motion Compensation & Seated Desk Stabilization",
+      "key_takeaways": [
+        "Handheld panning causes high inter-frame velocity that breaks standard ByteTrack/DeepSORT.",
+        "Fast ORB + RANSAC calculates 3x3 homography H_t, projecting detections into a global desk grid.",
+        "Detections with spatial IoU ≥ 0.40 in desk coordinates are aggregated into unified Desk Tracklets."
+      ]
+    },
+    {
+      "slide_number": 10,
+      "speaker": { "name": "Sreeharini Ganishkaa S", "roll_no": "23Z370" },
+      "category": "EDGE CO-DESIGN NOVELTY",
+      "title": "Multi-Criteria Quality Exemplar Pruning",
+      "subtitle": "Slashing ArcFace Neural Inferences by 75% for Mobile Thermal Stability",
+      "key_takeaways": [
+        "50 students × 40 sharp frames = 2,000 raw detections (35+ seconds CPU compute).",
+        "Quality function Q = 0.40·Conf + 0.40·Frontality + 0.20·Scale ranks every detection.",
+        "ArcFace runs strictly on top k=2 exemplars per desk, cutting forward passes to ≤ 100 in 0.7s."
+      ]
+    },
+    {
+      "slide_number": 11,
+      "speaker": { "name": "Sreeharini Ganishkaa S", "roll_no": "23Z370" },
+      "category": "GEOMETRIC ESTIMATION",
+      "title": "6-DoF 3D Pose Estimation & Frontality Normalization",
+      "subtitle": "Direct Perspective-n-Point Head Pose Calculation via solvePnP",
+      "key_takeaways": [
+        "Uses 5 YuNet 2D facial landmarks fitted against a canonical 3D face model via solvePnP.",
+        "Extracts 6-DoF [Yaw, Pitch, Roll] with zero auxiliary neural network overhead.",
+        "Frontality metric cos(ψ)cos(θ)cos(φ) and synthetic 3D frontalization align faces into 112x112 canonical view."
+      ]
+    },
+    {
+      "slide_number": 12,
+      "speaker": { "name": "Sreeharini Ganishkaa S", "roll_no": "23Z370" },
+      "category": "IDENTITY CONSOLIDATION",
+      "title": "Identity Consolidation: Average-Linkage HAC",
+      "subtitle": "Robust Identity Clustering Across Fragmented Tracklets",
+      "key_takeaways": [
+        "Resolves tracklet splits caused by transient occlusions (e.g. teacher walking past).",
+        "Average-linkage Hierarchical Agglomerative Clustering in cosine distance space (tau_cluster=0.35).",
+        "Generates one noise-free 512-D centroid vector per physical student in under 2ms."
+      ]
+    },
+    {
+      "slide_number": 13,
+      "speaker": { "name": "Ananya R S", "roll_no": "23Z306" },
+      "category": "STATISTICAL DECISION THEORY",
+      "title": "Bayesian Asymmetric Matching & 'All-Present' Prior",
+      "subtitle": "Optimal Decision Boundaries Under Classroom Prior Distributions",
+      "key_takeaways": [
+        "Closed-classroom prior: P(Present) ≈ 0.85-0.95; intruder prior P(Intruder) ≈ 0.01.",
+        "Asymmetric risk: False Negative cost (marking present absent) = 10.0; False Positive cost = 1.0.",
+        "Bayesian decision rule validates calibrated operating threshold tau_match = 0.38 via 11-point ROC analysis."
+      ]
+    },
+    {
+      "slide_number": 14,
+      "speaker": { "name": "Ananya R S", "roll_no": "23Z306" },
+      "category": "ALGORITHMIC NOVELTY 5",
+      "title": "Passive Sweep Parallax 3D Liveness / Anti-Spoofing",
+      "subtitle": "Zero-Cost 3D Geometric Anti-Spoofing Against Proxy Photo & Screen Attacks",
+      "key_takeaways": [
+        "2D Spoof (iPad screen / photo): Rigid planar surface adhering to single homography H_screen (Residual error ε ≈ 0).",
+        "3D Live Human Head: Differential motion parallax creates non-zero depth variance (Depth Var > tau_3D).",
+        "Rejects 88% of proxy attacks at only 15ms compute overhead with zero specialist sensors."
+      ]
+    },
+    {
+      "slide_number": 15,
+      "speaker": { "name": "Ananya R S", "roll_no": "23Z306" },
+      "category": "BIOMETRIC ADAPTATION",
+      "title": "Progressive Continuous Roster Adaptation",
+      "subtitle": "Quality-Weighted Exponential Moving Average (EMA) Gallery Updating",
+      "key_takeaways": [
+        "Overcomes semester biometric drift (haircut, spectacles, beard growth).",
+        "Quality-gated EMA update: g^(t+1) = Norm((1 - α·Q)g^(t) + α·Q·e_new) triggers only if Match ≥ 0.85.",
+        "Apple Face ID 3D multi-pose enrollment captures Frontal, Left 15°, and Right 15° vectors."
+      ]
+    },
+    {
+      "slide_number": 16,
+      "speaker": { "name": "Ananya R S", "roll_no": "23Z306" },
+      "category": "STATUTORY COMPLIANCE",
+      "title": "Zero-Trust Edge Privacy & DPDP Act 2023 Compliance",
+      "subtitle": "Strict Legal Architecture Protecting Student Biometric Sovereignty",
+      "key_takeaways": [
+        "Full compliance with India's DPDP Act 2023 and GDPR Article 9 (Sensitive Biometric Data).",
+        "Raw sweep video exists solely in transient RAM and is permanently purged post-sweep.",
+        "Mathematical 512-D embeddings are stored in local AES-256 encrypted SQLite; zero data sent over network."
+      ]
+    },
+    {
+      "slide_number": 17,
+      "speaker": { "name": "Athish Pranav", "roll_no": "23Z310" },
+      "category": "EMPIRICAL BENCHMARK AUDIT",
+      "title": "Empirical Benchmark Audit & Hardware Profiling",
+      "subtitle": "52 Native Execution Runs Across 10 Structured Scenarios (8,480 Faces)",
+      "latency_profile": {
+        "sample": "11.86 ms (12.3%)",
+        "blur_filter": "8.04 ms (8.3%)",
+        "yunet_detect": "38.46 ms (39.8%)",
+        "arcface_embed": "35.18 ms (36.5%)",
+        "cluster_and_match": "2.96 ms (3.1%)",
+        "total_frame": "96.49 ms",
+        "full_sweep_60_frames": "1.54 seconds",
+        "peak_ram": "45.8 MB"
+      }
+    },
+    {
+      "slide_number": 18,
+      "speaker": { "name": "Athish Pranav", "roll_no": "23Z310" },
+      "category": "ABLATION & VALIDATION",
+      "title": "Feature Ablation Study & ROC Operating Curves",
+      "subtitle": "Quantifying Cumulative Algorithmic Gains to Overall Attendance F1-Score",
+      "ablation_progression": [
+        { "stage": "Baseline 2D", "f1": 0.812, "gain": "+0.000" },
+        { "stage": "+ Tracklets (ST-DTF)", "f1": 0.845, "gain": "+0.033" },
+        { "stage": "+ Homography Motion Comp", "f1": 0.872, "gain": "+0.060" },
+        { "stage": "+ CLAHE Dynamic Contrast", "f1": 0.895, "gain": "+0.083" },
+        { "stage": "+ 3D Pose Frontalization", "f1": 0.932, "gain": "+0.120" },
+        { "stage": "+ Progressive EMA Updates", "f1": 0.962, "gain": "+0.150" }
+      ]
+    },
+    {
+      "slide_number": 19,
+      "speaker": { "name": "Athish Pranav", "roll_no": "23Z310" },
+      "category": "ORACLE BENCHMARK",
+      "title": "Edge-Native Pipeline vs Cloud GPU Oracle Benchmark",
+      "subtitle": "Demonstrating 97.1% Accuracy Parity Against an Unconstrained GPU Server",
+      "comparison": {
+        "model_footprint": "380 MB (Cloud) vs 3.2 MB (Edge) — 118x more compact",
+        "server_cost": "₹40,000/month (Cloud) vs ₹0.00 (Edge)",
+        "sweep_latency": "14.2s (Cloud) vs 1.54s (Edge)",
+        "front_mid_recall": "99.4% (Cloud) vs 98.8% (Edge)",
+        "rear_row_recall": "96.2% (Cloud) vs 93.5% (Edge)",
+        "overall_parity": "97.1% accuracy parity with zero cloud bills"
+      }
+    },
+    {
+      "slide_number": 20,
+      "speaker": { "name": "Athish Pranav", "roll_no": "23Z310" },
+      "category": "LIVE DEMONSTRATION & CONCLUSION",
+      "title": "Engineering Artifacts, LMS Sync & Live System Demo",
+      "subtitle": "Cross-Platform Flutter Delivery & Institutional LMS Integration",
+      "deliverables": [
+        "Hardware-Guided Sweep HUD driven by phone Gyroscope & Accelerometer (optimal tilt 18° and pan speed 1.2 rad/s).",
+        "Apple Face ID 36-tick animated radial mesh with multi-pose verification.",
+        "REST API synchronization with PSG Tech e-Campus, Google Classroom & Canvas LMS.",
+        "Proven edge-native computer vision delivering fast, zero-cost, privacy-compliant classroom attendance."
+      ]
+    }
+  ]
+}
