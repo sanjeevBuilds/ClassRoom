@@ -4,9 +4,13 @@ import 'dart:io';
 import 'dart:isolate';
 import 'dart:math';
 import 'dart:typed_data';
+import 'dart:ui' show Rect;
 
 import 'package:ffi/ffi.dart';
-import 'package:flutter/services.dart' show rootBundle;
+import 'package:flutter/services.dart' show rootBundle, MethodChannel;
+import 'package:flutter_onnxruntime/flutter_onnxruntime.dart';
+import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
+import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
@@ -19,16 +23,6 @@ import 'classroom_bindings.dart';
 /// entire sample -> blur -> detect -> embed -> cluster -> match sequence
 /// natively and hands back only a JSON result — see
 /// native/include/classroom/pipeline.h for the design rationale.
-///
-/// Owns the extracted model/DB file paths: the C++ side opens real files by
-/// path (cv::imread, Ort::Session, sqlite3_open), not Flutter asset-bundle
-/// keys, so the .onnx assets are copied out of the asset bundle to disk
-/// once, on first launch.
-///
-/// Each pipeline call runs on a background Isolate — ClassroomProcessSweepVideo
-/// can take several seconds, and an FFI call blocks the calling isolate's
-/// event loop for its whole duration, which would freeze the UI if run on
-/// the main isolate.
 class ClassroomEngine {
   ClassroomEngine._(this.yunetModelPath, this.arcfaceModelPath, this._baseDir) {
     switchClass('CS101'); // Default fallback
@@ -44,6 +38,60 @@ class ClassroomEngine {
   String currentClassId = 'CS101';
   FacePose? lastEnrollmentPose;
   final List<String> _pendingFaceIdPhotos = [];
+
+  static const MethodChannel _frameChannel = MethodChannel('com.example.classroom/video_frames');
+  OrtSession? _arcfaceSession;
+
+  // Enrollment detector: enables landmarks & classification for 3D Face ID pose calibration
+  final FaceDetector _enrollmentDetector = FaceDetector(
+    options: FaceDetectorOptions(
+      enableLandmarks: true,
+      enableContours: false,
+      enableClassification: true,
+      enableTracking: true,
+      minFaceSize: 0.05,
+      performanceMode: FaceDetectorMode.accurate,
+    ),
+  );
+
+  // Multi-face classroom sweep detector: configured for ultra-fast, high-density row detection
+  // minFaceSize 0.015 enables rear-row student detection down to ~20px without missing distant faces
+  final FaceDetector _videoDetector = FaceDetector(
+    options: FaceDetectorOptions(
+      enableLandmarks: false,
+      enableContours: false,
+      enableClassification: false,
+      enableTracking: true,
+      minFaceSize: 0.015,
+      performanceMode: FaceDetectorMode.accurate,
+    ),
+  );
+
+  Future<FacePose?> detectPoseFromPhoto(String photoPath) async {
+    try {
+      final inputImage = InputImage.fromFilePath(photoPath);
+      final faces = await _enrollmentDetector.processImage(inputImage);
+      if (faces.isEmpty) return null;
+      final mainFace = faces.reduce((a, b) =>
+          (a.boundingBox.width * a.boundingBox.height) >
+          (b.boundingBox.width * b.boundingBox.height) ? a : b);
+      final yaw = mainFace.headEulerAngleY ?? 0.0;
+      final pitch = mainFace.headEulerAngleX ?? 0.0;
+      final roll = mainFace.headEulerAngleZ ?? 0.0;
+      final frontality = (1.0 - (yaw.abs() / 45.0)).clamp(0.0, 1.0);
+      return FacePose(
+        pitch: pitch,
+        yaw: yaw,
+        roll: roll,
+        tx: 0,
+        ty: 0,
+        tz: 50,
+        frontalityScore: frontality,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
 
   void switchClass(String classId) {
     currentClassId = classId;
@@ -76,10 +124,26 @@ class ClassroomEngine {
       yunet = await _extractAsset('assets/models/yunet_int8.onnx', p.join(dir.path, 'yunet_int8.onnx'));
       arcface = await _extractAsset('assets/models/arcface_mobilefacenet.onnx', p.join(dir.path, 'arcface_mobilefacenet.onnx'));
     } catch (e) {
-      print('WARNING: ONNX models missing from assets/models/. ML pipelines will fail if called: $e');
+      print('WARNING: ONNX models missing from assets/models/: $e');
     }
     
-    return ClassroomEngine._(yunet, arcface, dir.path);
+    final engine = ClassroomEngine._(yunet, arcface, dir.path);
+    await engine._initArcFace(arcface);
+    return engine;
+  }
+
+  Future<void> _initArcFace(String modelPath) async {
+    try {
+      final ort = OnnxRuntime();
+      if (modelPath.isNotEmpty && await File(modelPath).exists()) {
+        _arcfaceSession = await ort.createSession(modelPath);
+      } else {
+        _arcfaceSession = await ort.createSessionFromAsset('assets/models/arcface_mobilefacenet.onnx');
+      }
+      print('ArcFace ONNX initialized: input=${_arcfaceSession?.inputNames}, output=${_arcfaceSession?.outputNames}');
+    } catch (e) {
+      print('ArcFace ONNX init fallback/warning: $e');
+    }
   }
 
   static Future<String> _extractAsset(String assetKey, String destPath) async {
@@ -164,13 +228,211 @@ class ClassroomEngine {
     await file.writeAsString(jsonEncode(students));
   }
 
-  /// Detects the largest face in [photoPath], embeds it, and saves it to
-  /// the roster DB under [studentId]/[name]. Always persists to local roster.
+  /// Extracts a 512-D face embedding using the deep ArcFace MobileFaceNet ONNX model.
+  /// Falls back to normalized visual crop features if the ONNX session is unavailable.
+  Future<Float32List> _getFaceEmbeddingFromImage({
+    required String imagePath,
+    required Rect boundingBox,
+    img.Image? preloadedImage,
+  }) async {
+    img.Image? decoded = preloadedImage;
+    if (decoded == null) {
+      try {
+        final bytes = await File(imagePath).readAsBytes();
+        decoded = img.decodeImage(bytes);
+      } catch (e) {
+        print('Error decoding image $imagePath: $e');
+      }
+    }
+
+    if (decoded == null) {
+      return Float32List(512);
+    }
+
+    // 1. ArcFace ONNX inference
+    if (_arcfaceSession != null) {
+      try {
+        final padW = (boundingBox.width * 0.15).round();
+        final padH = (boundingBox.height * 0.15).round();
+        final x1 = (boundingBox.left - padW).clamp(0, decoded.width - 1).toInt();
+        final y1 = (boundingBox.top - padH).clamp(0, decoded.height - 1).toInt();
+        final x2 = (boundingBox.right + padW).clamp(x1 + 1, decoded.width).toInt();
+        final y2 = (boundingBox.bottom + padH).clamp(y1 + 1, decoded.height).toInt();
+
+        final cropped = img.copyCrop(decoded, x: x1, y: y1, width: x2 - x1, height: y2 - y1);
+        final resized = img.copyResize(cropped, width: 112, height: 112);
+
+        final inputFloats = Float32List(1 * 3 * 112 * 112);
+        const channelStride = 112 * 112;
+        for (int y = 0; y < 112; y++) {
+          for (int x = 0; x < 112; x++) {
+            final p = resized.getPixel(x, y);
+            final offset = y * 112 + x;
+            inputFloats[0 * channelStride + offset] = (p.r - 127.5) / 127.5;
+            inputFloats[1 * channelStride + offset] = (p.g - 127.5) / 127.5;
+            inputFloats[2 * channelStride + offset] = (p.b - 127.5) / 127.5;
+          }
+        }
+
+        final inName = _arcfaceSession!.inputNames.first;
+        final outName = _arcfaceSession!.outputNames.first;
+        final inputTensor = await OrtValue.fromList(inputFloats, [1, 3, 112, 112]);
+        final outputs = await _arcfaceSession!.run({inName: inputTensor});
+        final rawEmb = await outputs[outName]!.asList();
+
+        double sumSq = 0.0;
+        for (final v in rawEmb) {
+          final d = (v as num).toDouble();
+          sumSq += d * d;
+        }
+        final norm = sqrt(sumSq);
+        final emb512 = Float32List(512);
+        if (norm > 0) {
+          for (int i = 0; i < 512; i++) {
+            emb512[i] = (rawEmb[i] as num).toDouble() / norm;
+          }
+          return emb512;
+        }
+      } catch (e) {
+        print('ArcFace ONNX inference error: $e');
+      }
+    }
+
+    return _extractFallbackCropEmbedding(decoded, boundingBox);
+  }
+
+  Float32List _extractFallbackCropEmbedding(img.Image image, Rect bbox) {
+    final list = Float32List(512);
+    final x1 = bbox.left.clamp(0, image.width - 1).toInt();
+    final y1 = bbox.top.clamp(0, image.height - 1).toInt();
+    final x2 = bbox.right.clamp(x1 + 1, image.width).toInt();
+    final y2 = bbox.bottom.clamp(y1 + 1, image.height).toInt();
+    final w = x2 - x1;
+    final h = y2 - y1;
+    if (w <= 0 || h <= 0) return list;
+
+    final cropped = img.copyCrop(image, x: x1, y: y1, width: w, height: h);
+    final thumb = img.copyResize(cropped, width: 16, height: 16);
+
+    double sumSq = 0.0;
+    for (int y = 0; y < 16; y++) {
+      for (int x = 0; x < 16; x++) {
+        final p = thumb.getPixel(x, y);
+        final idx = (y * 16 + x) * 2;
+        final luma = (0.299 * p.r + 0.587 * p.g + 0.114 * p.b) / 255.0;
+        final chrom = ((p.r - p.b) / 255.0);
+        list[idx % 512] += luma;
+        list[(idx + 1) % 512] += chrom;
+      }
+    }
+
+    for (int i = 0; i < 512; i++) {
+      sumSq += list[i] * list[i];
+    }
+    final norm = sqrt(sumSq);
+    if (norm > 0) {
+      for (int i = 0; i < 512; i++) {
+        list[i] /= norm;
+      }
+    }
+    return list;
+  }
+
+  double _cosineSimilarity(Float32List a, Float32List b) {
+    if (a.length != b.length || a.isEmpty) return 0.0;
+    double dot = 0.0;
+    for (int i = 0; i < a.length; i++) {
+      dot += a[i] * b[i];
+    }
+    return dot;
+  }
+
+  List<Float32List> _clusterEmbeddings(List<Float32List> embeddings, {double tauCluster = 0.35}) {
+    if (embeddings.isEmpty) return [];
+    final clusters = <List<Float32List>>[];
+
+    for (final emb in embeddings) {
+      double bestSim = -1.0;
+      int bestClusterIdx = -1;
+
+      for (int i = 0; i < clusters.length; i++) {
+        double sumSim = 0.0;
+        for (final cEmb in clusters[i]) {
+          sumSim += _cosineSimilarity(emb, cEmb);
+        }
+        final avgSim = sumSim / clusters[i].length;
+        if (avgSim > bestSim) {
+          bestSim = avgSim;
+          bestClusterIdx = i;
+        }
+      }
+
+      if (bestClusterIdx != -1 && (1.0 - bestSim) <= tauCluster) {
+        clusters[bestClusterIdx].add(emb);
+      } else {
+        clusters.add([emb]);
+      }
+    }
+
+    return clusters.map((cluster) {
+      final centroid = Float32List(512);
+      for (final e in cluster) {
+        for (int i = 0; i < 512; i++) {
+          centroid[i] += e[i];
+        }
+      }
+      double normSq = 0.0;
+      for (int i = 0; i < 512; i++) {
+        centroid[i] /= cluster.length;
+        normSq += centroid[i] * centroid[i];
+      }
+      final norm = sqrt(normSq);
+      if (norm > 0) {
+        for (int i = 0; i < 512; i++) {
+          centroid[i] /= norm;
+        }
+      }
+      return centroid;
+    }).toList();
+  }
+
+  /// Detects the largest face in [photoPath], embeds it via ArcFace, and saves it.
+  /// Returns false if no face was found (strict rejection).
   Future<bool> enrollStudentFromPhoto({
     required String photoPath,
     required String studentId,
     required String name,
   }) async {
+    final inputImage = InputImage.fromFilePath(photoPath);
+    final faces = await _enrollmentDetector.processImage(inputImage);
+    if (faces.isEmpty) {
+      return false;
+    }
+
+    final mainFace = faces.reduce((a, b) =>
+        (a.boundingBox.width * a.boundingBox.height) >
+        (b.boundingBox.width * b.boundingBox.height) ? a : b);
+
+    final yaw = mainFace.headEulerAngleY ?? 0.0;
+    final pitch = mainFace.headEulerAngleX ?? 0.0;
+    final roll = mainFace.headEulerAngleZ ?? 0.0;
+    final frontality = (1.0 - (yaw.abs() / 45.0)).clamp(0.0, 1.0);
+
+    lastEnrollmentPose = FacePose(
+      pitch: pitch,
+      yaw: yaw,
+      roll: roll,
+      tx: 0,
+      ty: 0,
+      tz: 50,
+      frontalityScore: frontality,
+    );
+
+    final embedding = await _getFaceEmbeddingFromImage(
+      imagePath: photoPath,
+      boundingBox: mainFace.boundingBox,
+    );
+
     try {
       await Isolate.run(() => _enrollStudentFromPhoto(_EnrollArgs(
             photoPath: photoPath,
@@ -180,42 +442,50 @@ class ClassroomEngine {
             arcfaceModelPath: arcfaceModelPath,
             rosterDbPath: rosterDbPath,
           )));
-    } catch (e) {
-      print('Native enrollStudentFromPhoto fallback: $e');
-    }
-
-    lastEnrollmentPose ??= const FacePose(
-      pitch: 0.0,
-      yaw: 0.0,
-      roll: 0.0,
-      tx: 0,
-      ty: 0,
-      tz: 50,
-      frontalityScore: 0.98,
-    );
+    } catch (_) {}
 
     await _persistStudentToJson(
       classId: currentClassId,
       studentId: studentId,
       name: name,
       photoPath: photoPath,
+      embeddings: [embedding],
     );
 
     return true;
   }
 
-  /// Multi-angle 3D face enrollment (Apple Face ID style): detects, aligns,
-  /// and extracts embeddings from multiple angle photos (Frontal, Left 15°, Right 15°)
-  /// and saves all 512-D vectors under [studentId]/[name].
-  /// Returns the number of successfully enrolled angles (>= 1 on success).
+  /// Multi-angle 3D face enrollment (Apple Face ID style): detects, validates,
+  /// and extracts embeddings from multiple angle photos.
   Future<int> enrollStudentFromPhotos({
     required List<String> photoPaths,
     required String studentId,
     required String name,
   }) async {
-    int nativeCount = 0;
+    final validEmbeddings = <Float32List>[];
+    for (final p in photoPaths) {
+      try {
+        final inputImage = InputImage.fromFilePath(p);
+        final faces = await _enrollmentDetector.processImage(inputImage);
+        if (faces.isNotEmpty) {
+          final mainFace = faces.reduce((a, b) =>
+              (a.boundingBox.width * a.boundingBox.height) >
+              (b.boundingBox.width * b.boundingBox.height) ? a : b);
+          final emb = await _getFaceEmbeddingFromImage(
+            imagePath: p,
+            boundingBox: mainFace.boundingBox,
+          );
+          validEmbeddings.add(emb);
+        }
+      } catch (_) {}
+    }
+
+    if (validEmbeddings.isEmpty) {
+      return 0;
+    }
+
     try {
-      nativeCount = await Isolate.run(() => _enrollStudentFromPhotos(_MultiEnrollArgs(
+      await Isolate.run(() => _enrollStudentFromPhotos(_MultiEnrollArgs(
             photoPaths: photoPaths,
             studentId: studentId,
             name: name,
@@ -223,22 +493,62 @@ class ClassroomEngine {
             arcfaceModelPath: arcfaceModelPath,
             rosterDbPath: rosterDbPath,
           )));
-    } catch (e) {
-      print('Native enrollStudentFromPhotos fallback: $e');
-    }
+    } catch (_) {}
 
     await _persistStudentToJson(
       classId: currentClassId,
       studentId: studentId,
       name: name,
       photoPaths: photoPaths,
+      embeddings: validEmbeddings,
     );
 
-    return nativeCount > 0 ? nativeCount : (photoPaths.isNotEmpty ? photoPaths.length : 1);
+    return validEmbeddings.length;
+  }
+
+  /// Processes a face photo, validates face detection, and returns an Embedding.
+  Future<Embedding?> processFacePhoto(String photoPath) async {
+    final inputImage = InputImage.fromFilePath(photoPath);
+    final faces = await _enrollmentDetector.processImage(inputImage);
+    if (faces.isEmpty) {
+      lastEnrollmentPose = null;
+      return null;
+    }
+
+    final mainFace = faces.reduce((a, b) =>
+        (a.boundingBox.width * a.boundingBox.height) >
+        (b.boundingBox.width * b.boundingBox.height) ? a : b);
+
+    final yaw = mainFace.headEulerAngleY ?? 0.0;
+    final pitch = mainFace.headEulerAngleX ?? 0.0;
+    final roll = mainFace.headEulerAngleZ ?? 0.0;
+    final frontality = (1.0 - (yaw.abs() / 45.0)).clamp(0.0, 1.0);
+
+    lastEnrollmentPose = FacePose(
+      pitch: pitch,
+      yaw: yaw,
+      roll: roll,
+      tx: 0,
+      ty: 0,
+      tz: 50,
+      frontalityScore: frontality,
+    );
+
+    _pendingFaceIdPhotos.add(photoPath);
+
+    final vec = await _getFaceEmbeddingFromImage(
+      imagePath: photoPath,
+      boundingBox: mainFace.boundingBox,
+    );
+
+    return Embedding(
+      detectionId: 'faceid_angle_${_pendingFaceIdPhotos.length}',
+      vector: vec,
+    );
   }
 
   /// Runs the full pipeline on a recorded sweep video and returns the
-  /// attendance results.
+  /// attendance results using real face detection, ArcFace embeddings, and calibrated matching.
   Future<List<AttendanceResult>> processSweepVideo(String videoPath) async {
     List<AttendanceResult> results = [];
     try {
@@ -248,26 +558,122 @@ class ClassroomEngine {
             arcfaceModelPath: arcfaceModelPath,
             rosterDbPath: rosterDbPath,
           )));
-    } catch (e) {
-      print('Native processSweepVideo fallback: $e');
-    }
+    } catch (_) {}
 
     if (results.isNotEmpty) {
       return results;
     }
 
-    // Android/offline fallback: evaluate attendance against the enrolled roster
+    // Hardware frame extraction at 4.0 FPS
+    List<String> framePaths = [];
+    try {
+      final res = await _frameChannel.invokeMethod('extractFrames', {
+        'videoPath': videoPath,
+        'fps': 4.0,
+        'maxFrames': 40,
+      });
+      if (res is List) {
+        framePaths = List<String>.from(res);
+      }
+    } catch (e) {
+      print('Frame extraction error: $e');
+    }
+
     final enrolled = await getEnrolledStudents();
     if (enrolled.isEmpty) {
       return [];
     }
 
-    final random = Random();
+    if (framePaths.isEmpty) {
+      return enrolled.map((s) => AttendanceResult(
+        studentId: s['student_id'] as String? ?? '',
+        name: s['name'] as String? ?? 'Student',
+        status: AttendanceStatus.absent,
+        similarityScore: 0.0,
+      )).toList();
+    }
+
+    // Detect faces across all extracted video frames
+    final detectedFaceEmbeddings = <Float32List>[];
+
+    for (final fPath in framePaths) {
+      try {
+        final inputImage = InputImage.fromFilePath(fPath);
+        final faces = await _videoDetector.processImage(inputImage);
+        if (faces.isNotEmpty) {
+          final bytes = await File(fPath).readAsBytes();
+          final decoded = img.decodeImage(bytes);
+          for (final f in faces) {
+            if (f.boundingBox.width >= 20 && f.boundingBox.height >= 20) {
+              final emb = await _getFaceEmbeddingFromImage(
+                imagePath: fPath,
+                boundingBox: f.boundingBox,
+                preloadedImage: decoded,
+              );
+              detectedFaceEmbeddings.add(emb);
+            }
+          }
+        }
+      } catch (e) {
+        print('Error processing frame $fPath: $e');
+      }
+    }
+
+    // If ZERO faces were detected in the entire sweep video, everyone is strictly ABSENT
+    if (detectedFaceEmbeddings.isEmpty) {
+      return enrolled.map((s) => AttendanceResult(
+        studentId: s['student_id'] as String? ?? '',
+        name: s['name'] as String? ?? 'Student',
+        status: AttendanceStatus.absent,
+        similarityScore: 0.0,
+      )).toList();
+    }
+
+    // Cluster detected face embeddings (tau_cluster = 0.35)
+    final clusters = _clusterEmbeddings(detectedFaceEmbeddings, tauCluster: 0.35);
+
+    // Match clusters against enrolled roster using calibrated tau_match = 0.38
+    const double tauMatch = 0.38;
+    final matchedStudentIds = <String>{};
+    final studentScores = <String, double>{};
+
+    for (final clusterCentroid in clusters) {
+      double bestScore = -1.0;
+      String? bestStudentId;
+
+      for (final s in enrolled) {
+        final sId = s['student_id'] as String? ?? '';
+        final rawEmbs = (s['reference_embeddings'] as List?) ?? [];
+
+        for (final rawEmb in rawEmbs) {
+          if (rawEmb is List) {
+            final refVec = Float32List.fromList(rawEmb.map((v) => (v as num).toDouble()).toList());
+            final sim = _cosineSimilarity(clusterCentroid, refVec);
+            if (sim > bestScore) {
+              bestScore = sim;
+              bestStudentId = sId;
+            }
+          }
+        }
+      }
+
+      if (bestStudentId != null) {
+        if (!studentScores.containsKey(bestStudentId) || bestScore > studentScores[bestStudentId]!) {
+          studentScores[bestStudentId] = bestScore;
+        }
+        if (bestScore >= tauMatch) {
+          matchedStudentIds.add(bestStudentId);
+        }
+      }
+    }
+
+    // Build final attendance results for each enrolled student
     return enrolled.map((s) {
-      final sId = s['student_id'] as String? ?? 'unknown';
+      final sId = s['student_id'] as String? ?? '';
       final sName = s['name'] as String? ?? 'Student';
-      final isPresent = random.nextDouble() < 0.90;
-      final score = isPresent ? (0.78 + random.nextDouble() * 0.18) : (0.15 + random.nextDouble() * 0.15);
+      final score = studentScores[sId] ?? 0.0;
+      final isPresent = matchedStudentIds.contains(sId);
+
       return AttendanceResult(
         studentId: sId,
         name: sName,
@@ -405,53 +811,6 @@ class ClassroomEngine {
     return importedCount;
   }
 
-  /// Processes a face photo, validates face detection via YuNet, and returns an Embedding.
-  Future<Embedding?> processFacePhoto(String photoPath) async {
-    final tempDir = await getTemporaryDirectory();
-    final testDbPath = p.join(tempDir.path, 'face_test_${DateTime.now().microsecondsSinceEpoch}.db');
-    try {
-      bool hasFace = true;
-      try {
-        hasFace = await Isolate.run(() => _enrollStudentFromPhoto(_EnrollArgs(
-              photoPath: photoPath,
-              studentId: 'test_face',
-              name: 'test_face',
-              yunetModelPath: yunetModelPath,
-              arcfaceModelPath: arcfaceModelPath,
-              rosterDbPath: testDbPath,
-            )));
-      } catch (_) {
-        hasFace = true;
-      }
-
-      if (!hasFace) {
-        return null;
-      }
-
-      _pendingFaceIdPhotos.add(photoPath);
-
-      final step = (_pendingFaceIdPhotos.length - 1) % 3;
-      if (step == 0) {
-        lastEnrollmentPose = const FacePose(pitch: 0.0, yaw: 0.0, roll: 0.0, tx: 0, ty: 0, tz: 50, frontalityScore: 0.98);
-      } else if (step == 1) {
-        lastEnrollmentPose = const FacePose(pitch: 1.5, yaw: -15.2, roll: 0.8, tx: -5, ty: 0, tz: 50, frontalityScore: 0.89);
-      } else {
-        lastEnrollmentPose = const FacePose(pitch: 1.2, yaw: 16.0, roll: -0.6, tx: 5, ty: 0, tz: 50, frontalityScore: 0.88);
-      }
-
-      return Embedding(
-        detectionId: 'faceid_angle_$step',
-        vector: Float32List(512),
-      );
-    } finally {
-      final testFile = File(testDbPath);
-      if (await testFile.exists()) {
-        try {
-          await testFile.delete();
-        } catch (_) {}
-      }
-    }
-  }
 
   /// Enrolls student with accumulated 3D multi-pose photos into native C++ engine.
   Future<bool> enrollStudentWithEmbeddings({

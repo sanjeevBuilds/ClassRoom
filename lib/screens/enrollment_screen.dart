@@ -306,24 +306,6 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
     }
   }
 
-  Float32List _generateSyntheticEmbedding(int sector) {
-    // Generate a reproducible unit-normalized 512-D embedding for demo/fallback
-    final random = Random(42 + sector * 107);
-    final list = Float32List(512);
-    double sumSq = 0.0;
-    for (int i = 0; i < 512; i++) {
-      final val = random.nextDouble() * 2.0 - 1.0;
-      list[i] = val;
-      sumSq += val * val;
-    }
-    final norm = sqrt(sumSq);
-    if (norm > 0) {
-      for (int i = 0; i < 512; i++) {
-        list[i] /= norm;
-      }
-    }
-    return list;
-  }
 
   void _checkSectorAutoCapture() {
     if (_isProcessing || _isCompletedAnimation || _isAutoFilling) return;
@@ -462,9 +444,11 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
       if (_faceIdEmbeddings.isNotEmpty) {
         embeddingsToSave.addAll(_faceIdEmbeddings);
       } else {
-        embeddingsToSave.add(_generateSyntheticEmbedding(0));
-        embeddingsToSave.add(_generateSyntheticEmbedding(1));
-        embeddingsToSave.add(_generateSyntheticEmbedding(2));
+        setState(() {
+          _error = 'No face detected during scan. Center face in the ring and retry.';
+          _isProcessing = false;
+        });
+        return;
       }
 
       await widget.engine.enrollStudentWithEmbeddings(
@@ -537,6 +521,14 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
       } catch (_) {}
     }
 
+    if (realEmbedding == null) {
+      setState(() {
+        _isAutoFilling = false;
+        _error = 'No face detected in camera! Point camera at your face first.';
+      });
+      return;
+    }
+
     // Step through each of the 36 ticks with deliberate, detailed biometric reading pace (~9s total)
     for (int i = 0; i < 36; i++) {
       if (!mounted) {
@@ -600,8 +592,7 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
         // Register Sector 0 (Frontal) at top (tick 0)
         if (i == 0 && !_capturedSectors.contains(0)) {
           _capturedSectors.add(0);
-          final emb = realEmbedding?.vector ?? _generateSyntheticEmbedding(0);
-          _faceIdEmbeddings.add(emb);
+          _faceIdEmbeddings.add(realEmbedding!.vector);
           _faceIdPoses.add(const FacePose(
               pitch: 0.0,
               yaw: 0.0,
@@ -616,8 +607,7 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
         // Register Sector 2 (Right Profile) at 3 o'clock (tick 9)
         if (i == 9 && !_capturedSectors.contains(2)) {
           _capturedSectors.add(2);
-          final emb = realEmbedding?.vector ?? _generateSyntheticEmbedding(2);
-          _faceIdEmbeddings.add(emb);
+          _faceIdEmbeddings.add(realEmbedding!.vector);
           _faceIdPoses.add(const FacePose(
               pitch: 1.2,
               yaw: 16.0,
@@ -632,8 +622,7 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
         // Register Sector 1 (Left Profile) at 9 o'clock (tick 27)
         if (i == 27 && !_capturedSectors.contains(1)) {
           _capturedSectors.add(1);
-          final emb = realEmbedding?.vector ?? _generateSyntheticEmbedding(1);
-          _faceIdEmbeddings.add(emb);
+          _faceIdEmbeddings.add(realEmbedding!.vector);
           _faceIdPoses.add(const FacePose(
               pitch: 1.5,
               yaw: -15.2,
