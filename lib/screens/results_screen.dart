@@ -6,6 +6,7 @@ import 'package:share_plus/share_plus.dart';
 import '../models/attendance_result.dart';
 import '../theme/app_theme.dart';
 import '../widgets/glass_card.dart';
+import '../widgets/ambient_background.dart';
 
 class ResultsScreen extends StatefulWidget {
   final List<AttendanceResult> initialResults;
@@ -71,7 +72,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
     final secondaryTextColor = isDark ? Colors.white60 : Colors.black54;
 
     return Scaffold(
-      backgroundColor: isDark ? AppTheme.darkScaffoldBg : AppTheme.lightScaffoldBg,
+      backgroundColor: Colors.transparent,
       appBar: AppBar(
         title: Text(
           'Attendance Results',
@@ -90,39 +91,10 @@ class _ResultsScreenState extends State<ResultsScreen> {
           ),
         ],
       ),
-      body: Stack(
-        children: [
-          // Ambient blurred glow orbs
-          Positioned(
-            top: -40,
-            right: -40,
-            child: IgnorePointer(
-              child: Container(
-                width: 220,
-                height: 220,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: AppTheme.discordPurple.withValues(alpha: isDark ? 0.20 : 0.12),
-                ),
-              ),
-            ),
-          ),
-          Positioned(
-            bottom: 80,
-            left: -50,
-            child: IgnorePointer(
-              child: Container(
-                width: 200,
-                height: 200,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: AppTheme.discordGreen.withValues(alpha: isDark ? 0.10 : 0.08),
-                ),
-              ),
-            ),
-          ),
-
-          Column(
+      body: AmbientBackground(
+        child: SafeArea(
+          top: false,
+          child: Column(
             children: [
               // Summary Header
               Padding(
@@ -271,7 +243,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
                                   ),
                                   Switch(
                                     value: isPresent,
-                                    activeColor: AppTheme.discordPurple,
+                                    activeThumbColor: AppTheme.discordPurple,
                                     activeTrackColor: AppTheme.discordPurple.withValues(alpha: 0.4),
                                     inactiveTrackColor: isDark ? Colors.white10 : Colors.black12,
                                     inactiveThumbColor: Colors.grey,
@@ -345,7 +317,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
               ),
             ],
           ),
-        ],
+        ),
       ),
     );
   }

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../native/classroom_engine.dart';
 import '../theme/app_theme.dart';
 import '../widgets/glass_card.dart';
+import '../widgets/ambient_background.dart';
 import 'results_screen.dart';
 
 /// Processing screen — hands the recorded sweep video to the C++ engine
@@ -51,24 +52,9 @@ class _ProcessingScreenState extends State<ProcessingScreen> {
     final secondaryTextColor = isDark ? Colors.white60 : Colors.black54;
 
     return Scaffold(
-      backgroundColor: isDark ? AppTheme.darkScaffoldBg : AppTheme.lightScaffoldBg,
-      body: Stack(
-        children: [
-          // Background ambient glow
-          Center(
-            child: IgnorePointer(
-              child: Container(
-                width: 260,
-                height: 260,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: AppTheme.discordPurple.withValues(alpha: isDark ? 0.20 : 0.12),
-                ),
-              ),
-            ),
-          ),
-
-          Center(
+      backgroundColor: Colors.transparent,
+      body: AmbientBackground(
+        child: Center(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 32),
               child: _error != null
@@ -149,8 +135,7 @@ class _ProcessingScreenState extends State<ProcessingScreen> {
                     ),
             ),
           ),
-        ],
-      ),
+        ),
     );
   }
 }
