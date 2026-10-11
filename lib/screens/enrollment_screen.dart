@@ -52,8 +52,6 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
   StreamSubscription<GyroscopeEvent>? _gyroSubscription;
   final Set<int> _completedTicks = {};
   final Set<int> _capturedSectors = {}; // 0: Frontal, 1: Left, 2: Right
-  double _tiltX = 0.0;
-  double _tiltY = 0.0;
   double _motionAngle = -pi / 2; // Default facing straight ahead (Frontal / 12 o'clock)
   double _motionIntensity = 0.0;
   bool _isCompletedAnimation = false;
@@ -114,8 +112,6 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
     setState(() {
       _motionAngle = smoothedAngle;
       _motionIntensity = intensity.clamp(0.0, 1.0);
-      _tiltX = cos(smoothedAngle) * min(1.0, intensity);
-      _tiltY = sin(smoothedAngle) * min(1.0, intensity);
     });
 
     // Only accumulate dynamic head-roll ticks and trigger auto-capture in Auto Enroll mode
@@ -521,8 +517,6 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
       setState(() {
         _completedTicks.add(i);
         _motionAngle = tickAngle;
-        _tiltX = cos(tickAngle) * 0.85;
-        _tiltY = sin(tickAngle) * 0.85;
         _motionIntensity = 0.95;
         _detailedScanStage = stageText;
 
@@ -1102,7 +1096,7 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
         child: SafeArea(
           child: SingleChildScrollView(
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: Builder(
             builder: (context) {
               final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -1122,7 +1116,7 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
                             : AppTheme.lightTextPrimary,
                       ),
                       decoration: InputDecoration(
-                        hintText: 'Student Roll No (e.g. 23Z...)',
+                        hintText: 'Enter Roll No (e.g. 23Z301)',
                         hintStyle: TextStyle(
                           color: isDark
                               ? AppTheme.darkTextSecondary
@@ -1142,9 +1136,9 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
                       },
                     ),
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 8),
 
-                  // Mode Toggle: Normal (3 Poses) vs Auto Enroll (360°)
+                  // Mode Toggle: Normal (3 Poses) vs Auto (360°)
                   GlassCard(
                     padding: const EdgeInsets.all(4),
                     borderRadius: 14,
@@ -1179,33 +1173,39 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
                                     : null,
                               ),
                               child: Center(
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(
-                                      Icons.camera_alt_rounded,
-                                      size: 16,
-                                      color: !_isAutoEnrollMode
-                                          ? Colors.white
-                                          : (isDark
-                                              ? Colors.white60
-                                              : Colors.black54),
+                                child: FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        Icon(
+                                          Icons.camera_alt_rounded,
+                                          size: 15,
+                                          color: !_isAutoEnrollMode
+                                              ? Colors.white
+                                              : (isDark
+                                                  ? Colors.white60
+                                                  : Colors.black54),
+                                        ),
+                                        const SizedBox(width: 5),
+                                        Text(
+                                          'Normal (3 Poses)',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.bold,
+                                            color: !_isAutoEnrollMode
+                                                ? Colors.white
+                                                : (isDark
+                                                    ? Colors.white70
+                                                    : Colors.black87),
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      'Normal (3 Poses)',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.bold,
-                                        color: !_isAutoEnrollMode
-                                            ? Colors.white
-                                            : (isDark
-                                                ? Colors.white70
-                                                : Colors.black87),
-                                      ),
-                                    ),
-                                  ],
+                                  ),
                                 ),
                               ),
                             ),
@@ -1240,33 +1240,39 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
                                     : null,
                               ),
                               child: Center(
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(
-                                      Icons.rotate_90_degrees_cw_rounded,
-                                      size: 16,
-                                      color: _isAutoEnrollMode
-                                          ? Colors.white
-                                          : (isDark
-                                              ? Colors.white60
-                                              : Colors.black54),
+                                child: FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        Icon(
+                                          Icons.rotate_90_degrees_cw_rounded,
+                                          size: 15,
+                                          color: _isAutoEnrollMode
+                                              ? Colors.white
+                                              : (isDark
+                                                  ? Colors.white60
+                                                  : Colors.black54),
+                                        ),
+                                        const SizedBox(width: 5),
+                                        Text(
+                                          'Auto (360°)',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.bold,
+                                            color: _isAutoEnrollMode
+                                                ? Colors.white
+                                                : (isDark
+                                                    ? Colors.white70
+                                                    : Colors.black87),
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      'Auto Enroll (360°)',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.bold,
-                                        color: _isAutoEnrollMode
-                                            ? Colors.white
-                                            : (isDark
-                                                ? Colors.white70
-                                                : Colors.black87),
-                                      ),
-                                    ),
-                                  ],
+                                  ),
                                 ),
                               ),
                             ),
@@ -1275,13 +1281,13 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
                       ],
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 10),
 
                   // Camera Viewfinder (Face ID Circular Ring)
                   _buildFaceIdViewfinder(),
 
                   if (_error != null) ...[
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 8),
                     Container(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 14, vertical: 8),
@@ -1307,7 +1313,7 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
                       ),
                     ),
                   ],
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 10),
 
                   // Action Buttons
                   if (!_isAutoEnrollMode)
@@ -1355,14 +1361,17 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
                                     child: CircularProgressIndicator(
                                         strokeWidth: 2, color: Colors.white))
                                 : const Icon(Icons.save_rounded),
-                            label: Text(
-                              _isProcessing
-                                  ? 'Saving 3D Biometrics…'
-                                  : (_nameController.text.trim().isEmpty
-                                      ? 'Enter Roll No to Save Enrollment'
-                                      : 'Save Face ID Enrollment'),
-                              style: const TextStyle(
-                                  fontSize: 15, fontWeight: FontWeight.bold),
+                            label: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text(
+                                _isProcessing
+                                    ? 'Saving 3D Biometrics…'
+                                    : (_nameController.text.trim().isEmpty
+                                        ? 'Enter Roll No to Save Enrollment'
+                                        : 'Save Face ID Enrollment'),
+                                style: const TextStyle(
+                                    fontSize: 15, fontWeight: FontWeight.bold),
+                              ),
                             ),
                           )
                         else
@@ -1385,18 +1394,21 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
                                     child: CircularProgressIndicator(
                                         strokeWidth: 2, color: Colors.white))
                                 : const Icon(Icons.camera_alt_rounded),
-                            label: Text(
-                              _isProcessing
-                                  ? 'Processing Pose ${_faceIdStep + 1}…'
-                                  : (_nameController.text.trim().isEmpty
-                                      ? 'Enter Roll No Above to Enroll'
-                                      : (_faceIdStep == 0
-                                          ? '📸 Capture Pose 1: Center (Split 1/3)'
-                                          : (_faceIdStep == 1
-                                              ? '📸 Capture Pose 2: Left 15° (Split 2/3)'
-                                              : '📸 Capture Pose 3: Right 15° (Split 3/3)'))),
-                              style: const TextStyle(
-                                  fontSize: 15, fontWeight: FontWeight.bold),
+                            label: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text(
+                                _isProcessing
+                                    ? 'Processing Pose ${_faceIdStep + 1}…'
+                                    : (_nameController.text.trim().isEmpty
+                                        ? 'Enter Roll No to Begin'
+                                        : (_faceIdStep == 0
+                                            ? '📸 Capture Pose 1: Center'
+                                            : (_faceIdStep == 1
+                                                ? '📸 Capture Pose 2: Left 15°'
+                                                : '📸 Capture Pose 3: Right 15°'))),
+                                style: const TextStyle(
+                                    fontSize: 15, fontWeight: FontWeight.bold),
+                              ),
                             ),
                           ),
                         if (_completedTicks.isNotEmpty || _faceIdStep > 0) ...[
@@ -1459,14 +1471,17 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
                                     child: CircularProgressIndicator(
                                         strokeWidth: 2, color: Colors.white))
                                 : const Icon(Icons.save_rounded),
-                            label: Text(
-                              _isProcessing
-                                  ? 'Saving 3D Biometrics…'
-                                  : (_nameController.text.trim().isEmpty
-                                      ? 'Enter Roll No to Save Enrollment'
-                                      : 'Save Face ID Enrollment'),
-                              style: const TextStyle(
-                                  fontSize: 15, fontWeight: FontWeight.bold),
+                            label: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text(
+                                _isProcessing
+                                    ? 'Saving 3D Biometrics…'
+                                    : (_nameController.text.trim().isEmpty
+                                        ? 'Enter Roll No to Save Enrollment'
+                                        : 'Save Face ID Enrollment'),
+                                style: const TextStyle(
+                                    fontSize: 15, fontWeight: FontWeight.bold),
+                              ),
                             ),
                           )
                         else
@@ -1491,14 +1506,17 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
                                     child: CircularProgressIndicator(
                                         strokeWidth: 2, color: Colors.white))
                                 : const Icon(Icons.bolt_rounded),
-                            label: Text(
-                              _isAutoFilling
-                                  ? 'Scanning 360°…'
-                                  : (_nameController.text.trim().isEmpty
-                                      ? 'Enter Roll No Above to Enroll'
-                                      : '⚡ Auto 360° Biometric Sweep'),
-                              style: const TextStyle(
-                                  fontSize: 15, fontWeight: FontWeight.bold),
+                            label: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text(
+                                _isAutoFilling
+                                    ? 'Scanning 360°…'
+                                    : (_nameController.text.trim().isEmpty
+                                        ? 'Enter Roll No to Begin'
+                                        : '⚡ Auto 360° Biometric Sweep'),
+                                style: const TextStyle(
+                                    fontSize: 15, fontWeight: FontWeight.bold),
+                              ),
                             ),
                           ),
                         if (_completedTicks.isNotEmpty || _isCompletedAnimation) ...[
@@ -1650,14 +1668,14 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
             ],
           ),
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 6),
 
         // Apple Face ID Circular Aperture & 36-Tick Radial Ring with Interactive Motion
         AnimatedBuilder(
           animation: _scanController,
           builder: (context, _) {
             final screenWidth = MediaQuery.of(context).size.width;
-            final ringSize = (screenWidth * 0.70).clamp(210.0, 270.0);
+            final ringSize = (screenWidth * 0.62).clamp(200.0, 245.0);
             final innerSize = ringSize * (236.0 / 280.0);
 
             return Center(
@@ -1683,36 +1701,33 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
                             children: [
                               _buildFittedCameraPreview(controller),
 
-                              // Dynamic 3D Parallax Face Alignment Guide Reticle
+                              // Static Centered Face Alignment Guide Reticle
                               Center(
-                                child: Transform.translate(
-                                  offset: Offset(_tiltX * 18, _tiltY * 18),
-                                  child: Container(
-                                    width: innerSize * 0.60,
-                                    height: innerSize * 0.76,
-                                    decoration: BoxDecoration(
-                                      borderRadius: BorderRadius.circular(innerSize * 0.30),
-                                      border: Border.all(
-                                        color: _isCompletedAnimation
-                                            ? const Color(0xFF34C759)
-                                            : (isDark
-                                                ? AppTheme.discordPurple
-                                                    .withValues(alpha: 0.65)
-                                                : AppTheme.discordPurple
-                                                    .withValues(alpha: 0.45)),
-                                        width: 2.0,
-                                      ),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: (_isCompletedAnimation
-                                                  ? const Color(0xFF34C759)
-                                                  : AppTheme.discordPurple)
-                                              .withValues(alpha: 0.25),
-                                          blurRadius: 16,
-                                          spreadRadius: 2,
-                                        ),
-                                      ],
+                                child: Container(
+                                  width: innerSize * 0.60,
+                                  height: innerSize * 0.76,
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(innerSize * 0.30),
+                                    border: Border.all(
+                                      color: _isCompletedAnimation
+                                          ? const Color(0xFF34C759)
+                                          : (isDark
+                                              ? AppTheme.discordPurple
+                                                  .withValues(alpha: 0.65)
+                                              : AppTheme.discordPurple
+                                                  .withValues(alpha: 0.45)),
+                                      width: 2.0,
                                     ),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: (_isCompletedAnimation
+                                                ? const Color(0xFF34C759)
+                                                : AppTheme.discordPurple)
+                                            .withValues(alpha: 0.25),
+                                        blurRadius: 16,
+                                        spreadRadius: 2,
+                                      ),
+                                    ],
                                   ),
                                 ),
                               ),
@@ -1808,7 +1823,7 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
             );
           },
         ),
-        const SizedBox(height: 14),
+        const SizedBox(height: 8),
 
         // Guidance Prompt Pill (Separated, centered below the ring)
         Container(
@@ -1848,30 +1863,32 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
               ),
               const SizedBox(width: 8),
               Flexible(
-                child: Text(
-                  _isCompletedAnimation
-                      ? '3D Biometrics Verified (100% Circle)'
-                      : (!_isAutoEnrollMode
-                          ? (_faceIdStep == 0
-                              ? 'Pose 1/3: Center (Look Frontal at Camera)'
-                              : (_faceIdStep == 1
-                                  ? 'Pose 2/3: Turn Head Slightly Left (~15°)'
-                                  : 'Pose 3/3: Turn Head Slightly Right (~15°)'))
-                          : (_detailedScanStage.isNotEmpty
-                              ? _detailedScanStage
-                              : (_completedTicks.length < 6
-                                  ? 'Roll your head slowly in a circle'
-                                  : (_completedTicks.length < 18
-                                      ? 'Keep rolling your head clockwise…'
-                                      : (_completedTicks.length < 32
-                                          ? 'Almost there! Turn to remaining angles'
-                                          : 'Biometrics locked! Completing…'))))),
-                  style: TextStyle(
-                    color: isDark ? Colors.white : Colors.black87,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 12,
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    _isCompletedAnimation
+                        ? '3D Biometrics Verified (100% Circle)'
+                        : (!_isAutoEnrollMode
+                            ? (_faceIdStep == 0
+                                ? 'Pose 1/3: Look straight ahead'
+                                : (_faceIdStep == 1
+                                    ? 'Pose 2/3: Turn head slightly left'
+                                    : 'Pose 3/3: Turn head slightly right'))
+                            : (_detailedScanStage.isNotEmpty
+                                ? _detailedScanStage
+                                : (_completedTicks.length < 6
+                                    ? 'Roll head slowly in circle'
+                                    : (_completedTicks.length < 18
+                                        ? 'Keep rolling head clockwise…'
+                                        : (_completedTicks.length < 32
+                                            ? 'Turn to remaining angles'
+                                            : 'Biometrics locked! Completing…'))))),
+                    style: TextStyle(
+                      color: isDark ? Colors.white : Colors.black87,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 12,
+                    ),
                   ),
-                  overflow: TextOverflow.ellipsis,
                 ),
               ),
               const SizedBox(width: 8),
@@ -1900,7 +1917,7 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
             ],
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 6),
 
         // Sleek 4px progress indicator bar
         ClipRRect(
@@ -1919,7 +1936,7 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
             ),
           ),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 8),
 
         // Pose / Split Status Badges
         FittedBox(
@@ -1928,19 +1945,19 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               _buildPoseBadge(
-                !_isAutoEnrollMode ? '1. Center (Split 1)' : '1. Frontal',
+                !_isAutoEnrollMode ? '1. Center' : '1. Frontal',
                 _capturedSectors.contains(0) || _completedTicks.contains(0),
                 _faceIdStep == 0,
               ),
               const SizedBox(width: 8),
               _buildPoseBadge(
-                !_isAutoEnrollMode ? '2. Left 15° (Split 2)' : '2. Left 15°',
+                !_isAutoEnrollMode ? '2. Left 15°' : '2. Left 15°',
                 _capturedSectors.contains(1) || _completedTicks.contains(18),
                 _faceIdStep == 1,
               ),
               const SizedBox(width: 8),
               _buildPoseBadge(
-                !_isAutoEnrollMode ? '3. Right 15° (Split 3)' : '3. Right 15°',
+                !_isAutoEnrollMode ? '3. Right 15°' : '3. Right 15°',
                 _capturedSectors.contains(2) || _completedTicks.contains(6),
                 _faceIdStep == 2,
               ),
