@@ -486,16 +486,19 @@ class _CaptureScreenState extends State<CaptureScreen>
                               size: 16,
                               color: _isRecording ? AppTheme.discordRed : AppTheme.discordPurple,
                             ),
-                            const SizedBox(width: 6),
+                            const SizedBox(width: 8),
                             Expanded(
-                              child: Text(
-                                _isRecording ? 'Sweeping Classroom…' : 'Sweep across classroom',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                alignment: Alignment.centerLeft,
+                                child: Text(
+                                  _isRecording ? 'Recording Sweep…' : 'Classroom Sweep',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                  ),
                                 ),
-                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
                           ],
@@ -524,7 +527,7 @@ class _CaptureScreenState extends State<CaptureScreen>
                       GestureDetector(
                         onTap: _pickVideoFromGallery,
                         child: GlassCard(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                           borderRadius: 14,
                           child: const Row(
                             mainAxisSize: MainAxisSize.min,
@@ -533,7 +536,7 @@ class _CaptureScreenState extends State<CaptureScreen>
                               SizedBox(width: 4),
                               Text(
                                 'Upload',
-                                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11),
+                                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
                               ),
                             ],
                           ),
