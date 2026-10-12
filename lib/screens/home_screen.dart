@@ -580,162 +580,206 @@ class _HomeScreenState extends State<HomeScreen> {
     final detectors = [
       {
         'id': 'yunet',
-        'name': 'YuNet INT8 (Proposed Edge)',
-        'desc': '6.4ms/frame, 0.44 MB, multi-scale SAHI crop, 99.4% recall',
+        'name': 'YuNet INT8',
+        'subtitle': 'Proposed Edge Pipeline',
+        'desc': '6.4ms/frame • 0.44 MB • Multi-scale SAHI crop • 99.4% recall',
         'badge': 'Recommended',
+        'badgeColor': AppTheme.discordGreen,
       },
       {
         'id': 'retinaface',
         'name': 'RetinaFace MobileNet-0.25',
-        'desc': '38.2ms/frame, 1.7 MB, ResNet/FPN architecture (Base Paper 1)',
-        'badge': 'IEEE ICVEE 2024 Base',
+        'subtitle': 'IEEE ICVEE 2024 Baseline',
+        'desc': '38.2ms/frame • 1.7 MB • ResNet/FPN architecture',
+        'badge': 'Base Paper 1',
+        'badgeColor': AppTheme.discordPurple,
       },
       {
         'id': 'haar',
-        'name': 'Haar Cascade (OpenCV Classic)',
-        'desc': '14.8ms/frame, classical integral features (25% low-light recall)',
-        'badge': 'Legacy Baseline',
+        'name': 'Haar Cascade (OpenCV)',
+        'subtitle': 'Classical Integral Cascade',
+        'desc': '14.8ms/frame • Handcrafted features (25% low-light recall)',
+        'badge': 'Legacy',
+        'badgeColor': Colors.amber,
       },
     ];
 
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
-      builder: (ctx) => Container(
-        padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(
-          color: (isDark ? AppTheme.darkSurface : AppTheme.lightSurface).withOpacity(0.96),
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-          border: Border.all(
-            color: isDark ? Colors.white.withOpacity(0.12) : AppTheme.discordPurple.withOpacity(0.15),
+      isScrollControlled: true,
+      builder: (ctx) => SafeArea(
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
+          decoration: BoxDecoration(
+            color: isDark ? AppTheme.darkSurface : AppTheme.lightSurface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+            border: Border.all(
+              color: isDark ? Colors.white.withValues(alpha: 0.12) : AppTheme.discordPurple.withValues(alpha: 0.15),
+            ),
           ),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  children: [
-                    const Icon(Icons.tune_rounded, color: AppTheme.discordPurple, size: 22),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Live Detector Switcher',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary,
-                      ),
-                    ),
-                  ],
-                ),
-                IconButton(
-                  icon: const Icon(Icons.close_rounded),
-                  onPressed: () => Navigator.pop(ctx),
-                ),
-              ],
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'Switch engine detector live on-device to demonstrate comparative inference latency and accuracy during review defense.',
-              style: TextStyle(
-                fontSize: 12,
-                color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
-              ),
-            ),
-            const SizedBox(height: 16),
-            ...detectors.map((d) {
-              final isSelected = ClassroomEngine.instance.activeDetector == d['id'];
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: InkWell(
-                  onTap: () {
-                    ClassroomEngine.instance.setActiveDetector(d['id']!);
-                    setState(() {});
-                    Navigator.pop(ctx);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Switched face detector to ${d['name']}')),
-                    );
-                  },
-                  borderRadius: BorderRadius.circular(16),
-                  child: Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: isSelected
-                          ? AppTheme.discordPurple.withOpacity(0.18)
-                          : (isDark ? Colors.white.withOpacity(0.04) : Colors.black.withOpacity(0.03)),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: isSelected ? AppTheme.discordPurple : Colors.transparent,
-                        width: 1.5,
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          isSelected ? Icons.radio_button_checked_rounded : Icons.radio_button_off_rounded,
-                          color: isSelected ? AppTheme.discordPurple : (isDark ? Colors.white38 : Colors.black38),
-                          size: 20,
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Flexible(
-                                    child: Text(
-                                      d['name']!,
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 13,
-                                        color: isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary,
-                                      ),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: isSelected
-                                          ? AppTheme.discordPurple.withOpacity(0.2)
-                                          : (isDark ? Colors.white10 : Colors.black.withOpacity(0.06)),
-                                      borderRadius: BorderRadius.circular(6),
-                                    ),
-                                    child: Text(
-                                      d['badge']!,
-                                      style: TextStyle(
-                                        fontSize: 9,
-                                        fontWeight: FontWeight.bold,
-                                        color: isSelected ? AppTheme.discordPurple : (isDark ? Colors.white70 : Colors.black87),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                d['desc']!,
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 36,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 16),
+                  decoration: BoxDecoration(
+                    color: isDark ? Colors.white24 : Colors.black12,
+                    borderRadius: BorderRadius.circular(2),
                   ),
                 ),
-              );
-            }),
-            const SizedBox(height: 8),
-          ],
+              ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: AppTheme.discordPurple.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(Icons.tune_rounded, color: AppTheme.discordPurple, size: 20),
+                      ),
+                      const SizedBox(width: 10),
+                      Text(
+                        'Face Detection Engine',
+                        style: TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.bold,
+                          color: isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary,
+                        ),
+                      ),
+                    ],
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded, size: 22),
+                    onPressed: () => Navigator.pop(ctx),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Switch the face detection model live on device to demonstrate latency and multi-row recall differences.',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                  height: 1.35,
+                ),
+              ),
+              const SizedBox(height: 18),
+              ...detectors.map((d) {
+                final isSelected = ClassroomEngine.instance.activeDetector == d['id'];
+                final badgeColor = d['badgeColor'] as Color;
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: InkWell(
+                    onTap: () {
+                      ClassroomEngine.instance.setActiveDetector(d['id'] as String);
+                      setState(() {});
+                      Navigator.pop(ctx);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Switched face detector to ${d['name']}')),
+                      );
+                    },
+                    borderRadius: BorderRadius.circular(16),
+                    child: Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: isSelected
+                            ? AppTheme.discordPurple.withValues(alpha: 0.14)
+                            : (isDark ? Colors.white.withValues(alpha: 0.04) : Colors.black.withValues(alpha: 0.03)),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: isSelected ? AppTheme.discordPurple : (isDark ? Colors.white12 : Colors.black12),
+                          width: isSelected ? 1.8 : 1.0,
+                        ),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.only(top: 2),
+                            child: Icon(
+                              isSelected ? Icons.check_circle_rounded : Icons.radio_button_off_rounded,
+                              color: isSelected ? AppTheme.discordPurple : (isDark ? Colors.white38 : Colors.black38),
+                              size: 20,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        d['name'] as String,
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 14,
+                                          color: isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: badgeColor.withValues(alpha: 0.15),
+                                        borderRadius: BorderRadius.circular(6),
+                                        border: Border.all(color: badgeColor.withValues(alpha: 0.3)),
+                                      ),
+                                      child: Text(
+                                        d['badge'] as String,
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
+                                          color: badgeColor,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 3),
+                                Text(
+                                  d['subtitle'] as String,
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: isDark ? Colors.white70 : Colors.black87,
+                                  ),
+                                ),
+                                const SizedBox(height: 3),
+                                Text(
+                                  d['desc'] as String,
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                                    height: 1.3,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              }),
+              const SizedBox(height: 4),
+            ],
+          ),
         ),
       ),
     );
@@ -870,7 +914,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 children: [
                                   Icon(Icons.analytics_rounded, size: 18, color: AppTheme.discordGreen),
                                   const SizedBox(width: 10),
-                                  Text('Benchmark & Defense', style: TextStyle(color: isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary)),
+                                  Text('Benchmark Mode', style: TextStyle(color: isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary)),
                                 ],
                               ),
                             ),
@@ -962,32 +1006,33 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   const SizedBox(height: 14),
 
-                  // Quick System Bar: Detector Selector & Benchmark Validation Hub
+                  // Quick System Bar: Detector Selector & Benchmark Mode Hub
                   Row(
                     children: [
                       // Active Detector Selector Chip
                       Expanded(
                         child: GlassCard(
-                          borderRadius: 18,
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          borderRadius: 16,
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
                           onTap: _showDetectorPicker,
                           child: Row(
                             children: [
                               Container(
-                                padding: const EdgeInsets.all(6),
+                                padding: const EdgeInsets.all(7),
                                 decoration: BoxDecoration(
-                                  color: AppTheme.discordPurple.withOpacity(0.16),
+                                  color: AppTheme.discordPurple.withValues(alpha: 0.16),
                                   borderRadius: BorderRadius.circular(10),
                                 ),
-                                child: const Icon(Icons.memory_rounded, size: 16, color: AppTheme.discordPurple),
+                                child: const Icon(Icons.tune_rounded, size: 16, color: AppTheme.discordPurple),
                               ),
                               const SizedBox(width: 8),
                               Expanded(
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisSize: MainAxisSize.min,
                                   children: [
                                     Text(
-                                      'Active Detector',
+                                      'Detector',
                                       style: TextStyle(
                                         fontSize: 10,
                                         fontWeight: FontWeight.w600,
@@ -996,7 +1041,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                     ),
                                     Text(
                                       ClassroomEngine.instance.activeDetector == 'retinaface'
-                                          ? 'RetinaFace (Base)'
+                                          ? 'RetinaFace'
                                           : ClassroomEngine.instance.activeDetector == 'haar'
                                               ? 'Haar Cascade'
                                               : 'YuNet INT8',
@@ -1012,8 +1057,8 @@ class _HomeScreenState extends State<HomeScreen> {
                                 ),
                               ),
                               Icon(
-                                Icons.keyboard_arrow_down_rounded,
-                                size: 16,
+                                Icons.arrow_drop_down_rounded,
+                                size: 20,
                                 color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
                               ),
                             ],
@@ -1021,52 +1066,63 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       ),
                       const SizedBox(width: 10),
-                      // Benchmark & Defense Hub Pill
-                      GlassCard(
-                        borderRadius: 18,
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => BenchmarkValidationScreen(engine: ClassroomEngine.instance),
-                            ),
-                          );
-                        },
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(6),
-                              decoration: BoxDecoration(
-                                color: AppTheme.discordGreen.withOpacity(0.18),
-                                borderRadius: BorderRadius.circular(10),
+                      // Benchmark Hub Pill
+                      Expanded(
+                        child: GlassCard(
+                          borderRadius: 16,
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => BenchmarkValidationScreen(engine: ClassroomEngine.instance),
                               ),
-                              child: const Icon(Icons.analytics_rounded, size: 16, color: AppTheme.discordGreen),
-                            ),
-                            const SizedBox(width: 8),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Review Defense',
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w600,
-                                    color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
-                                  ),
+                            );
+                          },
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(7),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.discordGreen.withValues(alpha: 0.16),
+                                  borderRadius: BorderRadius.circular(10),
                                 ),
-                                Text(
-                                  'Benchmark',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
-                                    color: isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary,
-                                  ),
+                                child: const Icon(Icons.analytics_rounded, size: 16, color: AppTheme.discordGreen),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      'Evaluation',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w600,
+                                        color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                                      ),
+                                    ),
+                                    Text(
+                                      'Benchmark',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                        color: isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ],
                                 ),
-                              ],
-                            ),
-                          ],
+                              ),
+                              Icon(
+                                Icons.arrow_forward_ios_rounded,
+                                size: 13,
+                                color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ],

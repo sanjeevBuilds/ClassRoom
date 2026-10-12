@@ -127,83 +127,86 @@ class _BenchmarkValidationScreenState extends State<BenchmarkValidationScreen> {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
-      builder: (ctx) => Container(
-        decoration: BoxDecoration(
-          color: isDark ? const Color(0xFF2B2D31) : Colors.white,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.3),
-              blurRadius: 20,
-              offset: const Offset(0, -4),
-            )
-          ],
-        ),
-        padding: const EdgeInsets.fromLTRB(24, 20, 24, 36),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: isDark ? Colors.white24 : Colors.black12,
-                  borderRadius: BorderRadius.circular(2),
+      isScrollControlled: true,
+      builder: (ctx) => SafeArea(
+        child: Container(
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF2B2D31) : Colors.white,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.3),
+                blurRadius: 20,
+                offset: const Offset(0, -4),
+              )
+            ],
+          ),
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 36,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: isDark ? Colors.white24 : Colors.black12,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: 18),
-            Text(
-              'Select Face Detection Engine',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: primaryTextColor),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'Switch between detectors live for research demonstration & comparative benchmarks.',
-              style: TextStyle(fontSize: 13, color: isDark ? Colors.white60 : Colors.black54),
-            ),
-            const SizedBox(height: 18),
-            _buildDetectorOption(
-              key: 'yunet',
-              title: 'YuNet INT8 + SAHI Slicing (Recommended)',
-              subtitle: '11.8ms per frame • Quantized 100KB • 2.5x Rear Horizon Zoom • Edge Optimized',
-              badge: 'PROPOSED',
-              badgeColor: AppTheme.discordGreen,
-              isSelected: widget.engine.activeDetector == 'yunet',
-              onTap: () {
-                setState(() => widget.engine.setActiveDetector('yunet'));
-                Navigator.pop(ctx);
-              },
-            ),
-            const SizedBox(height: 10),
-            _buildDetectorOption(
-              key: 'retinaface',
-              title: 'RetinaFace MobileNet-0.25 (Base Paper 1)',
-              subtitle: '52.3ms CPU (9.1s GPU) • ResNet FPN • Heavyweight Accuracy Baseline',
-              badge: 'ICVEE 2024',
-              badgeColor: AppTheme.discordBlurple,
-              isSelected: widget.engine.activeDetector == 'retinaface',
-              onTap: () {
-                setState(() => widget.engine.setActiveDetector('retinaface'));
-                Navigator.pop(ctx);
-              },
-            ),
-            const SizedBox(height: 10),
-            _buildDetectorOption(
-              key: 'haar',
-              title: 'Haar Cascade (Viola-Jones Baseline)',
-              subtitle: '68.2ms • Legacy XML classifier • No spatial landmarks • Fails in low-light',
-              badge: 'LEGACY',
-              badgeColor: Colors.amber,
-              isSelected: widget.engine.activeDetector == 'haar',
-              onTap: () {
-                setState(() => widget.engine.setActiveDetector('haar'));
-                Navigator.pop(ctx);
-              },
-            ),
-          ],
+              const SizedBox(height: 16),
+              Text(
+                'Select Face Detection Engine',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: primaryTextColor),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Switch between detectors live for comparative latency and multi-row recall evaluation.',
+                style: TextStyle(fontSize: 12, color: isDark ? Colors.white60 : Colors.black54),
+              ),
+              const SizedBox(height: 16),
+              _buildDetectorOption(
+                key: 'yunet',
+                title: 'YuNet INT8 + SAHI',
+                subtitle: '11.8ms per frame • Quantized 100KB • 2.5x Rear Horizon Zoom • Edge Optimized',
+                badge: 'PROPOSED',
+                badgeColor: AppTheme.discordGreen,
+                isSelected: widget.engine.activeDetector == 'yunet',
+                onTap: () {
+                  setState(() => widget.engine.setActiveDetector('yunet'));
+                  Navigator.pop(ctx);
+                },
+              ),
+              const SizedBox(height: 10),
+              _buildDetectorOption(
+                key: 'retinaface',
+                title: 'RetinaFace MobileNet-0.25',
+                subtitle: '52.3ms CPU (9.1s GPU) • ResNet FPN • Base Paper 1 Accuracy Baseline',
+                badge: 'BASE PAPER',
+                badgeColor: AppTheme.discordPurple,
+                isSelected: widget.engine.activeDetector == 'retinaface',
+                onTap: () {
+                  setState(() => widget.engine.setActiveDetector('retinaface'));
+                  Navigator.pop(ctx);
+                },
+              ),
+              const SizedBox(height: 10),
+              _buildDetectorOption(
+                key: 'haar',
+                title: 'Haar Cascade (OpenCV)',
+                subtitle: '68.2ms • Legacy XML classifier • Classical Viola-Jones Baseline',
+                badge: 'LEGACY',
+                badgeColor: Colors.amber,
+                isSelected: widget.engine.activeDetector == 'haar',
+                onTap: () {
+                  setState(() => widget.engine.setActiveDetector('haar'));
+                  Navigator.pop(ctx);
+                },
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -225,38 +228,50 @@ class _BenchmarkValidationScreenState extends State<BenchmarkValidationScreen> {
       onTap: onTap,
       borderRadius: BorderRadius.circular(16),
       child: Container(
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
           color: isSelected
-              ? AppTheme.discordBlurple.withValues(alpha: 0.12)
+              ? AppTheme.discordPurple.withValues(alpha: 0.12)
               : (isDark ? Colors.white.withValues(alpha: 0.04) : Colors.black.withValues(alpha: 0.03)),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: isSelected ? AppTheme.discordBlurple : (isDark ? Colors.white12 : Colors.black12),
+            color: isSelected ? AppTheme.discordPurple : (isDark ? Colors.white12 : Colors.black12),
             width: isSelected ? 1.5 : 1.0,
           ),
         ),
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Icon(
+                isSelected ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
+                color: isSelected ? AppTheme.discordPurple : (isDark ? Colors.white30 : Colors.black26),
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     children: [
-                      Flexible(
+                      Expanded(
                         child: Text(
                           title,
                           style: TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.bold,
-                            color: isSelected ? AppTheme.discordBlurple : primaryTextColor,
+                            color: isSelected ? AppTheme.discordPurple : primaryTextColor,
                           ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                       const SizedBox(width: 8),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                         decoration: BoxDecoration(
                           color: badgeColor.withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(6),
@@ -269,19 +284,13 @@ class _BenchmarkValidationScreenState extends State<BenchmarkValidationScreen> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 3),
                   Text(
                     subtitle,
-                    style: TextStyle(fontSize: 11, color: isDark ? Colors.white60 : Colors.black54),
+                    style: TextStyle(fontSize: 11, color: isDark ? Colors.white60 : Colors.black54, height: 1.25),
                   ),
                 ],
               ),
-            ),
-            const SizedBox(width: 10),
-            Icon(
-              isSelected ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
-              color: isSelected ? AppTheme.discordBlurple : (isDark ? Colors.white30 : Colors.black26),
-              size: 22,
             ),
           ],
         ),
