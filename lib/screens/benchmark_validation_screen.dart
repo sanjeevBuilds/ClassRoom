@@ -40,7 +40,7 @@ class _BenchmarkValidationScreenState extends State<BenchmarkValidationScreen> {
       'students': 40,
       'lux': 152,
       'depth': 'Rows 1-6 (1-4m)',
-      'desc': 'Standard lecture hall with uniform fluorescent illumination.',
+      'desc': 'Standard tiered lecture hall with uniform ambient illumination and elevated row seating.',
       'ref_f1': '99.5%',
       'ref_time': '9.15s',
       'yunet_f1': '98.3%',
@@ -51,11 +51,11 @@ class _BenchmarkValidationScreenState extends State<BenchmarkValidationScreen> {
     {
       'id': 'S2',
       'shortName': 'High Density',
-      'name': 'Scenario 2: High-Density Tiered Hall',
+      'name': 'Scenario 2: High-Density Seating',
       'students': 38,
       'lux': 152,
       'depth': 'Rows 1-6 (1-5m)',
-      'desc': 'Tight bench spacing with frequent shoulder and head occlusions.',
+      'desc': 'High-occupancy amphitheater setting featuring inter-student occlusions and compact seating pitch.',
       'ref_f1': '99.5%',
       'ref_time': '12.7s',
       'yunet_f1': '98.3%',
@@ -66,11 +66,11 @@ class _BenchmarkValidationScreenState extends State<BenchmarkValidationScreen> {
     {
       'id': 'S3',
       'shortName': 'Seminar Room',
-      'name': 'Scenario 3: Medium Seminar Room',
+      'name': 'Scenario 3: Interactive Seminar Room',
       'students': 32,
       'lux': 152,
       'depth': 'Rows 1-5 (1-4m)',
-      'desc': 'Angled student postures, note-taking and laptops on desks.',
+      'desc': 'Seminar room layout with angular seating profiles and desk workspace occlusions.',
       'ref_f1': '99.5%',
       'ref_time': '9.66s',
       'yunet_f1': '98.3%',
@@ -81,11 +81,11 @@ class _BenchmarkValidationScreenState extends State<BenchmarkValidationScreen> {
     {
       'id': 'S4',
       'shortName': 'Low Light',
-      'name': 'Scenario 4: Dim-Light Projector Lecture',
+      'name': 'Scenario 4: Dim Ambient Projection',
       'students': 32,
       'lux': 40,
       'depth': 'Rows 1-5 (1-5m)',
-      'desc': '40 Lux low-light projection mode. Classical cascade drops to 25% recall.',
+      'desc': 'Low-lux lecture environment (40 Lux) under active multimedia presentation display.',
       'ref_f1': '100%',
       'ref_time': '11.5s',
       'yunet_f1': '97.3%',
@@ -96,11 +96,11 @@ class _BenchmarkValidationScreenState extends State<BenchmarkValidationScreen> {
     {
       'id': 'S5',
       'shortName': 'Deep Hall',
-      'name': 'Scenario 5: PSG Tech Deep Tiered Hall',
+      'name': 'Scenario 5: Extended Depth Auditorium',
       'students': 60,
       'lux': 140,
       'depth': 'Rows 1-10 (1-8m)',
-      'desc': 'Challenging 10-row amphitheater with rear rows 6-10 at 6-8 meters.',
+      'desc': 'Deep amphitheater configuration with extended subject distances up to 8 meters.',
       'ref_f1': '94.8%',
       'ref_time': '4.18s',
       'yunet_f1': '97.4%',
@@ -619,57 +619,6 @@ class _BenchmarkValidationScreenState extends State<BenchmarkValidationScreen> {
                       ),
                     ),
 
-                    const SizedBox(height: 14),
-
-                    // Architecture Comparison Card
-                    GlassCard(
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                const Icon(Icons.shield_outlined, color: AppTheme.discordGreen, size: 20),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: FittedBox(
-                                    fit: BoxFit.scaleDown,
-                                    alignment: Alignment.centerLeft,
-                                    child: Text(
-                                      'Architecture Comparison (Mobile vs Cloud)',
-                                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: primaryTextColor),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 12),
-                            _buildArchRow(
-                              label: 'Capture Hardware',
-                              ours: 'Handheld Smartphone (10s sweep)',
-                              theirs: 'Fixed Ceiling Surveillance Cameras',
-                            ),
-                            _buildArchRow(
-                              label: 'Compute Device',
-                              ours: '100% Commodity Mobile CPU',
-                              theirs: 'Dedicated Cloud Server Instance',
-                            ),
-                            _buildArchRow(
-                              label: 'Privacy & Security',
-                              ours: 'Local SQLite (Zero Cloud Biometrics)',
-                              theirs: 'Google Firebase Cloud Sync',
-                            ),
-                            _buildArchRow(
-                              label: 'Installation Cost',
-                              ours: '\$0 (Teacher\'s existing phone)',
-                              theirs: '\$2000+ per lecture hall cabling',
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-
                     const SizedBox(height: 18),
 
                     // Action Button: Run on Video File
@@ -802,56 +751,6 @@ class _BenchmarkValidationScreenState extends State<BenchmarkValidationScreen> {
               '$referenceLabel: $referenceValue',
               style: TextStyle(fontSize: 10, color: isDark ? Colors.white54 : Colors.black45),
             ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildArchRow({
-    required String label,
-    required String ours,
-    required String theirs,
-  }) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final primaryTextColor = isDark ? const Color(0xFFF2F3F5) : const Color(0xFF23272A);
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: primaryTextColor),
-          ),
-          const SizedBox(height: 4),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Icon(Icons.check_circle_rounded, size: 14, color: AppTheme.discordGreen),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  'ClassRoom: $ours',
-                  style: const TextStyle(fontSize: 11, color: AppTheme.discordGreen, fontWeight: FontWeight.w600),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 2),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(Icons.remove_circle_outline_rounded, size: 14, color: isDark ? Colors.white38 : Colors.black38),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  'Traditional: $theirs',
-                  style: TextStyle(fontSize: 11, color: isDark ? Colors.white54 : Colors.black45),
-                ),
-              ),
-            ],
           ),
         ],
       ),
