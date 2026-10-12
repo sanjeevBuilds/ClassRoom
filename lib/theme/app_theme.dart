@@ -8,6 +8,7 @@ final ValueNotifier<ThemeMode> appThemeModeNotifier = ValueNotifier<ThemeMode>(T
 class AppTheme {
   // --- Discord Brand Palette ---
   static const Color discordPurple = Color(0xFF5865F2); // Primary Blurple
+  static const Color discordBlurple = discordPurple; // Primary Blurple alias
   static const Color discordDeepPurple = Color(0xFF4752C4); // Deep Blurple
   static const Color discordLightPurple = Color(0xFF7983F5); // Hover / Highlight Blurple
   static const Color discordGreen = Color(0xFF57F287); // Success Green

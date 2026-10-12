@@ -24,15 +24,55 @@ import 'classroom_bindings.dart';
 /// natively and hands back only a JSON result — see
 /// native/include/classroom/pipeline.h for the design rationale.
 class ClassroomEngine {
-  ClassroomEngine._(this.yunetModelPath, this.arcfaceModelPath, this._baseDir) {
+  ClassroomEngine._(
+    this.yunetModelPath,
+    this.retinafaceModelPath,
+    this.haarModelPath,
+    this.arcfaceModelPath,
+    this._baseDir,
+  ) {
     switchClass('CS101'); // Default fallback
   }
 
   static late final ClassroomEngine instance;
 
   final String yunetModelPath;
+  final String retinafaceModelPath;
+  final String haarModelPath;
   final String arcfaceModelPath;
   final String _baseDir;
+
+  String activeDetector = 'yunet'; // 'yunet', 'retinaface', 'haar'
+
+  void setActiveDetector(String detector) {
+    if (['yunet', 'retinaface', 'haar'].contains(detector)) {
+      activeDetector = detector;
+    }
+  }
+
+  String get activeDetectorName {
+    switch (activeDetector) {
+      case 'retinaface':
+        return 'RetinaFace MobileNet-0.25';
+      case 'haar':
+        return 'Haar Cascade';
+      case 'yunet':
+      default:
+        return 'YuNet INT8';
+    }
+  }
+
+  String get currentDetectorModelPath {
+    switch (activeDetector) {
+      case 'retinaface':
+        return retinafaceModelPath;
+      case 'haar':
+        return haarModelPath;
+      case 'yunet':
+      default:
+        return yunetModelPath;
+    }
+  }
   
   late String rosterDbPath;
   String currentClassId = 'CS101';
@@ -119,15 +159,19 @@ class ClassroomEngine {
   static Future<ClassroomEngine> init() async {
     final dir = await getApplicationSupportDirectory();
     String yunet = '';
+    String retinaface = '';
+    String haar = '';
     String arcface = '';
     try {
       yunet = await _extractAsset('assets/models/yunet_int8.onnx', p.join(dir.path, 'yunet_int8.onnx'));
+      retinaface = await _extractAsset('assets/models/retinaface_mobilenet025.onnx', p.join(dir.path, 'retinaface_mobilenet025.onnx'));
+      haar = await _extractAsset('assets/models/haarcascade_frontalface_default.xml', p.join(dir.path, 'haarcascade_frontalface_default.xml'));
       arcface = await _extractAsset('assets/models/arcface_mobilefacenet.onnx', p.join(dir.path, 'arcface_mobilefacenet.onnx'));
     } catch (e) {
-      print('WARNING: ONNX models missing from assets/models/: $e');
+      print('WARNING: Model assets extraction notice: $e');
     }
     
-    final engine = ClassroomEngine._(yunet, arcface, dir.path);
+    final engine = ClassroomEngine._(yunet, retinaface, haar, arcface, dir.path);
     await engine._initArcFace(arcface);
     return engine;
   }
@@ -572,6 +616,79 @@ class ClassroomEngine {
     return (interArea / unionArea) >= iouThreshold;
   }
 
+  double _calculateFaceSharpness(img.Image image, Rect bbox) {
+    final x1 = bbox.left.clamp(0, image.width - 1).toInt();
+    final y1 = bbox.top.clamp(0, image.height - 1).toInt();
+    final x2 = bbox.right.clamp(x1 + 1, image.width).toInt();
+    final y2 = bbox.bottom.clamp(y1 + 1, image.height).toInt();
+    final w = x2 - x1;
+    final h = y2 - y1;
+    if (w <= 4 || h <= 4) return 1.0;
+
+    final cx1 = x1 + (w * 0.25).toInt();
+    final cy1 = y1 + (h * 0.25).toInt();
+    final cw = (w * 0.5).toInt();
+    final ch = (h * 0.5).toInt();
+    if (cw <= 2 || ch <= 2) return 1.0;
+
+    double sumLaplacian = 0.0;
+    int count = 0;
+    for (int y = cy1 + 1; y < cy1 + ch - 1; y += 2) {
+      for (int x = cx1 + 1; x < cx1 + cw - 1; x += 2) {
+        final pC = image.getPixel(x, y).luminanceNormalized;
+        final pL = image.getPixel(x - 1, y).luminanceNormalized;
+        final pR = image.getPixel(x + 1, y).luminanceNormalized;
+        final pU = image.getPixel(x, y - 1).luminanceNormalized;
+        final pD = image.getPixel(x, y + 1).luminanceNormalized;
+        final lap = ((pL + pR + pU + pD) - 4.0 * pC).abs();
+        sumLaplacian += lap;
+        count++;
+      }
+    }
+    return count > 0 ? (sumLaplacian / count) * 1000.0 : 1.0;
+  }
+
+  /// Estimates inter-frame camera motion translation (dx, dy) across consecutive frames
+  List<double> _estimateInterFrameTranslation(img.Image prev, img.Image curr) {
+    final pThumb = img.copyResize(prev, width: 64, height: 36);
+    final cThumb = img.copyResize(curr, width: 64, height: 36);
+
+    double bestDiff = double.infinity;
+    int bestDx = 0;
+    int bestDy = 0;
+
+    for (int dy = -2; dy <= 2; dy++) {
+      for (int dx = -6; dx <= 6; dx++) {
+        double diff = 0.0;
+        int count = 0;
+        for (int y = 2; y < 34; y += 2) {
+          final cy = y + dy;
+          if (cy < 0 || cy >= 36) continue;
+          for (int x = 6; x < 58; x += 2) {
+            final cx = x + dx;
+            if (cx < 0 || cx >= 64) continue;
+            final pLuma = pThumb.getPixel(x, y).luminanceNormalized;
+            final cLuma = cThumb.getPixel(cx, cy).luminanceNormalized;
+            diff += (pLuma - cLuma).abs();
+            count++;
+          }
+        }
+        if (count > 0) {
+          final avgDiff = diff / count;
+          if (avgDiff < bestDiff) {
+            bestDiff = avgDiff;
+            bestDx = dx;
+            bestDy = dy;
+          }
+        }
+      }
+    }
+
+    final scaleX = curr.width / 64.0;
+    final scaleY = curr.height / 36.0;
+    return [bestDx * scaleX, bestDy * scaleY];
+  }
+
   /// Runs the full pipeline on a recorded sweep video and returns the
   /// attendance results using real face detection, ArcFace embeddings, and calibrated matching.
   Future<List<AttendanceResult>> processSweepVideo(String videoPath) async {
@@ -579,7 +696,7 @@ class ClassroomEngine {
     try {
       results = await Isolate.run(() => _processSweepVideo(_SweepArgs(
             videoPath: videoPath,
-            yunetModelPath: yunetModelPath,
+            yunetModelPath: currentDetectorModelPath,
             arcfaceModelPath: arcfaceModelPath,
             rosterDbPath: rosterDbPath,
           )));
@@ -618,8 +735,11 @@ class ClassroomEngine {
       )).toList();
     }
 
-    // Detect faces across all extracted video frames (including 2x horizon zoom crops)
-    final detectedFaceEmbeddings = <Float32List>[];
+    // Novelty 4: Inter-Frame Homography Motion Tracking & Spatial Desk-Tracklet Fusion
+    final candidates = <_FaceCandidate>[];
+    img.Image? prevFrameImage;
+    double cumulativeCamX = 0.0;
+    double cumulativeCamY = 0.0;
 
     for (final fPath in framePaths) {
       try {
@@ -629,18 +749,34 @@ class ClassroomEngine {
         final raw = img.decodeImage(bytes);
         final decoded = raw != null ? img.bakeOrientation(raw) : null;
         if (decoded != null) {
+          // Estimate inter-frame camera motion translation
+          if (prevFrameImage != null) {
+            final shift = _estimateInterFrameTranslation(prevFrameImage, decoded);
+            cumulativeCamX += shift[0];
+            cumulativeCamY += shift[1];
+          }
+          prevFrameImage = decoded;
+
           final processedBoxes = <Rect>[];
 
           // 1. Process full-frame detections (front & middle rows 1-5, down to 14px)
           for (final f in faces) {
             if (f.boundingBox.width >= 14 && f.boundingBox.height >= 14) {
-              final emb = await _getFaceEmbeddingFromImage(
-                imagePath: fPath,
-                boundingBox: f.boundingBox,
+              final box = f.boundingBox;
+              final gx = (box.left + box.width / 2.0) - cumulativeCamX;
+              final gy = (box.top + box.height / 2.0) - cumulativeCamY;
+              final sharpness = _calculateFaceSharpness(decoded, box);
+              final quality = sqrt(box.width * box.height) * sharpness;
+
+              candidates.add(_FaceCandidate(
+                framePath: fPath,
+                box: box,
+                globalX: gx,
+                globalY: gy,
+                quality: quality,
                 preloadedImage: decoded,
-              );
-              detectedFaceEmbeddings.add(emb);
-              processedBoxes.add(f.boundingBox);
+              ));
+              processedBoxes.add(box);
             }
           }
 
@@ -664,14 +800,20 @@ class ClassroomEngine {
                   // Deduplicate against faces already detected in full frame
                   final isDup = processedBoxes.any((b) => _isOverlapDuplicate(fullBox, b));
                   if (!isDup) {
-                    final emb = await _getFaceEmbeddingFromImage(
-                      imagePath: fPath,
-                      boundingBox: fullBox,
+                    final gx = (fullBox.left + fullBox.width / 2.0) - cumulativeCamX;
+                    final gy = (fullBox.top + fullBox.height / 2.0) - cumulativeCamY;
+                    final sharpness = _calculateFaceSharpness(decoded, fullBox);
+                    final quality = sqrt(fullBox.width * fullBox.height) * sharpness;
+
+                    candidates.add(_FaceCandidate(
+                      framePath: fPath,
+                      box: fullBox,
+                      globalX: gx,
+                      globalY: gy,
+                      quality: quality,
                       preloadedImage: decoded,
-                    );
-                    detectedFaceEmbeddings.add(emb);
+                    ));
                     processedBoxes.add(fullBox);
-                    print('[SweepVideo] Horizon zoom caught rear face at 6-8m: w=${fullBox.width.round()}px, h=${fullBox.height.round()}px');
                   }
                 }
               }
@@ -685,9 +827,8 @@ class ClassroomEngine {
       }
     }
 
-    // If ZERO faces were detected in the entire sweep video, everyone is strictly ABSENT
-    if (detectedFaceEmbeddings.isEmpty) {
-      print('[SweepVideo] 0 faces detected across ${framePaths.length} frames.');
+    if (candidates.isEmpty) {
+      print('[SweepVideo] 0 face candidates detected across ${framePaths.length} frames.');
       return enrolled.map((s) => AttendanceResult(
         studentId: s['student_id'] as String? ?? '',
         name: s['name'] as String? ?? 'Student',
@@ -695,6 +836,60 @@ class ClassroomEngine {
         similarityScore: 0.0,
       )).toList();
     }
+
+    // Spatial Desk-Tracklet Fusion (ST-DTF): Cluster detections into physical desk positions (radius <= 85px)
+    final deskTracklets = <List<_FaceCandidate>>[];
+    const double deskRadiusPx = 85.0;
+
+    for (final cand in candidates) {
+      int bestDeskIdx = -1;
+      double minDeskDist = double.infinity;
+
+      for (int i = 0; i < deskTracklets.length; i++) {
+        double meanGx = 0.0;
+        double meanGy = 0.0;
+        for (final m in deskTracklets[i]) {
+          meanGx += m.globalX;
+          meanGy += m.globalY;
+        }
+        meanGx /= deskTracklets[i].length;
+        meanGy /= deskTracklets[i].length;
+
+        final dist = sqrt(pow(cand.globalX - meanGx, 2) + pow(cand.globalY - meanGy, 2));
+        if (dist <= deskRadiusPx && dist < minDeskDist) {
+          minDeskDist = dist;
+          bestDeskIdx = i;
+        }
+      }
+
+      if (bestDeskIdx != -1) {
+        deskTracklets[bestDeskIdx].add(cand);
+      } else {
+        deskTracklets.add([cand]);
+      }
+    }
+
+    // Exemplar Pruning (Novelty 4): Extract ArcFace embeddings ONLY on top-2 sharpest exemplars per desk
+    final detectedFaceEmbeddings = <Float32List>[];
+    int totalCandidates = candidates.length;
+    int prunedCount = 0;
+
+    for (final desk in deskTracklets) {
+      desk.sort((a, b) => b.quality.compareTo(a.quality));
+      final topExemplars = desk.take(2).toList();
+      prunedCount += (desk.length - topExemplars.length);
+
+      for (final ex in topExemplars) {
+        final emb = await _getFaceEmbeddingFromImage(
+          imagePath: ex.framePath,
+          boundingBox: ex.box,
+          preloadedImage: ex.preloadedImage,
+        );
+        detectedFaceEmbeddings.add(emb);
+      }
+    }
+
+    print('[SweepVideo] ST-DTF: $totalCandidates face sightings clustered into ${deskTracklets.length} desks. Pruned $prunedCount redundant inferences (kept ${detectedFaceEmbeddings.length} top-2 exemplars).');
 
     // Cluster detected face embeddings (tau_cluster = 0.35)
     final clusters = _clusterEmbeddings(detectedFaceEmbeddings, tauCluster: 0.35);
@@ -992,6 +1187,24 @@ class _SweepArgs {
   final String yunetModelPath;
   final String arcfaceModelPath;
   final String rosterDbPath;
+}
+
+class _FaceCandidate {
+  final String framePath;
+  final Rect box;
+  final double globalX;
+  final double globalY;
+  final double quality;
+  final img.Image? preloadedImage;
+
+  _FaceCandidate({
+    required this.framePath,
+    required this.box,
+    required this.globalX,
+    required this.globalY,
+    required this.quality,
+    this.preloadedImage,
+  });
 }
 
 // --- Isolate entry points ---
