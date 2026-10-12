@@ -19,7 +19,7 @@ EXTERNAL SOURCES:
     :path: Flutter
 
 SPEC CHECKSUMS:
-  classroom_engine: 335513d767b996ec349829f59d6fd1b5effe00b6
+  classroom_engine: cb76836c3714f9f0fc35d867e2a2d3b838f92065
   Flutter: 71a624a5bc0c04062bf19101d501e466baf2fb47
   onnxruntime-c: 3174c63a963d9abbc2bf9627e3d622819c0ed5f7
 

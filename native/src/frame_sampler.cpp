@@ -13,6 +13,9 @@ std::vector<SampledFrame> FrameSampler::SampleFrames(
                               video_path);
   }
 
+  // Ensure AVFoundation / container metadata auto-orientation is enabled
+  capture.set(cv::CAP_PROP_ORIENTATION_AUTO, 1.0);
+
   const double native_fps = capture.get(cv::CAP_PROP_FPS);
   const int step = native_fps > 0
                         ? std::max(1, static_cast<int>(std::lround(

@@ -125,6 +125,41 @@ std::vector<AttendanceResult> ProcessSweepVideo(const std::string& video_path,
 
   size_t total_detections = 0;
   size_t total_horizon_detections = 0;
+  // Auto-detect mobile video orientation: if raw video buffer is rotated (e.g. portrait
+  // shot stored in landscape container), faces appear at 90° and YuNet detector finds 0 faces.
+  // We probe the first sharp frame across rotations and re-align all frames upright if needed.
+  int detected_rot = -1;
+  for (const auto& sf : sharp_frames) {
+    if (sf.frame_lowres.empty()) continue;
+    auto test_dets = detector.Detect(sf.frame_lowres, 0, 0.0);
+    if (!test_dets.empty()) {
+      break;  // Already upright
+    }
+    const int candidate_rotations[] = {cv::ROTATE_90_CLOCKWISE,
+                                       cv::ROTATE_90_COUNTERCLOCKWISE,
+                                       cv::ROTATE_180};
+    for (int rot : candidate_rotations) {
+      cv::Mat rot_low;
+      cv::rotate(sf.frame_lowres, rot_low, rot);
+      auto r_dets = detector.Detect(rot_low, 0, 0.0);
+      if (!r_dets.empty()) {
+        detected_rot = rot;
+        break;
+      }
+    }
+    if (detected_rot != -1) break;
+  }
+
+  if (detected_rot != -1) {
+    for (auto& sf : sharp_frames) {
+      cv::Mat r_full, r_low;
+      cv::rotate(sf.frame, r_full, detected_rot);
+      cv::rotate(sf.frame_lowres, r_low, detected_rot);
+      sf.frame = std::move(r_full);
+      sf.frame_lowres = std::move(r_low);
+    }
+  }
+
   std::vector<Embedding> embeddings;
 
   for (const auto& f : sharp_frames) {
@@ -294,23 +329,52 @@ std::vector<AttendanceResult> ProcessSweepVideo(const std::string& video_path,
   return results;
 }
 
-// Detects face at 0°. If none found, tries 90° CW, 90° CCW, and 180° rotations to
-// guarantee reliable face detection regardless of mobile camera sensor orientation.
+// Detects face with scale-adaptive downscaling (to match YuNet's receptive field)
+// and tries 0°, 90° CW, 90° CCW, and 180° rotations to guarantee reliable face
+// detection regardless of mobile camera sensor resolution or orientation.
 std::vector<Detection> DetectWithRotations(YuNetDetector& detector, cv::Mat& frame) {
-  auto detections = detector.Detect(frame, 0, 0.0);
+  if (frame.empty()) return {};
+
+  const int max_dim = 640;
+  int low_w, low_h;
+  if (frame.cols >= frame.rows) {
+    low_w = max_dim;
+    low_h = std::max(1, static_cast<int>(std::lround(
+                            frame.rows * (static_cast<double>(max_dim) / frame.cols))));
+  } else {
+    low_h = max_dim;
+    low_w = std::max(1, static_cast<int>(std::lround(
+                            frame.cols * (static_cast<double>(max_dim) / frame.rows))));
+  }
+
+  cv::Mat lowres;
+  cv::resize(frame, lowres, cv::Size(low_w, low_h));
+  const double scale_x = static_cast<double>(frame.cols) / low_w;
+  const double scale_y = static_cast<double>(frame.rows) / low_h;
+
+  // 1. Try 0° rotation on downscaled image
+  auto detections = detector.Detect(lowres, 0, 0.0, scale_x, scale_y);
   if (!detections.empty()) return detections;
 
+  // 2. Try rotations (90° CW, 90° CCW, 180°) on downscaled image
   const int rotations[] = {cv::ROTATE_90_CLOCKWISE, cv::ROTATE_90_COUNTERCLOCKWISE, cv::ROTATE_180};
   for (int rot : rotations) {
-    cv::Mat rotated;
-    cv::rotate(frame, rotated, rot);
-    auto rot_dets = detector.Detect(rotated, 0, 0.0);
+    cv::Mat rot_low;
+    cv::rotate(lowres, rot_low, rot);
+    const double r_scale_x = static_cast<double>(rot == cv::ROTATE_180 ? frame.cols : frame.rows) / rot_low.cols;
+    const double r_scale_y = static_cast<double>(rot == cv::ROTATE_180 ? frame.rows : frame.cols) / rot_low.rows;
+    auto rot_dets = detector.Detect(rot_low, 0, 0.0, r_scale_x, r_scale_y);
     if (!rot_dets.empty()) {
-      frame = rotated;
+      cv::Mat rot_frame;
+      cv::rotate(frame, rot_frame, rot);
+      frame = std::move(rot_frame);
       return rot_dets;
     }
   }
-  return {};
+
+  // 3. Fallback: try raw high-res frame in case downscaling missed small distant faces
+  detections = detector.Detect(frame, 0, 0.0, 1.0, 1.0);
+  return detections;
 }
 
 bool EnrollStudentFromPhoto(const std::string& photo_path,
@@ -324,7 +388,7 @@ bool EnrollStudentFromPhoto(const std::string& photo_path,
   }
 
   YuNetDetector detector;
-  detector.Init(config.yunet_model_path, 0.45, 0.3);
+  detector.Init(config.yunet_model_path, 0.38, 0.3);
   auto detections = DetectWithRotations(detector, frame);
 
   const Detection* largest = LargestFace(detections);
@@ -356,7 +420,7 @@ int EnrollStudentFromPhotos(const std::vector<std::string>& photo_paths,
   if (photo_paths.empty()) return 0;
 
   YuNetDetector detector;
-  detector.Init(config.yunet_model_path, 0.45, 0.3);
+  detector.Init(config.yunet_model_path, 0.38, 0.3);
 
   ArcFaceEmbedder embedder;
   embedder.Init(config.arcface_model_path);

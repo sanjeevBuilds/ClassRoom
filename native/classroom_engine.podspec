@@ -31,6 +31,7 @@ Pod::Spec.new do |s|
   s.dependency 'onnxruntime-c', '1.23.0'
 
   s.libraries = 'sqlite3', 'c++'
+  s.frameworks = 'AVFoundation', 'CoreMedia', 'CoreVideo', 'Accelerate'
 
   s.pod_target_xcconfig = {
     'CLANG_CXX_LANGUAGE_STANDARD' => 'c++17',

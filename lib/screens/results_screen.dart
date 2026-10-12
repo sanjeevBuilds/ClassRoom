@@ -30,6 +30,10 @@ class _ResultsScreenState extends State<ResultsScreen> {
       .where((r) => r.studentId != null && r.name != null && r.studentId != '__pipeline_debug__')
       .toList();
 
+  int get unknownGuestCount => widget.initialResults
+      .where((r) => r.status == AttendanceStatus.unknownGuest && r.studentId != '__pipeline_debug__')
+      .length;
+
   List<AttendanceResult> get _filteredResults {
     final query = _searchQuery.trim().toLowerCase();
     if (query.isEmpty) return _knownResults;
@@ -113,10 +117,43 @@ class _ResultsScreenState extends State<ResultsScreen> {
                         color: isDark ? Colors.white12 : Colors.black12,
                       ),
                       _buildStatColumn('Absent', (_knownResults.length - presentCount).toString(), AppTheme.discordRed, secondaryTextColor),
+                      if (unknownGuestCount > 0) ...[
+                        Container(
+                          width: 1,
+                          height: 44,
+                          color: isDark ? Colors.white12 : Colors.black12,
+                        ),
+                        _buildStatColumn('Unregistered', unknownGuestCount.toString(), Colors.amber, secondaryTextColor),
+                      ],
                     ],
                   ),
                 ),
               ),
+
+              if (unknownGuestCount > 0)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: Colors.amber.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.amber.withValues(alpha: 0.3)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.info_outline_rounded, color: Colors.amber, size: 20),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            '$unknownGuestCount student face(s) detected in the room are not enrolled in this roster.',
+                            style: TextStyle(fontSize: 12, color: primaryTextColor),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
 
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20.0),
