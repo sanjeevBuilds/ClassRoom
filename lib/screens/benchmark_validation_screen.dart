@@ -19,10 +19,23 @@ class _BenchmarkValidationScreenState extends State<BenchmarkValidationScreen> {
   int _selectedScenarioIndex = 0; // Default to Scenario 1 (Standard Tiered Hall)
   bool _isPickingVideo = false;
 
+  String _detectorDisplayName(String key) {
+    switch (key.toLowerCase()) {
+      case 'yunet':
+        return 'YuNet INT8';
+      case 'retinaface':
+        return 'RetinaFace';
+      case 'haar':
+        return 'Haar Cascade';
+      default:
+        return key.toUpperCase();
+    }
+  }
+
   final List<Map<String, dynamic>> _scenarios = [
     {
       'id': 'S1',
-      'shortName': 'S1 • Standard',
+      'shortName': 'Tiered Hall',
       'name': 'Scenario 1: Standard Tiered Hall',
       'students': 40,
       'lux': 152,
@@ -37,7 +50,7 @@ class _BenchmarkValidationScreenState extends State<BenchmarkValidationScreen> {
     },
     {
       'id': 'S2',
-      'shortName': 'S2 • High Density',
+      'shortName': 'High Density',
       'name': 'Scenario 2: High-Density Tiered Hall',
       'students': 38,
       'lux': 152,
@@ -52,7 +65,7 @@ class _BenchmarkValidationScreenState extends State<BenchmarkValidationScreen> {
     },
     {
       'id': 'S3',
-      'shortName': 'S3 • Seminar',
+      'shortName': 'Seminar Room',
       'name': 'Scenario 3: Medium Seminar Room',
       'students': 32,
       'lux': 152,
@@ -67,7 +80,7 @@ class _BenchmarkValidationScreenState extends State<BenchmarkValidationScreen> {
     },
     {
       'id': 'S4',
-      'shortName': 'S4 • Dim Light',
+      'shortName': 'Low Light',
       'name': 'Scenario 4: Dim-Light Projector Lecture',
       'students': 32,
       'lux': 40,
@@ -82,7 +95,7 @@ class _BenchmarkValidationScreenState extends State<BenchmarkValidationScreen> {
     },
     {
       'id': 'S5',
-      'shortName': 'S5 • PSG Deep Hall',
+      'shortName': 'Deep Hall',
       'name': 'Scenario 5: PSG Tech Deep Tiered Hall',
       'students': 60,
       'lux': 140,
@@ -320,18 +333,23 @@ class _BenchmarkValidationScreenState extends State<BenchmarkValidationScreen> {
             children: [
               // Header
               Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                padding: const EdgeInsets.fromLTRB(8, 4, 16, 10),
                 child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     IconButton(
-                      icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
+                      icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
                       color: primaryTextColor,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
                       onPressed: () => Navigator.of(context).pop(),
+                      tooltip: 'Back',
                     ),
-                    const SizedBox(width: 4),
+                    const SizedBox(width: 6),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
                         children: [
                           FittedBox(
                             fit: BoxFit.scaleDown,
@@ -339,48 +357,56 @@ class _BenchmarkValidationScreenState extends State<BenchmarkValidationScreen> {
                             child: Text(
                               'Benchmark Evaluation',
                               style: TextStyle(
-                                fontSize: 18,
+                                fontSize: 17,
                                 fontWeight: FontWeight.bold,
+                                letterSpacing: -0.3,
                                 color: primaryTextColor,
                               ),
                             ),
                           ),
+                          const SizedBox(height: 1),
                           FittedBox(
                             fit: BoxFit.scaleDown,
                             alignment: Alignment.centerLeft,
                             child: Text(
-                              'On-Device Edge CPU vs Cloud Reference',
-                              style: TextStyle(fontSize: 12, color: secondaryTextColor),
+                              'Edge CPU vs Cloud Baseline',
+                              style: TextStyle(fontSize: 11, color: secondaryTextColor),
                             ),
                           ),
                         ],
                       ),
                     ),
-                    // Active Detector Button
+                    const SizedBox(width: 10),
+                    // Active Detector Switcher Button
                     InkWell(
                       onTap: _showDetectorPickerModal,
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(17),
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        height: 34,
+                        padding: const EdgeInsets.symmetric(horizontal: 11),
+                        alignment: Alignment.center,
                         decoration: BoxDecoration(
                           color: AppTheme.discordBlurple.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(17),
                           border: Border.all(color: AppTheme.discordBlurple.withValues(alpha: 0.4)),
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
-                            const Icon(Icons.tune_rounded, size: 14, color: AppTheme.discordBlurple),
-                            const SizedBox(width: 6),
+                            const Icon(Icons.tune_rounded, size: 13, color: AppTheme.discordBlurple),
+                            const SizedBox(width: 5),
                             Text(
-                              widget.engine.activeDetector.toUpperCase(),
+                              _detectorDisplayName(widget.engine.activeDetector),
+                              maxLines: 1,
                               style: const TextStyle(
-                                fontSize: 11,
+                                fontSize: 11.5,
                                 fontWeight: FontWeight.bold,
                                 color: AppTheme.discordBlurple,
                               ),
                             ),
-                            const Icon(Icons.arrow_drop_down, size: 16, color: AppTheme.discordBlurple),
+                            const SizedBox(width: 2),
+                            const Icon(Icons.keyboard_arrow_down_rounded, size: 16, color: AppTheme.discordBlurple),
                           ],
                         ),
                       ),
@@ -389,60 +415,64 @@ class _BenchmarkValidationScreenState extends State<BenchmarkValidationScreen> {
                 ),
               ),
 
+              // Pinned Scenario Selector Carousel
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                child: SizedBox(
+                  height: 34,
+                  child: ListView.builder(
+                    scrollDirection: Axis.horizontal,
+                    physics: const BouncingScrollPhysics(),
+                    itemCount: _scenarios.length,
+                    itemBuilder: (ctx, idx) {
+                      final sc = _scenarios[idx];
+                      final isSelected = idx == _selectedScenarioIndex;
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: InkWell(
+                          onTap: () => setState(() => _selectedScenarioIndex = idx),
+                          borderRadius: BorderRadius.circular(17),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 180),
+                            height: 34,
+                            padding: const EdgeInsets.symmetric(horizontal: 14),
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: isSelected
+                                  ? AppTheme.discordBlurple
+                                  : (isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.05)),
+                              borderRadius: BorderRadius.circular(17),
+                              border: Border.all(
+                                color: isSelected
+                                    ? AppTheme.discordBlurple
+                                    : (isDark ? Colors.white12 : Colors.black12),
+                                width: isSelected ? 1.5 : 1.0,
+                              ),
+                            ),
+                            child: Text(
+                              sc['shortName'] as String,
+                              maxLines: 1,
+                              softWrap: false,
+                              style: TextStyle(
+                                fontSize: 11.5,
+                                height: 1.1,
+                                fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+                                color: isSelected ? Colors.white : primaryTextColor,
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ),
+
               // Content
               Expanded(
                 child: ListView(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
                   children: [
-                    // Scenario Selector Horizontal Carousel (Smooth custom pills)
-                    SizedBox(
-                      height: 42,
-                      child: ListView.builder(
-                        scrollDirection: Axis.horizontal,
-                        physics: const BouncingScrollPhysics(),
-                        itemCount: _scenarios.length,
-                        itemBuilder: (ctx, idx) {
-                          final sc = _scenarios[idx];
-                          final isSelected = idx == _selectedScenarioIndex;
-                          return Padding(
-                            padding: const EdgeInsets.only(right: 8),
-                            child: InkWell(
-                              onTap: () => setState(() => _selectedScenarioIndex = idx),
-                              borderRadius: BorderRadius.circular(20),
-                              child: AnimatedContainer(
-                                duration: const Duration(milliseconds: 180),
-                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                                decoration: BoxDecoration(
-                                  color: isSelected
-                                      ? AppTheme.discordBlurple
-                                      : (isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.05)),
-                                  borderRadius: BorderRadius.circular(20),
-                                  border: Border.all(
-                                    color: isSelected
-                                        ? AppTheme.discordBlurple
-                                        : (isDark ? Colors.white12 : Colors.black12),
-                                    width: isSelected ? 1.5 : 1.0,
-                                  ),
-                                ),
-                                child: Center(
-                                  child: Text(
-                                    sc['shortName'] as String,
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                                      color: isSelected ? Colors.white : primaryTextColor,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-
-                    const SizedBox(height: 14),
-
                     // Active Scenario Card
                     GlassCard(
                       child: Padding(
