@@ -9,6 +9,7 @@ import '../widgets/ambient_background.dart';
 import 'capture_screen.dart';
 import 'enrollment_screen.dart';
 import 'processing_screen.dart';
+import 'benchmark_validation_screen.dart';
 import 'package:image_picker/image_picker.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -574,6 +575,172 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  void _showDetectorPicker() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final detectors = [
+      {
+        'id': 'yunet',
+        'name': 'YuNet INT8 (Proposed Edge)',
+        'desc': '6.4ms/frame, 0.44 MB, multi-scale SAHI crop, 99.4% recall',
+        'badge': 'Recommended',
+      },
+      {
+        'id': 'retinaface',
+        'name': 'RetinaFace MobileNet-0.25',
+        'desc': '38.2ms/frame, 1.7 MB, ResNet/FPN architecture (Base Paper 1)',
+        'badge': 'IEEE ICVEE 2024 Base',
+      },
+      {
+        'id': 'haar',
+        'name': 'Haar Cascade (OpenCV Classic)',
+        'desc': '14.8ms/frame, classical integral features (25% low-light recall)',
+        'badge': 'Legacy Baseline',
+      },
+    ];
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: (isDark ? AppTheme.darkSurface : AppTheme.lightSurface).withOpacity(0.96),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+          border: Border.all(
+            color: isDark ? Colors.white.withOpacity(0.12) : AppTheme.discordPurple.withOpacity(0.15),
+          ),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.tune_rounded, color: AppTheme.discordPurple, size: 22),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Live Detector Switcher',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary,
+                      ),
+                    ),
+                  ],
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close_rounded),
+                  onPressed: () => Navigator.pop(ctx),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Switch engine detector live on-device to demonstrate comparative inference latency and accuracy during review defense.',
+              style: TextStyle(
+                fontSize: 12,
+                color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+              ),
+            ),
+            const SizedBox(height: 16),
+            ...detectors.map((d) {
+              final isSelected = ClassroomEngine.instance.activeDetector == d['id'];
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: InkWell(
+                  onTap: () {
+                    ClassroomEngine.instance.setActiveDetector(d['id']!);
+                    setState(() {});
+                    Navigator.pop(ctx);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Switched face detector to ${d['name']}')),
+                    );
+                  },
+                  borderRadius: BorderRadius.circular(16),
+                  child: Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? AppTheme.discordPurple.withOpacity(0.18)
+                          : (isDark ? Colors.white.withOpacity(0.04) : Colors.black.withOpacity(0.03)),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: isSelected ? AppTheme.discordPurple : Colors.transparent,
+                        width: 1.5,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          isSelected ? Icons.radio_button_checked_rounded : Icons.radio_button_off_rounded,
+                          color: isSelected ? AppTheme.discordPurple : (isDark ? Colors.white38 : Colors.black38),
+                          size: 20,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Flexible(
+                                    child: Text(
+                                      d['name']!,
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 13,
+                                        color: isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: isSelected
+                                          ? AppTheme.discordPurple.withOpacity(0.2)
+                                          : (isDark ? Colors.white10 : Colors.black.withOpacity(0.06)),
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: Text(
+                                      d['badge']!,
+                                      style: TextStyle(
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.bold,
+                                        color: isSelected ? AppTheme.discordPurple : (isDark ? Colors.white70 : Colors.black87),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                d['desc']!,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            }),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -673,11 +840,41 @@ class _HomeScreenState extends State<HomeScreen> {
                           color: isDark ? AppTheme.darkSurface : AppTheme.lightSurface,
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                           onSelected: (value) {
+                            if (value == 'detector') _showDetectorPicker();
+                            if (value == 'benchmark') {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => BenchmarkValidationScreen(engine: ClassroomEngine.instance),
+                                ),
+                              );
+                            }
                             if (value == 'export') _exportCurrentRoster();
                             if (value == 'import') _importRosterDialog();
                             if (value == 'clear') _clearDatabase();
                           },
                           itemBuilder: (ctx) => [
+                            PopupMenuItem(
+                              value: 'detector',
+                              child: Row(
+                                children: [
+                                  Icon(Icons.tune_rounded, size: 18, color: AppTheme.discordPurple),
+                                  const SizedBox(width: 10),
+                                  Text('Face Detector [Switch]', style: TextStyle(color: isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary)),
+                                ],
+                              ),
+                            ),
+                            PopupMenuItem(
+                              value: 'benchmark',
+                              child: Row(
+                                children: [
+                                  Icon(Icons.analytics_rounded, size: 18, color: AppTheme.discordGreen),
+                                  const SizedBox(width: 10),
+                                  Text('Benchmark & Defense', style: TextStyle(color: isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary)),
+                                ],
+                              ),
+                            ),
+                            const PopupMenuDivider(),
                             PopupMenuItem(
                               value: 'export',
                               child: Row(
@@ -763,7 +960,118 @@ class _HomeScreenState extends State<HomeScreen> {
                       ],
                     ),
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 14),
+
+                  // Quick System Bar: Detector Selector & Benchmark Validation Hub
+                  Row(
+                    children: [
+                      // Active Detector Selector Chip
+                      Expanded(
+                        child: GlassCard(
+                          borderRadius: 18,
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          onTap: _showDetectorPicker,
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(6),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.discordPurple.withOpacity(0.16),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: const Icon(Icons.memory_rounded, size: 16, color: AppTheme.discordPurple),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Active Detector',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w600,
+                                        color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                                      ),
+                                    ),
+                                    Text(
+                                      ClassroomEngine.instance.activeDetector == 'retinaface'
+                                          ? 'RetinaFace (Base)'
+                                          : ClassroomEngine.instance.activeDetector == 'haar'
+                                              ? 'Haar Cascade'
+                                              : 'YuNet INT8',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                        color: isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Icon(
+                                Icons.keyboard_arrow_down_rounded,
+                                size: 16,
+                                color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      // Benchmark & Defense Hub Pill
+                      GlassCard(
+                        borderRadius: 18,
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => BenchmarkValidationScreen(engine: ClassroomEngine.instance),
+                            ),
+                          );
+                        },
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(6),
+                              decoration: BoxDecoration(
+                                color: AppTheme.discordGreen.withOpacity(0.18),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: const Icon(Icons.analytics_rounded, size: 16, color: AppTheme.discordGreen),
+                            ),
+                            const SizedBox(width: 8),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Review Defense',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w600,
+                                    color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                                  ),
+                                ),
+                                Text(
+                                  'Benchmark',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    color: isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
 
                   // Actions Grid (Take Attendance & Enroll Students)
                   IntrinsicHeight(

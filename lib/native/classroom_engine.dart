@@ -29,15 +29,55 @@ import 'classroom_bindings.dart';
 /// event loop for its whole duration, which would freeze the UI if run on
 /// the main isolate.
 class ClassroomEngine {
-  ClassroomEngine._(this.yunetModelPath, this.arcfaceModelPath, this._baseDir) {
+  ClassroomEngine._(
+    this.yunetModelPath,
+    this.retinafaceModelPath,
+    this.haarModelPath,
+    this.arcfaceModelPath,
+    this._baseDir,
+  ) {
     switchClass('CS101'); // Default fallback
   }
 
   static late final ClassroomEngine instance;
 
   final String yunetModelPath;
+  final String retinafaceModelPath;
+  final String haarModelPath;
   final String arcfaceModelPath;
   final String _baseDir;
+
+  String activeDetector = 'yunet'; // 'yunet', 'retinaface', 'haar'
+
+  void setActiveDetector(String detector) {
+    if (['yunet', 'retinaface', 'haar'].contains(detector)) {
+      activeDetector = detector;
+    }
+  }
+
+  String get activeDetectorName {
+    switch (activeDetector) {
+      case 'retinaface':
+        return 'RetinaFace MobileNet-0.25';
+      case 'haar':
+        return 'Haar Cascade';
+      case 'yunet':
+      default:
+        return 'YuNet INT8';
+    }
+  }
+
+  String get currentDetectorModelPath {
+    switch (activeDetector) {
+      case 'retinaface':
+        return retinafaceModelPath;
+      case 'haar':
+        return haarModelPath;
+      case 'yunet':
+      default:
+        return yunetModelPath;
+    }
+  }
   
   late String rosterDbPath;
   String currentClassId = 'CS101';
@@ -70,15 +110,19 @@ class ClassroomEngine {
   static Future<ClassroomEngine> init() async {
     final dir = await getApplicationSupportDirectory();
     String yunet = '';
+    String retinaface = '';
+    String haar = '';
     String arcface = '';
     try {
       yunet = await _extractAsset('assets/models/yunet_int8.onnx', p.join(dir.path, 'yunet_int8.onnx'));
       arcface = await _extractAsset('assets/models/arcface_mobilefacenet.onnx', p.join(dir.path, 'arcface_mobilefacenet.onnx'));
+      retinaface = await _extractAsset('assets/models/retinaface_mobilenet025_int8.onnx', p.join(dir.path, 'retinaface_mobilenet025_int8.onnx'));
+      haar = await _extractAsset('assets/models/haarcascade_frontalface_default.xml', p.join(dir.path, 'haarcascade_frontalface_default.xml'));
     } catch (e) {
-      print('WARNING: ONNX models missing from assets/models/. ML pipelines will fail if called: $e');
+      print('WARNING: Model assets missing from assets/models/: $e');
     }
     
-    return ClassroomEngine._(yunet, arcface, dir.path);
+    return ClassroomEngine._(yunet, retinaface, haar, arcface, dir.path);
   }
 
   static Future<String> _extractAsset(String assetKey, String destPath) async {
@@ -131,11 +175,12 @@ class ClassroomEngine {
   }
 
   /// Runs the full pipeline on a recorded sweep video and returns the
-  /// attendance results.
+  /// attendance results using the currently selected detector.
   Future<List<AttendanceResult>> processSweepVideo(String videoPath) {
+    final modelPath = currentDetectorModelPath;
     return Isolate.run(() => _processSweepVideo(_SweepArgs(
           videoPath: videoPath,
-          yunetModelPath: yunetModelPath,
+          yunetModelPath: modelPath,
           arcfaceModelPath: arcfaceModelPath,
           rosterDbPath: rosterDbPath,
         )));
