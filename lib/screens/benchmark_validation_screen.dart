@@ -16,19 +16,20 @@ class BenchmarkValidationScreen extends StatefulWidget {
 }
 
 class _BenchmarkValidationScreenState extends State<BenchmarkValidationScreen> {
-  int _selectedScenarioIndex = 4; // Default to Scenario 5 (Deep Tiered Hall)
+  int _selectedScenarioIndex = 0; // Default to Scenario 1 (Standard Tiered Hall)
   bool _isPickingVideo = false;
 
   final List<Map<String, dynamic>> _scenarios = [
     {
       'id': 'S1',
+      'shortName': 'S1 • Standard',
       'name': 'Scenario 1: Standard Tiered Hall',
       'students': 40,
       'lux': 152,
       'depth': 'Rows 1-6 (1-4m)',
       'desc': 'Standard lecture hall with uniform fluorescent illumination.',
-      'paper1_f1': '99.5% (RetinaFace GPU)',
-      'paper1_time': '9.15s (T4 GPU)',
+      'ref_f1': '99.5%',
+      'ref_time': '9.15s',
       'yunet_f1': '98.3%',
       'yunet_time': '22.4 ms',
       'rear_recall': '97.2%',
@@ -36,13 +37,14 @@ class _BenchmarkValidationScreenState extends State<BenchmarkValidationScreen> {
     },
     {
       'id': 'S2',
+      'shortName': 'S2 • High Density',
       'name': 'Scenario 2: High-Density Tiered Hall',
       'students': 38,
       'lux': 152,
       'depth': 'Rows 1-6 (1-5m)',
       'desc': 'Tight bench spacing with frequent shoulder and head occlusions.',
-      'paper1_f1': '99.5% (RetinaFace GPU)',
-      'paper1_time': '12.73s (T4 GPU)',
+      'ref_f1': '99.5%',
+      'ref_time': '12.7s',
       'yunet_f1': '98.3%',
       'yunet_time': '22.4 ms',
       'rear_recall': '97.2%',
@@ -50,13 +52,14 @@ class _BenchmarkValidationScreenState extends State<BenchmarkValidationScreen> {
     },
     {
       'id': 'S3',
+      'shortName': 'S3 • Seminar',
       'name': 'Scenario 3: Medium Seminar Room',
       'students': 32,
       'lux': 152,
       'depth': 'Rows 1-5 (1-4m)',
       'desc': 'Angled student postures, note-taking and laptops on desks.',
-      'paper1_f1': '99.5% (RetinaFace GPU)',
-      'paper1_time': '9.66s (T4 GPU)',
+      'ref_f1': '99.5%',
+      'ref_time': '9.66s',
       'yunet_f1': '98.3%',
       'yunet_time': '22.4 ms',
       'rear_recall': '97.2%',
@@ -64,13 +67,14 @@ class _BenchmarkValidationScreenState extends State<BenchmarkValidationScreen> {
     },
     {
       'id': 'S4',
+      'shortName': 'S4 • Dim Light',
       'name': 'Scenario 4: Dim-Light Projector Lecture',
       'students': 32,
       'lux': 40,
       'depth': 'Rows 1-5 (1-5m)',
-      'desc': '40 Lux low-light projection mode. Haar Cascade collapses to 25% recall.',
-      'paper1_f1': '100% (RetinaFace GPU)',
-      'paper1_time': '11.47s (T4 GPU)',
+      'desc': '40 Lux low-light projection mode. Classical cascade drops to 25% recall.',
+      'ref_f1': '100%',
+      'ref_time': '11.5s',
       'yunet_f1': '97.3%',
       'yunet_time': '22.4 ms',
       'rear_recall': '96.5%',
@@ -78,13 +82,14 @@ class _BenchmarkValidationScreenState extends State<BenchmarkValidationScreen> {
     },
     {
       'id': 'S5',
+      'shortName': 'S5 • PSG Deep Hall',
       'name': 'Scenario 5: PSG Tech Deep Tiered Hall',
       'students': 60,
       'lux': 140,
-      'depth': 'Rows 1-10 (1-8m Depth)',
+      'depth': 'Rows 1-10 (1-8m)',
       'desc': 'Challenging 10-row amphitheater with rear rows 6-10 at 6-8 meters.',
-      'paper1_f1': '94.8% (RetinaFace GPU)',
-      'paper1_time': '4.18s (GPU)',
+      'ref_f1': '94.8%',
+      'ref_time': '4.18s',
       'yunet_f1': '97.4%',
       'yunet_time': '22.4 ms',
       'rear_recall': '94.4%',
@@ -130,6 +135,7 @@ class _BenchmarkValidationScreenState extends State<BenchmarkValidationScreen> {
       isScrollControlled: true,
       builder: (ctx) => SafeArea(
         child: Container(
+          constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.85),
           decoration: BoxDecoration(
             color: isDark ? const Color(0xFF2B2D31) : Colors.white,
             borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
@@ -141,71 +147,73 @@ class _BenchmarkValidationScreenState extends State<BenchmarkValidationScreen> {
               )
             ],
           ),
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                  width: 36,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: isDark ? Colors.white24 : Colors.black12,
-                    borderRadius: BorderRadius.circular(2),
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 36,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: isDark ? Colors.white24 : Colors.black12,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Select Face Detection Engine',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: primaryTextColor),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                'Switch between detectors live for comparative latency and multi-row recall evaluation.',
-                style: TextStyle(fontSize: 12, color: isDark ? Colors.white60 : Colors.black54),
-              ),
-              const SizedBox(height: 16),
-              _buildDetectorOption(
-                key: 'yunet',
-                title: 'YuNet INT8 + SAHI',
-                subtitle: '11.8ms per frame • Quantized 100KB • 2.5x Rear Horizon Zoom • Edge Optimized',
-                badge: 'PROPOSED',
-                badgeColor: AppTheme.discordGreen,
-                isSelected: widget.engine.activeDetector == 'yunet',
-                onTap: () {
-                  setState(() => widget.engine.setActiveDetector('yunet'));
-                  Navigator.pop(ctx);
-                },
-              ),
-              const SizedBox(height: 10),
-              _buildDetectorOption(
-                key: 'retinaface',
-                title: 'RetinaFace MobileNet-0.25',
-                subtitle: '52.3ms CPU (9.1s GPU) • ResNet FPN • Base Paper 1 Accuracy Baseline',
-                badge: 'BASE PAPER',
-                badgeColor: AppTheme.discordPurple,
-                isSelected: widget.engine.activeDetector == 'retinaface',
-                onTap: () {
-                  setState(() => widget.engine.setActiveDetector('retinaface'));
-                  Navigator.pop(ctx);
-                },
-              ),
-              const SizedBox(height: 10),
-              _buildDetectorOption(
-                key: 'haar',
-                title: 'Haar Cascade (OpenCV)',
-                subtitle: '68.2ms • Legacy XML classifier • Classical Viola-Jones Baseline',
-                badge: 'LEGACY',
-                badgeColor: Colors.amber,
-                isSelected: widget.engine.activeDetector == 'haar',
-                onTap: () {
-                  setState(() => widget.engine.setActiveDetector('haar'));
-                  Navigator.pop(ctx);
-                },
-              ),
-            ],
+                const SizedBox(height: 16),
+                Text(
+                  'Select Face Detection Engine',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: primaryTextColor),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Switch between detectors live for comparative latency and multi-row recall evaluation.',
+                  style: TextStyle(fontSize: 12, color: isDark ? Colors.white60 : Colors.black54),
+                ),
+                const SizedBox(height: 16),
+                _buildDetectorOption(
+                  key: 'yunet',
+                  title: 'YuNet INT8 + SAHI',
+                  subtitle: '11.8ms per frame • Quantized 100KB • 2.5x Rear Horizon Zoom • Edge Optimized',
+                  badge: 'RECOMMENDED',
+                  badgeColor: AppTheme.discordGreen,
+                  isSelected: widget.engine.activeDetector == 'yunet',
+                  onTap: () {
+                    setState(() => widget.engine.setActiveDetector('yunet'));
+                    Navigator.pop(ctx);
+                  },
+                ),
+                const SizedBox(height: 10),
+                _buildDetectorOption(
+                  key: 'retinaface',
+                  title: 'RetinaFace MobileNet-0.25',
+                  subtitle: '52.3ms CPU (9.1s GPU) • ResNet FPN • High Accuracy Deep Detector',
+                  badge: '',
+                  badgeColor: AppTheme.discordPurple,
+                  isSelected: widget.engine.activeDetector == 'retinaface',
+                  onTap: () {
+                    setState(() => widget.engine.setActiveDetector('retinaface'));
+                    Navigator.pop(ctx);
+                  },
+                ),
+                const SizedBox(height: 10),
+                _buildDetectorOption(
+                  key: 'haar',
+                  title: 'Haar Cascade (OpenCV)',
+                  subtitle: '68.2ms • CPU XML Classifier • Classical Viola-Jones',
+                  badge: '',
+                  badgeColor: Colors.amber,
+                  isSelected: widget.engine.activeDetector == 'haar',
+                  onTap: () {
+                    setState(() => widget.engine.setActiveDetector('haar'));
+                    Navigator.pop(ctx);
+                  },
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -255,33 +263,32 @@ class _BenchmarkValidationScreenState extends State<BenchmarkValidationScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
+                  Wrap(
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 8,
+                    runSpacing: 4,
                     children: [
-                      Expanded(
-                        child: Text(
-                          title,
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                            color: isSelected ? AppTheme.discordPurple : primaryTextColor,
+                      Text(
+                        title,
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: isSelected ? AppTheme.discordPurple : primaryTextColor,
+                        ),
+                      ),
+                      if (badge.isNotEmpty)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: badgeColor.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: badgeColor.withValues(alpha: 0.4)),
                           ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                          child: Text(
+                            badge,
+                            style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: badgeColor),
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: badgeColor.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(color: badgeColor.withValues(alpha: 0.4)),
-                        ),
-                        child: Text(
-                          badge,
-                          style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: badgeColor),
-                        ),
-                      ),
                     ],
                   ),
                   const SizedBox(height: 3),
@@ -326,17 +333,25 @@ class _BenchmarkValidationScreenState extends State<BenchmarkValidationScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            'Empirical Benchmark',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: primaryTextColor,
+                          FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              'Benchmark Evaluation',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: primaryTextColor,
+                              ),
                             ),
                           ),
-                          Text(
-                            'Real-World Edge CPU vs Base Papers 1 & 2',
-                            style: TextStyle(fontSize: 12, color: secondaryTextColor),
+                          FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              'On-Device Edge CPU vs Cloud Reference',
+                              style: TextStyle(fontSize: 12, color: secondaryTextColor),
+                            ),
                           ),
                         ],
                       ),
@@ -379,39 +394,54 @@ class _BenchmarkValidationScreenState extends State<BenchmarkValidationScreen> {
                 child: ListView(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   children: [
-                    // Scenario Selector Horizontal Carousel
+                    // Scenario Selector Horizontal Carousel (Smooth custom pills)
                     SizedBox(
                       height: 42,
                       child: ListView.builder(
                         scrollDirection: Axis.horizontal,
+                        physics: const BouncingScrollPhysics(),
                         itemCount: _scenarios.length,
                         itemBuilder: (ctx, idx) {
                           final sc = _scenarios[idx];
                           final isSelected = idx == _selectedScenarioIndex;
                           return Padding(
                             padding: const EdgeInsets.only(right: 8),
-                            child: FilterChip(
-                              label: Text('${sc['id']}: ${sc['name'].toString().split(': ').last}'),
-                              selected: isSelected,
-                              selectedColor: AppTheme.discordBlurple.withValues(alpha: 0.25),
-                              backgroundColor: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.04),
-                              labelStyle: TextStyle(
-                                fontSize: 11,
-                                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                                color: isSelected ? AppTheme.discordBlurple : primaryTextColor,
+                            child: InkWell(
+                              onTap: () => setState(() => _selectedScenarioIndex = idx),
+                              borderRadius: BorderRadius.circular(20),
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 180),
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: isSelected
+                                      ? AppTheme.discordBlurple
+                                      : (isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.05)),
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(
+                                    color: isSelected
+                                        ? AppTheme.discordBlurple
+                                        : (isDark ? Colors.white12 : Colors.black12),
+                                    width: isSelected ? 1.5 : 1.0,
+                                  ),
+                                ),
+                                child: Center(
+                                  child: Text(
+                                    sc['shortName'] as String,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                                      color: isSelected ? Colors.white : primaryTextColor,
+                                    ),
+                                  ),
+                                ),
                               ),
-                              side: BorderSide(
-                                color: isSelected ? AppTheme.discordBlurple : (isDark ? Colors.white12 : Colors.black12),
-                              ),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                              onSelected: (_) => setState(() => _selectedScenarioIndex = idx),
                             ),
                           );
                         },
                       ),
                     ),
 
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 14),
 
                     // Active Scenario Card
                     GlassCard(
@@ -421,33 +451,40 @@ class _BenchmarkValidationScreenState extends State<BenchmarkValidationScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                Text(
-                                  currentScenario['name'],
-                                  style: TextStyle(
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.bold,
-                                    color: primaryTextColor,
-                                  ),
-                                ),
                                 Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                   decoration: BoxDecoration(
                                     color: AppTheme.discordBlurple.withValues(alpha: 0.15),
                                     borderRadius: BorderRadius.circular(8),
                                   ),
-                                  child: Text(
-                                    '${currentScenario['students']} Students',
-                                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.discordBlurple),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(Icons.meeting_room_rounded, size: 13, color: AppTheme.discordBlurple),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        '${currentScenario['id']} • ${currentScenario['students']} Students',
+                                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.discordBlurple),
+                                      ),
+                                    ],
                                   ),
                                 ),
                               ],
                             ),
+                            const SizedBox(height: 8),
+                            Text(
+                              currentScenario['name'],
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: primaryTextColor,
+                              ),
+                            ),
                             const SizedBox(height: 6),
                             Text(
                               currentScenario['desc'],
-                              style: TextStyle(fontSize: 12, color: secondaryTextColor),
+                              style: TextStyle(fontSize: 12, color: secondaryTextColor, height: 1.3),
                             ),
                             const SizedBox(height: 14),
                             Row(
@@ -474,7 +511,7 @@ class _BenchmarkValidationScreenState extends State<BenchmarkValidationScreen> {
 
                     const SizedBox(height: 14),
 
-                    // ClassRoom Proposed vs Base Paper 1 Comparison Card
+                    // Empirical Benchmark Metrics Card
                     GlassCard(
                       child: Padding(
                         padding: const EdgeInsets.all(16),
@@ -485,9 +522,15 @@ class _BenchmarkValidationScreenState extends State<BenchmarkValidationScreen> {
                               children: [
                                 const Icon(Icons.compare_arrows_rounded, color: AppTheme.discordPurple, size: 20),
                                 const SizedBox(width: 8),
-                                Text(
-                                  'Empirical Metrics vs. Literature',
-                                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: primaryTextColor),
+                                Expanded(
+                                  child: FittedBox(
+                                    fit: BoxFit.scaleDown,
+                                    alignment: Alignment.centerLeft,
+                                    child: Text(
+                                      'Empirical Benchmark Metrics',
+                                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: primaryTextColor),
+                                    ),
+                                  ),
                                 ),
                               ],
                             ),
@@ -499,7 +542,8 @@ class _BenchmarkValidationScreenState extends State<BenchmarkValidationScreen> {
                                   child: _buildComparisonTile(
                                     title: 'F1-Score',
                                     ourValue: currentScenario['yunet_f1'],
-                                    baselineValue: currentScenario['paper1_f1'],
+                                    referenceLabel: 'Reference',
+                                    referenceValue: currentScenario['ref_f1'],
                                     isPositive: true,
                                   ),
                                 ),
@@ -508,7 +552,8 @@ class _BenchmarkValidationScreenState extends State<BenchmarkValidationScreen> {
                                   child: _buildComparisonTile(
                                     title: 'Inference Latency',
                                     ourValue: currentScenario['yunet_time'],
-                                    baselineValue: currentScenario['paper1_time'],
+                                    referenceLabel: 'Cloud GPU',
+                                    referenceValue: currentScenario['ref_time'],
                                     isPositive: true,
                                     isSpeed: true,
                                   ),
@@ -522,7 +567,8 @@ class _BenchmarkValidationScreenState extends State<BenchmarkValidationScreen> {
                                   child: _buildComparisonTile(
                                     title: 'Rear-Row Recall (6-8m)',
                                     ourValue: currentScenario['rear_recall'],
-                                    baselineValue: '72.2% (No SAHI)',
+                                    referenceLabel: 'Without Zoom',
+                                    referenceValue: '72.2%',
                                     isPositive: true,
                                   ),
                                 ),
@@ -531,7 +577,8 @@ class _BenchmarkValidationScreenState extends State<BenchmarkValidationScreen> {
                                   child: _buildComparisonTile(
                                     title: 'False Absence Rate',
                                     ourValue: currentScenario['far'],
-                                    baselineValue: '27.8% (Symmetric)',
+                                    referenceLabel: 'Raw Baseline',
+                                    referenceValue: '27.8%',
                                     isPositive: true,
                                   ),
                                 ),
@@ -544,7 +591,7 @@ class _BenchmarkValidationScreenState extends State<BenchmarkValidationScreen> {
 
                     const SizedBox(height: 14),
 
-                    // Base Paper 2 Architecture Comparison Card
+                    // Architecture Comparison Card
                     GlassCard(
                       child: Padding(
                         padding: const EdgeInsets.all(16),
@@ -555,13 +602,19 @@ class _BenchmarkValidationScreenState extends State<BenchmarkValidationScreen> {
                               children: [
                                 const Icon(Icons.shield_outlined, color: AppTheme.discordGreen, size: 20),
                                 const SizedBox(width: 8),
-                                Text(
-                                  'Architecture: ClassRoom vs Bugingo et al. 2025',
-                                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: primaryTextColor),
+                                Expanded(
+                                  child: FittedBox(
+                                    fit: BoxFit.scaleDown,
+                                    alignment: Alignment.centerLeft,
+                                    child: Text(
+                                      'Architecture Comparison (Mobile vs Cloud)',
+                                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: primaryTextColor),
+                                    ),
+                                  ),
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 10),
+                            const SizedBox(height: 12),
                             _buildArchRow(
                               label: 'Capture Hardware',
                               ours: 'Handheld Smartphone (10s sweep)',
@@ -598,7 +651,7 @@ class _BenchmarkValidationScreenState extends State<BenchmarkValidationScreen> {
                         icon: _isPickingVideo
                             ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                             : const Icon(Icons.video_library_rounded),
-                        label: Text(_isPickingVideo ? 'Analyzing Video...' : 'Run Benchmark on Classroom Sweep Video'),
+                        label: Text(_isPickingVideo ? 'Analyzing Video...' : 'Run Video Benchmark'),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppTheme.discordPurple,
                           foregroundColor: Colors.white,
@@ -636,17 +689,33 @@ class _BenchmarkValidationScreenState extends State<BenchmarkValidationScreen> {
           borderRadius: BorderRadius.circular(10),
           border: Border.all(color: color.withValues(alpha: 0.25)),
         ),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 16, color: color),
-            const SizedBox(width: 6),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(label, style: TextStyle(fontSize: 10, color: isDark ? Colors.white60 : Colors.black54)),
-                  Text(value, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: primaryTextColor)),
-                ],
+            Row(
+              children: [
+                Icon(icon, size: 14, color: color),
+                const SizedBox(width: 5),
+                Expanded(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      label,
+                      style: TextStyle(fontSize: 10, color: isDark ? Colors.white60 : Colors.black54),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 3),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(
+                value,
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: primaryTextColor),
               ),
             ),
           ],
@@ -658,7 +727,8 @@ class _BenchmarkValidationScreenState extends State<BenchmarkValidationScreen> {
   Widget _buildComparisonTile({
     required String title,
     required String ourValue,
-    required String baselineValue,
+    required String referenceLabel,
+    required String referenceValue,
     required bool isPositive,
     bool isSpeed = false,
   }) {
@@ -666,31 +736,42 @@ class _BenchmarkValidationScreenState extends State<BenchmarkValidationScreen> {
     final primaryTextColor = isDark ? const Color(0xFFF2F3F5) : const Color(0xFF23272A);
 
     return Container(
-      padding: const EdgeInsets.all(10),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: isDark ? Colors.white.withValues(alpha: 0.04) : Colors.black.withValues(alpha: 0.02),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(color: isDark ? Colors.white10 : Colors.black12),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: primaryTextColor)),
-          const SizedBox(height: 4),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              title,
+              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: primaryTextColor),
+            ),
+          ),
+          const SizedBox(height: 5),
           Row(
             children: [
               Text(
                 ourValue,
-                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppTheme.discordGreen),
+                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppTheme.discordGreen),
               ),
               const SizedBox(width: 4),
-              const Icon(Icons.arrow_upward_rounded, size: 12, color: AppTheme.discordGreen),
+              const Icon(Icons.arrow_upward_rounded, size: 13, color: AppTheme.discordGreen),
             ],
           ),
-          const SizedBox(height: 2),
-          Text(
-            'Baseline: $baselineValue',
-            style: TextStyle(fontSize: 10, color: isDark ? Colors.white38 : Colors.black38),
+          const SizedBox(height: 3),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              '$referenceLabel: $referenceValue',
+              style: TextStyle(fontSize: 10, color: isDark ? Colors.white54 : Colors.black45),
+            ),
           ),
         ],
       ),
@@ -706,31 +787,41 @@ class _BenchmarkValidationScreenState extends State<BenchmarkValidationScreen> {
     final primaryTextColor = isDark ? const Color(0xFFF2F3F5) : const Color(0xFF23272A);
 
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(
-            width: 110,
-            child: Text(
-              label,
-              style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: primaryTextColor),
-            ),
+          Text(
+            label,
+            style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: primaryTextColor),
           ),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '✓ ClassRoom: $ours',
-                  style: const TextStyle(fontSize: 11, color: AppTheme.discordGreen),
+          const SizedBox(height: 4),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(Icons.check_circle_rounded, size: 14, color: AppTheme.discordGreen),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  'ClassRoom: $ours',
+                  style: const TextStyle(fontSize: 11, color: AppTheme.discordGreen, fontWeight: FontWeight.w600),
                 ),
-                Text(
-                  '✗ Baseline: $theirs',
-                  style: TextStyle(fontSize: 10, color: isDark ? Colors.white38 : Colors.black38),
+              ),
+            ],
+          ),
+          const SizedBox(height: 2),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.remove_circle_outline_rounded, size: 14, color: isDark ? Colors.white38 : Colors.black38),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  'Traditional: $theirs',
+                  style: TextStyle(fontSize: 11, color: isDark ? Colors.white54 : Colors.black45),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ],
       ),
