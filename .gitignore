@@ -28,6 +28,7 @@ data/annotations/*
 *.png
 !docs/**/*.png
 !assets/**/*.png
+!reverse/**/*.png
 !ios/Runner/Assets.xcassets/**/*.png
 !android/app/src/main/res/**/*.png
 
