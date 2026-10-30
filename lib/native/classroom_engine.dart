@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:ffi';
 import 'dart:io';
 import 'dart:isolate';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:ffi/ffi.dart';
@@ -184,6 +185,167 @@ class ClassroomEngine {
           arcfaceModelPath: arcfaceModelPath,
           rosterDbPath: rosterDbPath,
         )));
+  }
+
+  /// Runs the full pipeline across multiple recorded sweep videos and
+  /// aggregates the attendance results into a single consolidated roster.
+  ///
+  /// Multi-Sweep Aggregation Rules:
+  /// - A student is marked [AttendanceStatus.present] if detected as present in ANY sweep.
+  /// - The similarity score is the maximum confidence observed across sweeps.
+  /// - Frame IDs from all sweeps where the student was recognized are combined.
+  /// - A student is marked [AttendanceStatus.absent] only if absent across ALL sweeps.
+  /// - Telemetry statistics (__pipeline_debug__) are summed and aggregated.
+  Future<List<AttendanceResult>> processMultipleSweeps(
+    List<String> videoPaths, {
+    void Function(int currentSweep, int totalSweeps, String message)? onProgress,
+  }) async {
+    if (videoPaths.isEmpty) return [];
+    if (videoPaths.length == 1) {
+      onProgress?.call(1, 1, 'Processing sweep 1 of 1…');
+      return processSweepVideo(videoPaths.first);
+    }
+
+    List<AttendanceResult>? aggregated;
+    int totalSampled = 0;
+    int totalSharp = 0;
+    int totalDets = 0;
+    int totalHorizonDets = 0;
+    int totalDesks = 0;
+    int totalEmbeds = 0;
+    int totalPruned = 0;
+    int totalClusters = 0;
+    int rosterSize = 0;
+    String detectorName = activeDetector;
+
+    for (int i = 0; i < videoPaths.length; i++) {
+      final sweepNumber = i + 1;
+      onProgress?.call(
+        sweepNumber,
+        videoPaths.length,
+        'Processing sweep $sweepNumber of ${videoPaths.length}…',
+      );
+
+      final sweepResults = await processSweepVideo(videoPaths[i]);
+
+      for (final r in sweepResults) {
+        if (r.studentId == '__pipeline_debug__') {
+          final parts = (r.name ?? '').split(',');
+          for (final part in parts) {
+            final kv = part.split('=');
+            if (kv.length == 2) {
+              final k = kv[0].trim();
+              final v = int.tryParse(kv[1].trim()) ?? 0;
+              if (k == 'sampled') {
+                totalSampled += v;
+              } else if (k == 'sharp') {
+                totalSharp += v;
+              } else if (k == 'dets') {
+                totalDets += v;
+              } else if (k == 'horizon_dets') {
+                totalHorizonDets += v;
+              } else if (k == 'desks') {
+                totalDesks += v;
+              } else if (k == 'embeds') {
+                totalEmbeds += v;
+              } else if (k == 'pruned') {
+                totalPruned += v;
+              } else if (k == 'clusters') {
+                totalClusters += v;
+              } else if (k == 'roster') {
+                rosterSize = v;
+              } else if (k == 'detector') {
+                detectorName = kv[1].trim();
+              }
+            }
+          }
+        }
+      }
+
+      if (aggregated == null) {
+        aggregated = sweepResults;
+      } else {
+        aggregated = aggregateAttendanceResults(aggregated, sweepResults);
+      }
+    }
+
+    final nonDebug = aggregated!.where((r) => r.studentId != '__pipeline_debug__').toList();
+    final debugEntry = AttendanceResult(
+      studentId: '__pipeline_debug__',
+      name: 'detector=$detectorName'
+          ',sweeps=${videoPaths.length}'
+          ',sampled=$totalSampled'
+          ',sharp=$totalSharp'
+          ',dets=$totalDets'
+          ',horizon_dets=$totalHorizonDets'
+          ',desks=$totalDesks'
+          ',embeds=$totalEmbeds'
+          ',pruned=$totalPruned'
+          ',clusters=$totalClusters'
+          ',roster=$rosterSize',
+      status: AttendanceStatus.unknownGuest,
+      similarityScore: 0.0,
+    );
+    nonDebug.add(debugEntry);
+
+    return nonDebug;
+  }
+
+  /// Aggregates two lists of attendance results into a single unified list.
+  /// If a student is present in either list, their status becomes [AttendanceStatus.present].
+  List<AttendanceResult> aggregateAttendanceResults(
+    List<AttendanceResult> baseResults,
+    List<AttendanceResult> newResults,
+  ) {
+    final Map<String, AttendanceResult> studentMap = {};
+    final List<AttendanceResult> guests = [];
+
+    String getKey(AttendanceResult r) => (r.studentId != null && r.studentId!.isNotEmpty)
+        ? r.studentId!
+        : (r.name ?? '');
+
+    for (final r in baseResults) {
+      if (r.studentId == '__pipeline_debug__') continue;
+      if (r.status == AttendanceStatus.unknownGuest) {
+        guests.add(r);
+      } else {
+        final key = getKey(r);
+        if (key.isNotEmpty) {
+          studentMap[key] = r;
+        }
+      }
+    }
+
+    for (final r in newResults) {
+      if (r.studentId == '__pipeline_debug__') continue;
+      if (r.status == AttendanceStatus.unknownGuest) {
+        guests.add(r);
+      } else {
+        final key = getKey(r);
+        if (key.isEmpty) continue;
+
+        if (!studentMap.containsKey(key)) {
+          studentMap[key] = r;
+        } else {
+          final existing = studentMap[key]!;
+          final isPresent = (existing.status == AttendanceStatus.present) ||
+              (r.status == AttendanceStatus.present);
+          final bestScore = max(existing.similarityScore, r.similarityScore);
+          final mergedFrames = <int>{...existing.frameIds, ...r.frameIds}.toList()..sort();
+
+          studentMap[key] = AttendanceResult(
+            studentId: existing.studentId,
+            name: existing.name ?? r.name,
+            status: isPresent ? AttendanceStatus.present : AttendanceStatus.absent,
+            similarityScore: bestScore,
+            matchedClusterId: existing.matchedClusterId ?? r.matchedClusterId,
+            frameIds: mergedFrames,
+          );
+        }
+      }
+    }
+
+    return [...studentMap.values, ...guests];
   }
 
   /// Returns a list of all currently enrolled students: [{'student_id': '...', 'name': '...'}]

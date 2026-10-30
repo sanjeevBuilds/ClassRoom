@@ -1,12 +1,17 @@
 import 'dart:io';
+import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import '../models/attendance_result.dart';
+import '../native/classroom_engine.dart';
 import '../theme/app_theme.dart';
 import '../widgets/glass_card.dart';
 import '../widgets/ambient_background.dart';
+import 'capture_screen.dart';
+import 'processing_screen.dart';
 
 class ResultsScreen extends StatefulWidget {
   final List<AttendanceResult> initialResults;
@@ -71,6 +76,263 @@ class _ResultsScreenState extends State<ResultsScreen> {
     await Share.shareXFiles([XFile(file.path)], text: 'Attendance results');
   }
 
+  List<AttendanceResult> _consolidatedResultsWithOverrides() {
+    return _knownResults.map((r) {
+      final key = r.studentId ?? r.name ?? r.hashCode.toString();
+      final overridden = _overrides[key];
+      if (overridden != null) {
+        return r.copyWith(
+          status: overridden ? AttendanceStatus.present : AttendanceStatus.absent,
+        );
+      }
+      return r;
+    }).toList();
+  }
+
+  Future<void> _showAddSweepSessionModal() async {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryTextColor = isDark ? const Color(0xFFF2F3F5) : const Color(0xFF23272A);
+    final secondaryTextColor = isDark ? Colors.white60 : Colors.black54;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        final media = MediaQuery.of(ctx);
+        final size = media.size;
+
+        return Container(
+          decoration: BoxDecoration(
+            color: (isDark ? AppTheme.darkSurface : AppTheme.lightSurface).withValues(alpha: 0.95),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.4),
+                blurRadius: 24,
+                offset: const Offset(0, -6),
+              ),
+            ],
+          ),
+          child: SafeArea(
+            top: false,
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(20, 16, 20, 16 + media.padding.bottom),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: isDark ? Colors.white24 : Colors.black12,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Add Sweep to Current Session',
+                    style: TextStyle(
+                      fontSize: (size.width * 0.045).clamp(16.0, 19.0),
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: -0.3,
+                      color: primaryTextColor,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Currently $presentCount present and $absentCount absent. Record or upload an additional sweep angle (e.g. rear rows or opposite wing) to verify missing students.',
+                    style: TextStyle(
+                      fontSize: (size.width * 0.031).clamp(12.0, 13.5),
+                      color: secondaryTextColor,
+                      height: 1.35,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+
+                  // Option 1: Live Sweep
+                  Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(16),
+                      onTap: () async {
+                        Navigator.pop(ctx);
+                        final cameras = await availableCameras();
+                        if (cameras.isEmpty) {
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('No camera available.')),
+                            );
+                          }
+                          return;
+                        }
+                        if (!mounted) return;
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => CaptureScreen(
+                              cameras: cameras,
+                              engine: ClassroomEngine.instance,
+                              initialExistingResults: _consolidatedResultsWithOverrides(),
+                            ),
+                          ),
+                        );
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: isDark ? const Color(0xFF1E1F22) : const Color(0xFFF2F3F5),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: isDark ? Colors.white12 : Colors.black12,
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 44,
+                              height: 44,
+                              decoration: BoxDecoration(
+                                gradient: const LinearGradient(
+                                  colors: [AppTheme.discordPurple, AppTheme.discordDeepPurple],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                ),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: const Icon(Icons.videocam_rounded, color: Colors.white, size: 22),
+                            ),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Record Live Sweep Angle',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 15,
+                                      color: primaryTextColor,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    'Scan missing rows with gyro alignment',
+                                    style: TextStyle(fontSize: 12, color: secondaryTextColor),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Icon(
+                              Icons.arrow_forward_ios_rounded,
+                              size: 14,
+                              color: isDark ? Colors.white38 : Colors.black26,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 10),
+
+                  // Option 2: Upload Video Clip
+                  Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(16),
+                      onTap: () async {
+                        Navigator.pop(ctx);
+                        try {
+                          final picker = ImagePicker();
+                          final picked = await picker.pickVideo(source: ImageSource.gallery);
+                          if (picked != null && mounted) {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => ProcessingScreen(
+                                  videoPath: picked.path,
+                                  engine: ClassroomEngine.instance,
+                                  initialExistingResults: _consolidatedResultsWithOverrides(),
+                                ),
+                              ),
+                            );
+                          }
+                        } catch (e) {
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Failed to load video: $e')),
+                            );
+                          }
+                        }
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: isDark ? const Color(0xFF1E1F22) : const Color(0xFFF2F3F5),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: isDark ? Colors.white12 : Colors.black12,
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 44,
+                              height: 44,
+                              decoration: BoxDecoration(
+                                gradient: const LinearGradient(
+                                  colors: [AppTheme.discordGreen, Color(0xFF3BA55D)],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                ),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: const Icon(Icons.video_library_rounded, color: Colors.white, size: 22),
+                            ),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Upload Additional Sweep Video',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 15,
+                                      color: primaryTextColor,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    'Aggregate video file from device storage',
+                                    style: TextStyle(fontSize: 12, color: secondaryTextColor),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Icon(
+                              Icons.arrow_forward_ios_rounded,
+                              size: 14,
+                              color: isDark ? Colors.white38 : Colors.black26,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -124,6 +386,11 @@ class _ResultsScreenState extends State<ResultsScreen> {
                       ),
                     ),
                     IconButton(
+                      icon: const Icon(Icons.add_a_photo_rounded, color: AppTheme.discordPurple, size: 20),
+                      tooltip: 'Add another sweep & aggregate',
+                      onPressed: _showAddSweepSessionModal,
+                    ),
+                    IconButton(
                       icon: const Icon(Icons.ios_share_rounded, color: AppTheme.discordPurple, size: 20),
                       tooltip: 'Export as CSV',
                       onPressed: _exportCsv,
@@ -164,6 +431,54 @@ class _ResultsScreenState extends State<ResultsScreen> {
                   ),
                 ),
               ),
+
+              if (absentCount > 0)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: AppTheme.discordPurple.withValues(alpha: 0.10),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppTheme.discordPurple.withValues(alpha: 0.25)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.auto_awesome_rounded, color: AppTheme.discordPurple, size: 16),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            '$absentCount student${absentCount > 1 ? 's' : ''} not detected. Add a sweep angle to verify.',
+                            style: TextStyle(
+                              fontSize: 11.5,
+                              color: primaryTextColor,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                        InkWell(
+                          onTap: _showAddSweepSessionModal,
+                          borderRadius: BorderRadius.circular(8),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: AppTheme.discordPurple,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Text(
+                              '+ Add Angle',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
 
               if (unknownGuestCount > 0)
                 Padding(

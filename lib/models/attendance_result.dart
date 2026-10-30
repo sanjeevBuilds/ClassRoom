@@ -37,6 +37,24 @@ class AttendanceResult {
     );
   }
 
+  AttendanceResult copyWith({
+    String? studentId,
+    String? name,
+    AttendanceStatus? status,
+    double? similarityScore,
+    String? matchedClusterId,
+    List<int>? frameIds,
+  }) {
+    return AttendanceResult(
+      studentId: studentId ?? this.studentId,
+      name: name ?? this.name,
+      status: status ?? this.status,
+      similarityScore: similarityScore ?? this.similarityScore,
+      matchedClusterId: matchedClusterId ?? this.matchedClusterId,
+      frameIds: frameIds ?? this.frameIds,
+    );
+  }
+
   Map<String, dynamic> toJson() => {
         'student_id': studentId,
         'name': name,

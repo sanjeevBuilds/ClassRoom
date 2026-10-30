@@ -1,6 +1,7 @@
 import 'dart:ui';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
 import 'package:share_plus/share_plus.dart';
 import '../native/classroom_engine.dart';
 import '../theme/app_theme.dart';
@@ -571,6 +572,101 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
                   ),
+                  const SizedBox(height: 10),
+                  // Option 3: Multi-Sweep Batch Aggregation
+                  Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(16),
+                      onTap: () async {
+                        Navigator.pop(ctx);
+                        await _showBatchSweepModal();
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: isDark ? const Color(0xFF1E1F22) : const Color(0xFFF2F3F5),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: AppTheme.discordPurple.withValues(alpha: 0.3),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 44,
+                              height: 44,
+                              decoration: BoxDecoration(
+                                gradient: const LinearGradient(
+                                  colors: [Color(0xFF5865F2), Color(0xFFEB459E)],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                ),
+                                borderRadius: BorderRadius.circular(12),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: const Color(0xFFEB459E).withValues(alpha: 0.3),
+                                    blurRadius: 8,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ],
+                              ),
+                              child: const Icon(Icons.auto_awesome_motion_rounded, color: Colors.white, size: 22),
+                            ),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Text(
+                                        'Multi-Sweep Batch',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 15,
+                                          color: isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: AppTheme.discordPurple.withValues(alpha: 0.15),
+                                          borderRadius: BorderRadius.circular(6),
+                                        ),
+                                        child: const Text(
+                                          'NEW',
+                                          style: TextStyle(
+                                            color: AppTheme.discordPurple,
+                                            fontSize: 9,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    'Aggregate multiple video angles into one roster',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Icon(
+                              Icons.arrow_forward_ios_rounded,
+                              size: 14,
+                              color: isDark ? Colors.white38 : Colors.black26,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -578,6 +674,301 @@ class _HomeScreenState extends State<HomeScreen> {
         );
       },
     );
+  }
+
+  Future<void> _showBatchSweepModal() async {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryTextColor = isDark ? const Color(0xFFF2F3F5) : const Color(0xFF23272A);
+    final secondaryTextColor = isDark ? Colors.white60 : Colors.black54;
+    final List<String> selectedVideos = [];
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final media = MediaQuery.of(context);
+            final size = media.size;
+
+            return Container(
+              decoration: BoxDecoration(
+                color: (isDark ? AppTheme.darkSurface : AppTheme.lightSurface).withValues(alpha: 0.95),
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.4),
+                    blurRadius: 24,
+                    offset: const Offset(0, -6),
+                  ),
+                ],
+              ),
+              child: SafeArea(
+                top: false,
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(20, 16, 20, 16 + media.padding.bottom),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Center(
+                        child: Container(
+                          width: 40,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: isDark ? Colors.white24 : Colors.black12,
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Multi-Sweep Aggregation',
+                                  style: TextStyle(
+                                    fontSize: (size.width * 0.045).clamp(16.0, 19.0),
+                                    fontWeight: FontWeight.bold,
+                                    letterSpacing: -0.3,
+                                    color: primaryTextColor,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  'Merge multiple video angles into a single attendance sheet',
+                                  style: TextStyle(
+                                    fontSize: (size.width * 0.030).clamp(11.5, 13.0),
+                                    color: secondaryTextColor,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: AppTheme.discordPurple.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: AppTheme.discordPurple.withValues(alpha: 0.35)),
+                            ),
+                            child: Text(
+                              selectedClass,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: AppTheme.discordPurple,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Selected Videos List or Empty State
+                      if (selectedVideos.isEmpty)
+                        Container(
+                          padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+                          decoration: BoxDecoration(
+                            color: isDark ? Colors.white.withValues(alpha: 0.03) : Colors.black.withValues(alpha: 0.03),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: isDark ? Colors.white12 : Colors.black12,
+                            ),
+                          ),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.video_collection_outlined, size: 38, color: secondaryTextColor),
+                              const SizedBox(height: 10),
+                              Text(
+                                'No video sweeps added yet',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 14,
+                                  color: primaryTextColor,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Select 2 or more classroom sweeps (e.g., left and right wings) from your gallery to aggregate.',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(fontSize: 12, color: secondaryTextColor),
+                              ),
+                            ],
+                          ),
+                        )
+                      else
+                        ConstrainedBox(
+                          constraints: BoxConstraints(maxHeight: size.height * 0.28),
+                          child: ListView.separated(
+                            shrinkWrap: true,
+                            itemCount: selectedVideos.length,
+                            separatorBuilder: (_, __) => const SizedBox(height: 8),
+                            itemBuilder: (context, idx) {
+                              final filePath = selectedVideos[idx];
+                              final fileName = p.basename(filePath);
+                              return Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                decoration: BoxDecoration(
+                                  color: isDark ? const Color(0xFF1E1F22) : const Color(0xFFF2F3F5),
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(
+                                    color: isDark ? Colors.white12 : Colors.black12,
+                                  ),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      width: 32,
+                                      height: 32,
+                                      decoration: BoxDecoration(
+                                        color: AppTheme.discordPurple.withValues(alpha: 0.15),
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      child: Center(
+                                        child: Text(
+                                          '${idx + 1}',
+                                          style: const TextStyle(
+                                            color: AppTheme.discordPurple,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 13,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            'Sweep Angle #${idx + 1}',
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 13,
+                                              color: primaryTextColor,
+                                            ),
+                                          ),
+                                          Text(
+                                            fileName,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(fontSize: 11, color: secondaryTextColor),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(Icons.close_rounded, size: 18),
+                                      color: AppTheme.discordRed,
+                                      onPressed: () {
+                                        setModalState(() {
+                                          selectedVideos.removeAt(idx);
+                                        });
+                                      },
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+
+                      const SizedBox(height: 14),
+
+                      // Add Video Button
+                      OutlinedButton.icon(
+                        onPressed: () async {
+                          try {
+                            final picker = ImagePicker();
+                            final List<XFile> media = await picker.pickMultipleMedia();
+                            if (media.isNotEmpty) {
+                              final videoFiles = media.where((f) {
+                                final ext = p.extension(f.path).toLowerCase();
+                                return ext == '.mp4' || ext == '.mov' || ext == '.avi' || ext == '.mkv' || ext == '.m4v';
+                              }).map((f) => f.path).toList();
+
+                              setModalState(() {
+                                for (final path in (videoFiles.isNotEmpty ? videoFiles : media.map((f) => f.path))) {
+                                  if (!selectedVideos.contains(path)) {
+                                    selectedVideos.add(path);
+                                  }
+                                }
+                              });
+                            } else {
+                              final single = await picker.pickVideo(source: ImageSource.gallery);
+                              if (single != null && !selectedVideos.contains(single.path)) {
+                                setModalState(() {
+                                  selectedVideos.add(single.path);
+                                });
+                              }
+                            }
+                          } catch (e) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Failed to pick videos: $e')),
+                              );
+                            }
+                          }
+                        },
+                        icon: const Icon(Icons.add_rounded, size: 18),
+                        label: Text(
+                          selectedVideos.isEmpty ? 'Select Sweeps from Gallery' : '+ Add Another Sweep Clip',
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: primaryTextColor,
+                          minimumSize: const Size(double.infinity, 48),
+                          side: BorderSide(
+                            color: isDark ? Colors.white24 : AppTheme.discordPurple.withValues(alpha: 0.35),
+                          ),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        ),
+                      ),
+
+                      if (selectedVideos.isNotEmpty) ...[
+                        const SizedBox(height: 10),
+                        FilledButton.icon(
+                          onPressed: () {
+                            Navigator.pop(ctx);
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => ProcessingScreen.multi(
+                                  videoPaths: selectedVideos,
+                                  engine: ClassroomEngine.instance,
+                                ),
+                              ),
+                            );
+                          },
+                          icon: const Icon(Icons.bolt_rounded, size: 18),
+                          label: Text(
+                            'Process & Aggregate (${selectedVideos.length} Sweep${selectedVideos.length > 1 ? 's' : ''})',
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                          ),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: AppTheme.discordPurple,
+                            foregroundColor: Colors.white,
+                            minimumSize: const Size(double.infinity, 50),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
   }
 
   Future<void> _clearDatabase() async {

@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:camera/camera.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:sensors_plus/sensors_plus.dart';
+import '../models/attendance_result.dart';
 import '../native/classroom_engine.dart';
 import '../theme/app_theme.dart';
 import '../widgets/glass_card.dart';
@@ -13,8 +14,14 @@ import 'processing_screen.dart';
 class CaptureScreen extends StatefulWidget {
   final List<CameraDescription> cameras;
   final ClassroomEngine engine;
+  final List<AttendanceResult>? initialExistingResults;
 
-  const CaptureScreen({super.key, required this.cameras, required this.engine});
+  const CaptureScreen({
+    super.key,
+    required this.cameras,
+    required this.engine,
+    this.initialExistingResults,
+  });
 
   @override
   State<CaptureScreen> createState() => _CaptureScreenState();
@@ -52,6 +59,7 @@ class _CaptureScreenState extends State<CaptureScreen>
   bool _isRecording = false;
   bool _isTorchOn = false;
   bool _isPickingVideo = false;
+  final List<String> _recordedSweepPaths = [];
 
   // Real-time motion tracking state
   int _lastGyroTime = 0;
@@ -228,11 +236,13 @@ class _CaptureScreenState extends State<CaptureScreen>
       );
 
       if (picked != null && mounted) {
+        final allPaths = [..._recordedSweepPaths, picked.path];
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(
-            builder: (_) => ProcessingScreen(
-              videoPath: picked.path,
+            builder: (_) => ProcessingScreen.multi(
+              videoPaths: allPaths,
               engine: widget.engine,
+              initialExistingResults: widget.initialExistingResults,
             ),
           ),
         );
@@ -256,13 +266,13 @@ class _CaptureScreenState extends State<CaptureScreen>
 
     if (_isRecording) {
       final file = await _controller!.stopVideoRecording();
-      setState(() => _isRecording = false);
+      setState(() {
+        _isRecording = false;
+        _recordedSweepPaths.add(file.path);
+      });
+      _notifyGyroUpdate();
       if (mounted) {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(
-            builder: (_) => ProcessingScreen(videoPath: file.path, engine: widget.engine),
-          ),
-        );
+        _showSweepRecordedModal(file.path);
       }
     } else {
       _recordingPanAngle = 0.0; // Reset pan accumulator for fresh row sweep
@@ -271,6 +281,171 @@ class _CaptureScreenState extends State<CaptureScreen>
       setState(() => _isRecording = true);
       _notifyGyroUpdate();
     }
+  }
+
+  void _showSweepRecordedModal(String lastPath) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryTextColor = isDark ? const Color(0xFFF2F3F5) : const Color(0xFF23272A);
+    final secondaryTextColor = isDark ? Colors.white60 : Colors.black54;
+    final media = MediaQuery.of(context);
+    final size = media.size;
+
+    showModalBottomSheet(
+      context: context,
+      isDismissible: false,
+      enableDrag: false,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return Container(
+          padding: EdgeInsets.fromLTRB(20, 16, 20, 20 + media.padding.bottom),
+          decoration: BoxDecoration(
+            color: (isDark ? AppTheme.darkSurface : AppTheme.lightSurface).withValues(alpha: 0.95),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+            border: Border.all(
+              color: isDark ? Colors.white.withValues(alpha: 0.15) : AppTheme.discordPurple.withValues(alpha: 0.2),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.4),
+                blurRadius: 24,
+                offset: const Offset(0, -6),
+              ),
+            ],
+          ),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: isDark ? Colors.white24 : Colors.black12,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: AppTheme.discordGreen.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: AppTheme.discordGreen.withValues(alpha: 0.35)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.check_circle_rounded, color: AppTheme.discordGreen, size: 16),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Sweep #${_recordedSweepPaths.length} Captured',
+                        style: const TextStyle(
+                          color: AppTheme.discordGreen,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  _recordedSweepPaths.length == 1
+                      ? 'Process Attendance or Add Another Angle?'
+                      : '${_recordedSweepPaths.length} Sweeps in Multi-Angle Session',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: (size.width * 0.045).clamp(16.0, 19.0),
+                    fontWeight: FontWeight.bold,
+                    color: primaryTextColor,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Record from another vantage point (e.g., opposite wing or back row) to capture students obscured in this sweep.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: (size.width * 0.032).clamp(12.0, 13.5),
+                    color: secondaryTextColor,
+                    height: 1.35,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                // Primary Action: Process All Sweeps
+                FilledButton.icon(
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    Navigator.of(context).pushReplacement(
+                      MaterialPageRoute(
+                        builder: (_) => ProcessingScreen.multi(
+                          videoPaths: List.from(_recordedSweepPaths),
+                          engine: widget.engine,
+                          initialExistingResults: widget.initialExistingResults,
+                        ),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.bolt_rounded, size: 20),
+                  label: Text(
+                    'Process Attendance (${_recordedSweepPaths.length} Sweep${_recordedSweepPaths.length > 1 ? 's' : ''})',
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                  ),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppTheme.discordPurple,
+                    foregroundColor: Colors.white,
+                    minimumSize: const Size(double.infinity, 50),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                // Secondary Action: Add Another Angle
+                OutlinedButton.icon(
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          'Sweep #${_recordedSweepPaths.length} queued. Move to next position and tap Record!',
+                        ),
+                        backgroundColor: AppTheme.discordPurple,
+                        duration: const Duration(seconds: 3),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.add_a_photo_rounded, size: 18),
+                  label: const Text(
+                    '+ Record Another Angle (Sweep)',
+                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13.5),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: primaryTextColor,
+                    minimumSize: const Size(double.infinity, 48),
+                    side: BorderSide(
+                      color: isDark ? Colors.white24 : AppTheme.discordPurple.withValues(alpha: 0.35),
+                    ),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                // Discard last sweep option
+                TextButton(
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    setState(() {
+                      _recordedSweepPaths.removeLast();
+                    });
+                  },
+                  child: const Text(
+                    'Discard This Sweep',
+                    style: TextStyle(color: AppTheme.discordRed, fontSize: 12),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   /// Scales camera preview to cover the entire screen while strictly preserving
@@ -547,6 +722,61 @@ class _CaptureScreenState extends State<CaptureScreen>
               ),
             ),
           ),
+
+          // Multi-Sweep Session Floating Action Pill (visible when 1+ sweeps are recorded and not currently recording)
+          if (_recordedSweepPaths.isNotEmpty && !_isRecording)
+            Positioned(
+              bottom: 112,
+              left: 20,
+              right: 20,
+              child: Center(
+                child: GestureDetector(
+                  onTap: () {
+                    Navigator.of(context).pushReplacement(
+                      MaterialPageRoute(
+                        builder: (_) => ProcessingScreen.multi(
+                          videoPaths: List.from(_recordedSweepPaths),
+                          engine: widget.engine,
+                          initialExistingResults: widget.initialExistingResults,
+                        ),
+                      ),
+                    );
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: AppTheme.discordPurple,
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.3), width: 1.2),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppTheme.discordPurple.withValues(alpha: 0.45),
+                          blurRadius: 16,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.auto_awesome_rounded, color: Colors.white, size: 16),
+                        const SizedBox(width: 8),
+                        Text(
+                          '${_recordedSweepPaths.length} Sweep${_recordedSweepPaths.length > 1 ? 's' : ''} Ready • Tap to Process',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        const Icon(Icons.arrow_forward_rounded, color: Colors.white, size: 15),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
 
           // Bottom Controls: Upload Video Button | Shutter / Record | Torch Toggle
           Positioned(
