@@ -1,7 +1,10 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 import 'package:camera/camera.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:sensors_plus/sensors_plus.dart';
@@ -785,40 +788,105 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
 
   Future<void> _showImportDialog() async {
     final textController = TextEditingController();
+    String? selectedFileName;
     final result = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Import Classroom Roster'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Paste the exported classroom JSON package below to import all students and face embeddings:',
-              style: TextStyle(fontSize: 13, color: Colors.grey),
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text('Import Classroom Roster', style: TextStyle(fontWeight: FontWeight.bold)),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text(
+                  'Select an exported classroom .json file or paste the JSON package below:',
+                  style: TextStyle(fontSize: 13, color: Colors.grey),
+                ),
+                const SizedBox(height: 14),
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: AppTheme.discordPurple, width: 1.5),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                  ),
+                  icon: const Icon(Icons.file_open_rounded, color: AppTheme.discordPurple, size: 20),
+                  label: Text(
+                    selectedFileName != null ? 'Selected: $selectedFileName' : 'Select .json File',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: AppTheme.discordPurple, fontWeight: FontWeight.bold, fontSize: 13),
+                  ),
+                  onPressed: () async {
+                    try {
+                      final picked = await FilePicker.pickFiles(
+                        type: FileType.custom,
+                        allowedExtensions: ['json'],
+                      );
+                      if (picked != null && picked.files.isNotEmpty) {
+                        String content = '';
+                        final single = picked.files.single;
+                        if (single.bytes != null) {
+                          content = utf8.decode(single.bytes!);
+                        } else if (single.path != null) {
+                          content = await File(single.path!).readAsString();
+                        }
+                        if (content.isNotEmpty) {
+                          textController.text = content;
+                          setDialogState(() {
+                            selectedFileName = single.name;
+                          });
+                        }
+                      }
+                    } catch (e) {
+                      debugPrint('Error picking file: $e');
+                    }
+                  },
+                ),
+                const SizedBox(height: 12),
+                const Row(
+                  children: [
+                    Expanded(child: Divider(color: Colors.black12)),
+                    Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 8),
+                      child: Text(
+                        'OR PASTE JSON',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black38,
+                          letterSpacing: 1,
+                        ),
+                      ),
+                    ),
+                    Expanded(child: Divider(color: Colors.black12)),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: textController,
+                  maxLines: 4,
+                  decoration: const InputDecoration(
+                    hintText: '{"class_id": "CS101", "students": [...]}',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: textController,
-              maxLines: 6,
-              decoration: const InputDecoration(
-                hintText: '{"class_id": "CS101", "students": [...]}',
-                border: OutlineInputBorder(),
-              ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton.icon(
+              icon: const Icon(Icons.file_download_done_rounded),
+              label: const Text('Import'),
+              onPressed: () => Navigator.pop(ctx, true),
             ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton.icon(
-            icon: const Icon(Icons.file_download_done_rounded),
-            label: const Text('Import'),
-            onPressed: () => Navigator.pop(ctx, true),
-          ),
-        ],
       ),
     );
 

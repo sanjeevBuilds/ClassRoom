@@ -1,5 +1,8 @@
+import 'dart:convert';
+import 'dart:io';
 import 'dart:ui';
 import 'package:camera/camera.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 import '../native/classroom_engine.dart';
@@ -414,22 +417,33 @@ class _HomeScreenState extends State<HomeScreen> {
                       borderRadius: BorderRadius.circular(16),
                       onTap: () async {
                         Navigator.pop(ctx);
-                        final cameras = await availableCameras();
-                        if (cameras.isEmpty) {
+                        try {
+                          final cameras = await availableCameras();
+                          if (cameras.isEmpty) {
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('No camera found on this device.')),
+                              );
+                            }
+                            return;
+                          }
+                          if (!mounted) return;
+                          await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => CaptureScreen(cameras: cameras, engine: ClassroomEngine.instance),
+                            ),
+                          );
+                        } catch (e) {
                           if (mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('No camera found on this device.')),
+                              SnackBar(
+                                content: Text('Camera access error: $e. Check iOS Settings.'),
+                                backgroundColor: AppTheme.discordRed,
+                              ),
                             );
                           }
-                          return;
                         }
-                        if (!mounted) return;
-                        await Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => CaptureScreen(cameras: cameras, engine: ClassroomEngine.instance),
-                          ),
-                        );
                       },
                       child: Container(
                         padding: const EdgeInsets.all(14),
@@ -616,67 +630,131 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _importRosterDialog() async {
     final textController = TextEditingController();
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    String? selectedFileName;
 
     final result = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: isDark ? AppTheme.darkSurface : AppTheme.lightSurface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        title: Text(
-          'Import Classroom Roster',
-          style: TextStyle(
-            color: isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary,
-            fontWeight: FontWeight.bold,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          backgroundColor: isDark ? AppTheme.darkSurface : AppTheme.lightSurface,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          title: Text(
+            'Import Classroom Roster',
+            style: TextStyle(
+              color: isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary,
+              fontWeight: FontWeight.bold,
+            ),
           ),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Paste the exported classroom JSON package to import all student profiles and face embeddings:',
-              style: TextStyle(
-                fontSize: 13,
-                color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'Select an exported classroom .json file or paste the JSON package below:',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: AppTheme.discordPurple, width: 1.5),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                  ),
+                  icon: const Icon(Icons.file_open_rounded, color: AppTheme.discordPurple, size: 20),
+                  label: Text(
+                    selectedFileName != null ? 'Selected: $selectedFileName' : 'Select .json File',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: AppTheme.discordPurple, fontWeight: FontWeight.bold, fontSize: 13),
+                  ),
+                  onPressed: () async {
+                    try {
+                      final picked = await FilePicker.pickFiles(
+                        type: FileType.custom,
+                        allowedExtensions: ['json'],
+                      );
+                      if (picked != null && picked.files.isNotEmpty) {
+                        String content = '';
+                        final single = picked.files.single;
+                        if (single.bytes != null) {
+                          content = utf8.decode(single.bytes!);
+                        } else if (single.path != null) {
+                          content = await File(single.path!).readAsString();
+                        }
+                        if (content.isNotEmpty) {
+                          textController.text = content;
+                          setDialogState(() {
+                            selectedFileName = single.name;
+                          });
+                        }
+                      }
+                    } catch (e) {
+                      debugPrint('Error picking file: $e');
+                    }
+                  },
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(child: Divider(color: isDark ? Colors.white12 : Colors.black12)),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      child: Text(
+                        'OR PASTE JSON',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: isDark ? Colors.white38 : Colors.black38,
+                          letterSpacing: 1,
+                        ),
+                      ),
+                    ),
+                    Expanded(child: Divider(color: isDark ? Colors.white12 : Colors.black12)),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: textController,
+                  maxLines: 4,
+                  style: TextStyle(
+                    color: isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary,
+                    fontSize: 12,
+                  ),
+                  decoration: InputDecoration(
+                    hintText: '{"class_id": "CS101", "students": [...]}',
+                    hintStyle: TextStyle(
+                      color: isDark ? AppTheme.darkTextSecondary.withValues(alpha: 0.5) : AppTheme.lightTextSecondary.withValues(alpha: 0.5),
+                    ),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: const BorderSide(color: AppTheme.discordPurple, width: 2),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text(
+                'Cancel',
+                style: TextStyle(color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary),
               ),
             ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: textController,
-              maxLines: 6,
-              style: TextStyle(
-                color: isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary,
-                fontSize: 12,
-              ),
-              decoration: InputDecoration(
-                hintText: '{"class_id": "CS101", "students": [...]}',
-                hintStyle: TextStyle(
-                  color: isDark ? AppTheme.darkTextSecondary.withOpacity(0.5) : AppTheme.lightTextSecondary.withOpacity(0.5),
-                ),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(14),
-                  borderSide: const BorderSide(color: AppTheme.discordPurple, width: 2),
-                ),
-              ),
+            FilledButton.icon(
+              style: FilledButton.styleFrom(backgroundColor: AppTheme.discordPurple),
+              icon: const Icon(Icons.file_download_done_rounded),
+              label: const Text('Import'),
+              onPressed: () => Navigator.pop(ctx, true),
             ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text(
-              'Cancel',
-              style: TextStyle(color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary),
-            ),
-          ),
-          FilledButton.icon(
-            style: FilledButton.styleFrom(backgroundColor: AppTheme.discordPurple),
-            icon: const Icon(Icons.file_download_done_rounded),
-            label: const Text('Import'),
-            onPressed: () => Navigator.pop(ctx, true),
-          ),
-        ],
       ),
     );
 

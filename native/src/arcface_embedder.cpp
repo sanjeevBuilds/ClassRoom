@@ -112,6 +112,29 @@ cv::Mat ArcFaceEmbedder::NormCrop(
     return cv::Mat::zeros(kInputSize, kInputSize, CV_8UC3);
   }
   auto m = EstimateSimilarityTransform(landmarks, kReferenceLandmarks);
+  bool is_invalid = false;
+  for (int i = 0; i < 6; ++i) {
+    if (std::isnan(m[i]) || std::isinf(m[i])) {
+      is_invalid = true;
+      break;
+    }
+  }
+
+  auto landmark_fallback_crop = [&]() {
+    double min_x = frame.cols, min_y = frame.rows, max_x = 0, max_y = 0;
+    for (const auto& pt : landmarks) {
+      min_x = std::min(min_x, pt[0]);
+      min_y = std::min(min_y, pt[1]);
+      max_x = std::max(max_x, pt[0]);
+      max_y = std::max(max_y, pt[1]);
+    }
+    return CropAndResize(frame, {min_x, min_y, max_x, max_y});
+  };
+
+  if (is_invalid) {
+    return landmark_fallback_crop();
+  }
+
   cv::Mat transform(2, 3, CV_64F);
   transform.at<double>(0, 0) = m[0];
   transform.at<double>(0, 1) = m[1];
@@ -119,8 +142,14 @@ cv::Mat ArcFaceEmbedder::NormCrop(
   transform.at<double>(1, 0) = m[3];
   transform.at<double>(1, 1) = m[4];
   transform.at<double>(1, 2) = m[5];
+
   cv::Mat warped;
-  cv::warpAffine(frame, warped, transform, cv::Size(kInputSize, kInputSize));
+  try {
+    cv::warpAffine(frame, warped, transform, cv::Size(kInputSize, kInputSize));
+  } catch (...) {
+    return landmark_fallback_crop();
+  }
+
   if (warped.empty()) {
     return cv::Mat::zeros(kInputSize, kInputSize, CV_8UC3);
   }
@@ -138,6 +167,9 @@ std::array<double, 6> ArcFaceEmbedder::EstimateSimilarityTransform(
     const std::vector<std::array<double, 2>>& src,
     const std::array<std::array<double, 2>, 5>& dst) const {
   const size_t n = src.size();
+  if (n == 0) {
+    return {1.0, 0.0, 0.0, 0.0, 1.0, 0.0};
+  }
   double src_mean_x = 0, src_mean_y = 0, dst_mean_x = 0, dst_mean_y = 0;
   for (size_t i = 0; i < n; ++i) {
     src_mean_x += src[i][0];
@@ -158,6 +190,11 @@ std::array<double, 6> ArcFaceEmbedder::EstimateSimilarityTransform(
     numer_imag += sx * dy - sy * dx;
     denom += sx * sx + sy * sy;
   }
+
+  if (denom < 1e-6 || std::isnan(denom)) {
+    return {1.0, 0.0, dst_mean_x - src_mean_x, 0.0, 1.0, dst_mean_y - src_mean_y};
+  }
+
   const double a_real = numer_real / denom;
   const double a_imag = numer_imag / denom;
 

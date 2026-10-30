@@ -226,6 +226,14 @@ std::vector<AttendanceResult> ProcessSweepVideo(const std::string& video_path,
                                       f.timestamp_sec, scale_x, scale_y);
 
     for (auto& d : full_dets) {
+      d.bbox[0] = std::clamp(d.bbox[0], 0.0, static_cast<double>(f.frame.cols - 1));
+      d.bbox[1] = std::clamp(d.bbox[1], 0.0, static_cast<double>(f.frame.rows - 1));
+      d.bbox[2] = std::clamp(d.bbox[2], d.bbox[0] + 1.0, static_cast<double>(f.frame.cols));
+      d.bbox[3] = std::clamp(d.bbox[3], d.bbox[1] + 1.0, static_cast<double>(f.frame.rows));
+      for (auto& lm : d.landmarks) {
+        lm[0] = std::clamp(lm[0], 0.0, static_cast<double>(f.frame.cols));
+        lm[1] = std::clamp(lm[1], 0.0, static_cast<double>(f.frame.rows));
+      }
       const double bw = d.bbox[2] - d.bbox[0];
       const double bh = d.bbox[3] - d.bbox[1];
       // Filter out degenerate artifacts smaller than 14px in original frame coordinates
@@ -334,30 +342,48 @@ std::vector<AttendanceResult> ProcessSweepVideo(const std::string& video_path,
     cv::Mat affine_2d;
     bool has_motion = false;
     if (f_idx > 0 && !sharp_frames[f_idx - 1].frame_lowres.empty() && !f.frame_lowres.empty()) {
-      cv::Mat prev_gray, curr_gray;
-      cv::cvtColor(sharp_frames[f_idx - 1].frame_lowres, prev_gray, cv::COLOR_BGR2GRAY);
-      cv::cvtColor(f.frame_lowres, curr_gray, cv::COLOR_BGR2GRAY);
+      try {
+        cv::Mat prev_gray, curr_gray;
+        cv::cvtColor(sharp_frames[f_idx - 1].frame_lowres, prev_gray, cv::COLOR_BGR2GRAY);
+        cv::cvtColor(f.frame_lowres, curr_gray, cv::COLOR_BGR2GRAY);
 
-      std::vector<cv::Point2f> prev_pts, curr_pts;
-      std::vector<uchar> status;
-      std::vector<float> err;
+        std::vector<cv::Point2f> prev_pts, curr_pts;
+        std::vector<uchar> status;
+        std::vector<float> err;
 
-      cv::goodFeaturesToTrack(prev_gray, prev_pts, 80, 0.01, 8.0);
-      if (prev_pts.size() >= 10) {
-        cv::calcOpticalFlowPyrLK(prev_gray, curr_gray, prev_pts, curr_pts, status, err);
-        std::vector<cv::Point2f> good_prev, good_curr;
-        for (size_t k = 0; k < status.size(); ++k) {
-          if (status[k] && err[k] < 30.0) {
-            good_prev.push_back(prev_pts[k]);
-            good_curr.push_back(curr_pts[k]);
+        cv::goodFeaturesToTrack(prev_gray, prev_pts, 80, 0.01, 8.0);
+        if (prev_pts.size() >= 10) {
+          cv::calcOpticalFlowPyrLK(prev_gray, curr_gray, prev_pts, curr_pts, status, err);
+          std::vector<cv::Point2f> good_prev, good_curr;
+          for (size_t k = 0; k < status.size() && k < prev_pts.size() && k < curr_pts.size() && k < err.size(); ++k) {
+            if (status[k] && err[k] < 30.0) {
+              good_prev.push_back(prev_pts[k]);
+              good_curr.push_back(curr_pts[k]);
+            }
+          }
+          if (good_prev.size() >= 8) {
+            affine_2d = cv::estimateAffinePartial2D(good_prev, good_curr);
+            if (!affine_2d.empty() && affine_2d.rows >= 2 && affine_2d.cols >= 3) {
+              if (affine_2d.type() != CV_64F) {
+                affine_2d.convertTo(affine_2d, CV_64F);
+              }
+              const double a00 = affine_2d.at<double>(0, 0);
+              const double a01 = affine_2d.at<double>(0, 1);
+              const double a02 = affine_2d.at<double>(0, 2);
+              const double a10 = affine_2d.at<double>(1, 0);
+              const double a11 = affine_2d.at<double>(1, 1);
+              const double a12 = affine_2d.at<double>(1, 2);
+              if (!std::isnan(a00) && !std::isnan(a01) && !std::isnan(a02) &&
+                  !std::isnan(a10) && !std::isnan(a11) && !std::isnan(a12) &&
+                  !std::isinf(a00) && !std::isinf(a01) && !std::isinf(a02) &&
+                  !std::isinf(a10) && !std::isinf(a11) && !std::isinf(a12)) {
+                has_motion = true;
+              }
+            }
           }
         }
-        if (good_prev.size() >= 8) {
-          affine_2d = cv::estimateAffinePartial2D(good_prev, good_curr);
-          if (!affine_2d.empty()) {
-            has_motion = true;
-          }
-        }
+      } catch (...) {
+        has_motion = false;
       }
     }
 
@@ -365,10 +391,12 @@ std::vector<AttendanceResult> ProcessSweepVideo(const std::string& video_path,
     const double low_scale_x = static_cast<double>(f.frame.cols) / f.frame_lowres.cols;
     const double low_scale_y = static_cast<double>(f.frame.rows) / f.frame_lowres.rows;
 
+    const size_t n_existing_tracklets = desk_tracklets.size();
     std::vector<std::array<double, 2>> projected_desk_centers;
-    projected_desk_centers.reserve(desk_tracklets.size());
+    projected_desk_centers.reserve(n_existing_tracklets);
 
-    for (const auto& tracklet : desk_tracklets) {
+    for (size_t t = 0; t < n_existing_tracklets; ++t) {
+      const auto& tracklet = desk_tracklets[t];
       double px = tracklet.last_center[0];
       double py = tracklet.last_center[1];
 
@@ -377,14 +405,16 @@ std::vector<AttendanceResult> ProcessSweepVideo(const std::string& video_path,
         double ly = py / low_scale_y;
         double n_lx = affine_2d.at<double>(0, 0) * lx + affine_2d.at<double>(0, 1) * ly + affine_2d.at<double>(0, 2);
         double n_ly = affine_2d.at<double>(1, 0) * lx + affine_2d.at<double>(1, 1) * ly + affine_2d.at<double>(1, 2);
-        px = n_lx * low_scale_x;
-        py = n_ly * low_scale_y;
+        if (!std::isnan(n_lx) && !std::isnan(n_ly) && !std::isinf(n_lx) && !std::isinf(n_ly)) {
+          px = n_lx * low_scale_x;
+          py = n_ly * low_scale_y;
+        }
       }
       projected_desk_centers.push_back({px, py});
     }
 
-    // 5. Match frame detections to desk tracklets
-    std::vector<bool> tracklet_matched(desk_tracklets.size(), false);
+    // 5. Match frame detections to existing desk tracklets
+    std::vector<bool> tracklet_matched(n_existing_tracklets, false);
 
     for (const auto& d : frame_detections) {
       const double cx = (d.bbox[0] + d.bbox[2]) / 2.0;
@@ -398,7 +428,7 @@ std::vector<AttendanceResult> ProcessSweepVideo(const std::string& video_path,
       int best_tracklet_idx = -1;
       double min_dist = match_thresh;
 
-      for (size_t t = 0; t < desk_tracklets.size(); ++t) {
+      for (size_t t = 0; t < n_existing_tracklets; ++t) {
         if (tracklet_matched[t]) continue;
         const double dist = std::hypot(cx - projected_desk_centers[t][0],
                                        cy - projected_desk_centers[t][1]);
@@ -441,14 +471,29 @@ std::vector<AttendanceResult> ProcessSweepVideo(const std::string& video_path,
 
     for (size_t i = 0; i < n_to_embed; ++i) {
       const auto& obs = tracklet.observations[i];
-      const auto& sf = sharp_frames[obs.frame_idx];
-      embeddings.push_back(embedder.ExtractEmbedding(sf.frame, obs.detection));
+      if (obs.frame_idx < sharp_frames.size()) {
+        const auto& sf = sharp_frames[obs.frame_idx];
+        if (!sf.frame.empty()) {
+          try {
+            embeddings.push_back(embedder.ExtractEmbedding(sf.frame, obs.detection));
+          } catch (...) {
+            // Degenerate crop fallback: skip this observation safely
+          }
+        }
+      }
     }
 
     if (tracklet.observations.size() > kMaxExemplarsPerDesk) {
       total_pruned_inferences += (tracklet.observations.size() - kMaxExemplarsPerDesk);
     }
   }
+
+  const size_t total_desks = desk_tracklets.size();
+  // Aggressively free all uncompressed video frames and tracking buffers to release hundreds of MBs
+  sharp_frames.clear();
+  sharp_frames.shrink_to_fit();
+  desk_tracklets.clear();
+  desk_tracklets.shrink_to_fit();
 
   IdentityClusterer clusterer(config.tau_cluster);
   auto clusters = clusterer.ConsolidateIdentities(embeddings);
@@ -471,7 +516,7 @@ std::vector<AttendanceResult> ProcessSweepVideo(const std::string& video_path,
                ",sharp=" + std::to_string(n_sharp) +
                ",dets=" + std::to_string(total_detections) +
                ",horizon_dets=" + std::to_string(total_horizon_detections) +
-               ",desks=" + std::to_string(desk_tracklets.size()) +
+               ",desks=" + std::to_string(total_desks) +
                ",embeds=" + std::to_string(embeddings.size()) +
                ",pruned=" + std::to_string(total_pruned_inferences) +
                ",clusters=" + std::to_string(clusters.size()) +

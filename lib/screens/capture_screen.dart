@@ -79,7 +79,14 @@ class _CaptureScreenState extends State<CaptureScreen>
   }
 
   Future<void> _initCamera() async {
-    if (widget.cameras.isEmpty) return;
+    if (widget.cameras.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No camera found on this device.')),
+        );
+      }
+      return;
+    }
 
     // Select back camera if available for highest resolution sweep
     final camera = widget.cameras.firstWhere(
@@ -91,23 +98,38 @@ class _CaptureScreenState extends State<CaptureScreen>
     if (mounted) setState(() => _controller = null);
     await oldController?.dispose();
 
-    final controller = CameraController(
-      camera,
-      ResolutionPreset.veryHigh, // 1080p Full HD for crisp face detection across classroom
-      enableAudio: false,
-    );
-
-    try {
-      await controller.initialize();
-      if (!mounted) {
-        await controller.dispose();
-        return;
+    // Try veryHigh (1080p), fall back to high (720p) or medium if unsupported on iOS device
+    CameraController? controller;
+    for (final preset in [ResolutionPreset.veryHigh, ResolutionPreset.high, ResolutionPreset.medium]) {
+      try {
+        final c = CameraController(
+          camera,
+          preset,
+          enableAudio: false,
+        );
+        await c.initialize();
+        controller = c;
+        break;
+      } catch (e) {
+        debugPrint('Camera init failed with preset $preset: $e');
       }
+    }
+
+    if (!mounted) {
+      await controller?.dispose();
+      return;
+    }
+
+    if (controller != null) {
       setState(() => _controller = controller);
-    } catch (e) {
+    } else {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Camera init error: $e')),
+          const SnackBar(
+            content: Text('Camera initialization failed. Please check camera permissions in iOS Settings.'),
+            backgroundColor: AppTheme.discordRed,
+            duration: Duration(seconds: 4),
+          ),
         );
       }
     }
@@ -251,25 +273,62 @@ class _CaptureScreenState extends State<CaptureScreen>
     }
   }
 
-  void _toggleRecording() async {
-    if (_controller == null || !_controller!.value.isInitialized) return;
-
-    if (_isRecording) {
-      final file = await _controller!.stopVideoRecording();
-      setState(() => _isRecording = false);
+  Future<void> _toggleRecording() async {
+    if (_controller == null || !_controller!.value.isInitialized) {
       if (mounted) {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(
-            builder: (_) => ProcessingScreen(videoPath: file.path, engine: widget.engine),
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Camera is initializing, please wait a moment...'),
+            duration: Duration(seconds: 2),
+            backgroundColor: AppTheme.discordYellow,
           ),
         );
       }
+      return;
+    }
+
+    if (_isRecording) {
+      try {
+        final file = await _controller!.stopVideoRecording();
+        if (mounted) {
+          setState(() => _isRecording = false);
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(
+              builder: (_) => ProcessingScreen(videoPath: file.path, engine: widget.engine),
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          setState(() => _isRecording = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error saving sweep video: $e'),
+              backgroundColor: AppTheme.discordRed,
+            ),
+          );
+        }
+      }
     } else {
-      _recordingPanAngle = 0.0; // Reset pan accumulator for fresh row sweep
-      _panPosition = 0.15;      // Start near left edge to sweep towards right
-      await _controller!.startVideoRecording();
-      setState(() => _isRecording = true);
-      _notifyGyroUpdate();
+      try {
+        _recordingPanAngle = 0.0; // Reset pan accumulator for fresh row sweep
+        _panPosition = 0.15;      // Start near left edge to sweep towards right
+        await _controller!.startVideoRecording();
+        if (mounted) {
+          setState(() => _isRecording = true);
+          _notifyGyroUpdate();
+        }
+      } catch (e) {
+        if (mounted) {
+          setState(() => _isRecording = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to start recording: $e'),
+              backgroundColor: AppTheme.discordRed,
+            ),
+          );
+        }
+      }
     }
   }
 
@@ -419,35 +478,37 @@ class _CaptureScreenState extends State<CaptureScreen>
           // Sweep Guidance Overlay
           if (_isMovingTooFast && _isRecording)
             Positioned.fill(
-              child: AnimatedOpacity(
-                opacity: _isMovingTooFast ? 1.0 : 0.0,
-                duration: const Duration(milliseconds: 200),
-                child: Container(
-                  color: AppTheme.discordRed.withValues(alpha: 0.3),
-                  child: Center(
-                    child: GlassCard(
-                      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
-                      borderColor: AppTheme.discordRed.withValues(alpha: 0.6),
-                      child: const Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.warning_amber_rounded, size: 64, color: AppTheme.discordRed),
-                          SizedBox(height: 16),
-                          Text(
-                            'SLOW DOWN',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 24,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 2,
+              child: IgnorePointer(
+                child: AnimatedOpacity(
+                  opacity: _isMovingTooFast ? 1.0 : 0.0,
+                  duration: const Duration(milliseconds: 200),
+                  child: Container(
+                    color: AppTheme.discordRed.withValues(alpha: 0.3),
+                    child: Center(
+                      child: GlassCard(
+                        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+                        borderColor: AppTheme.discordRed.withValues(alpha: 0.6),
+                        child: const Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.warning_amber_rounded, size: 64, color: AppTheme.discordRed),
+                            SizedBox(height: 16),
+                            Text(
+                              'SLOW DOWN',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 24,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 2,
+                              ),
                             ),
-                          ),
-                          SizedBox(height: 8),
-                          Text(
-                            'Panning too fast causes motion blur',
-                            style: TextStyle(color: Colors.white70),
-                          ),
-                        ],
+                            SizedBox(height: 8),
+                            Text(
+                              'Panning too fast causes motion blur',
+                              style: TextStyle(color: Colors.white70),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),

@@ -3,8 +3,16 @@
 namespace classroom {
 
 double BlurFilter::ComputeSharpness(const cv::Mat& frame) const {
+  if (frame.empty()) return 0.0;
+
   cv::Mat gray;
-  cv::cvtColor(frame, gray, cv::COLOR_BGR2GRAY);
+  if (frame.channels() == 3) {
+    cv::cvtColor(frame, gray, cv::COLOR_BGR2GRAY);
+  } else if (frame.channels() == 4) {
+    cv::cvtColor(frame, gray, cv::COLOR_BGRA2GRAY);
+  } else {
+    gray = frame;
+  }
 
   cv::Mat laplacian;
   cv::Laplacian(gray, laplacian, CV_64F);
@@ -18,18 +26,51 @@ double BlurFilter::ComputeSharpness(const cv::Mat& frame) const {
 
 std::vector<SampledFrame> BlurFilter::FilterBlurryFrames(
     std::vector<SampledFrame> frames) const {
-  std::vector<SampledFrame> kept;
-  kept.reserve(frames.size());
+  if (frames.empty()) return {};
 
   for (auto& f : frames) {
-    const double score = ComputeSharpness(f.frame_lowres);
-    if (score >= tau_blur_) {
-      f.sharpness_score = score;
-      kept.push_back(std::move(f));
+    f.sharpness_score = ComputeSharpness(f.frame_lowres);
+  }
+
+  size_t passing_count = 0;
+  for (const auto& f : frames) {
+    if (f.sharpness_score >= tau_blur_) {
+      passing_count++;
     }
-    // Below threshold: dropped. cv::Mat's ref-counted buffers free
-    // themselves once f goes out of scope at the end of this loop
-    // iteration — no manual release() needed, unlike the Dart version.
+  }
+
+  std::vector<SampledFrame> kept;
+  const size_t min_passing = std::max(size_t(1), static_cast<size_t>(frames.size() * 0.35));
+
+  if (passing_count >= min_passing) {
+    kept.reserve(passing_count);
+    for (auto& f : frames) {
+      if (f.sharpness_score >= tau_blur_) {
+        kept.push_back(std::move(f));
+      }
+    }
+  } else {
+    // Adaptive Percentile Fallback:
+    // If fewer than 35% of frames meet tau_blur_ (common in handheld sweeps with motion blur),
+    // dynamically retain the top 65% sharpest frames to guarantee detector receives optimal evidence.
+    std::sort(frames.begin(), frames.end(),
+              [](const SampledFrame& a, const SampledFrame& b) {
+                return a.sharpness_score > b.sharpness_score;
+              });
+
+    const size_t target_count = std::max(size_t(1),
+        std::min(frames.size(), static_cast<size_t>(std::ceil(frames.size() * 0.65))));
+
+    kept.reserve(target_count);
+    for (size_t i = 0; i < target_count; ++i) {
+      kept.push_back(std::move(frames[i]));
+    }
+
+    // Re-sort chronologically by frame_id for consistent desk-tracklet homography fusion
+    std::sort(kept.begin(), kept.end(),
+              [](const SampledFrame& a, const SampledFrame& b) {
+                return a.frame_id < b.frame_id;
+              });
   }
 
   return kept;
