@@ -1069,6 +1069,404 @@ class _HomeScreenState extends State<HomeScreen> {
       },
     );
   }
+
+  Future<void> _showDataRetentionModal() async {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryTextColor = isDark ? const Color(0xFFF2F3F5) : const Color(0xFF23272A);
+    final secondaryTextColor = isDark ? Colors.white60 : Colors.black54;
+
+    Map<String, dynamic> metadata = await ClassroomEngine.instance.getRetentionFlushMetadata();
+    bool isFlushing = false;
+
+    if (!mounted) return;
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setModalState) {
+            final media = MediaQuery.of(ctx);
+            final screenWidth = media.size.width;
+            final isCompact = screenWidth < 380;
+
+            String formatBytes(int bytes) {
+              if (bytes <= 0) return '0 KB';
+              if (bytes < 1024) return '$bytes B';
+              if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+              return '${(bytes / (1024 * 1024)).toStringAsFixed(2)} MB';
+            }
+
+            String formatTimestamp(String? isoString) {
+              if (isoString == null) return 'Active on startup';
+              final dt = DateTime.tryParse(isoString);
+              if (dt == null) return 'Active on startup';
+              final local = dt.toLocal();
+              final now = DateTime.now();
+              final diff = now.difference(local);
+              if (diff.inMinutes < 1) return 'Just now';
+              if (diff.inHours < 1) return '${diff.inMinutes}m ago';
+              if (diff.inDays < 1) {
+                return 'Today at ${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
+              }
+              return '${local.month}/${local.day} ${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
+            }
+
+            final lastFlushStr = formatTimestamp(metadata['last_flush_timestamp'] as String?);
+            final cumulativeBytes = (metadata['cumulative_purged_bytes'] as num?)?.toInt() ?? (metadata['purged_bytes_total'] as num?)?.toInt() ?? 0;
+            final cumulativeItems = (metadata['cumulative_purged_items'] as num?)?.toInt() ?? 
+                (((metadata['purged_sessions_count'] as num?)?.toInt() ?? 0) +
+                 ((metadata['purged_exports_count'] as num?)?.toInt() ?? 0) +
+                 ((metadata['purged_videos_count'] as num?)?.toInt() ?? 0) +
+                 ((metadata['purged_temp_files_count'] as num?)?.toInt() ?? 0));
+
+            return Container(
+              decoration: BoxDecoration(
+                color: isDark ? AppTheme.darkSurface : AppTheme.lightSurface,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.35),
+                    blurRadius: 20,
+                    offset: const Offset(0, -4),
+                  ),
+                ],
+              ),
+              child: SafeArea(
+                top: false,
+                child: SingleChildScrollView(
+                  padding: EdgeInsets.fromLTRB(
+                    (screenWidth * 0.05).clamp(16.0, 24.0),
+                    12,
+                    (screenWidth * 0.05).clamp(16.0, 24.0),
+                    16 + media.padding.bottom,
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // Pull handle
+                      Center(
+                        child: Container(
+                          width: 40,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: isDark ? Colors.white24 : Colors.black12,
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Header Row
+                      Row(
+                        children: [
+                          Container(
+                            width: 44,
+                            height: 44,
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(
+                                colors: [AppTheme.discordGreen, AppTheme.discordCyan],
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                              ),
+                              borderRadius: BorderRadius.circular(14),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: AppTheme.discordGreen.withValues(alpha: 0.3),
+                                  blurRadius: 10,
+                                  offset: const Offset(0, 3),
+                                ),
+                              ],
+                            ),
+                            child: const Icon(Icons.auto_delete_rounded, color: Colors.white, size: 24),
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Attendance Data Retention',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: isCompact ? 16 : 18,
+                                    color: primaryTextColor,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  'Automatic 15-day privacy lifecycle',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: secondaryTextColor,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: () => Navigator.pop(ctx),
+                            icon: Icon(Icons.close_rounded, color: secondaryTextColor, size: 20),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 18),
+
+                      // Active Status Banner
+                      Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: AppTheme.discordGreen.withValues(alpha: isDark ? 0.12 : 0.08),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: AppTheme.discordGreen.withValues(alpha: 0.35)),
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Icon(Icons.verified_user_rounded, color: AppTheme.discordGreen, size: 20),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      const Text(
+                                        '15-Day Auto-Flush Active',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 13,
+                                          color: AppTheme.discordGreen,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                                        decoration: BoxDecoration(
+                                          color: AppTheme.discordGreen.withValues(alpha: 0.2),
+                                          borderRadius: BorderRadius.circular(6),
+                                        ),
+                                        child: const Text(
+                                          'ON-DEVICE',
+                                          style: TextStyle(
+                                            color: AppTheme.discordGreen,
+                                            fontSize: 9,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'Historical attendance sessions, checkpoint camera clips, and exported CSV reports older than 15 days are automatically wiped on startup to protect student privacy and free device storage.',
+                                    style: TextStyle(
+                                      fontSize: 11.5,
+                                      height: 1.35,
+                                      color: isDark ? const Color(0xFFDCDDDE) : const Color(0xFF4F545C),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+
+                      // Metrics 2x2 Grid
+                      LayoutBuilder(
+                        builder: (ctx, constraints) {
+                          final cardWidth = (constraints.maxWidth - 10) / 2;
+                          return Wrap(
+                            spacing: 10,
+                            runSpacing: 10,
+                            children: [
+                              _buildRetentionMetricCard(
+                                width: cardWidth,
+                                icon: Icons.timer_rounded,
+                                iconColor: AppTheme.discordPurple,
+                                title: 'Retention Span',
+                                value: '15 Days',
+                                isDark: isDark,
+                              ),
+                              _buildRetentionMetricCard(
+                                width: cardWidth,
+                                icon: Icons.history_rounded,
+                                iconColor: AppTheme.discordCyan,
+                                title: 'Last Flush',
+                                value: lastFlushStr,
+                                isDark: isDark,
+                              ),
+                              _buildRetentionMetricCard(
+                                width: cardWidth,
+                                icon: Icons.cleaning_services_rounded,
+                                iconColor: AppTheme.discordYellow,
+                                title: 'Purged Items',
+                                value: '$cumulativeItems records',
+                                isDark: isDark,
+                              ),
+                              _buildRetentionMetricCard(
+                                width: cardWidth,
+                                icon: Icons.storage_rounded,
+                                iconColor: AppTheme.discordGreen,
+                                title: 'Storage Freed',
+                                value: formatBytes(cumulativeBytes),
+                                isDark: isDark,
+                              ),
+                            ],
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 14),
+
+                      // Safe Roster Preservation Guarantee Callout
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: isDark ? const Color(0xFF1E1F22) : const Color(0xFFF2F3F5),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: isDark ? Colors.white10 : Colors.black12,
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.shield_rounded, size: 18, color: AppTheme.discordPurple),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                'Student enrollment face templates & classes (roster_*.db) are permanently retained.',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: secondaryTextColor,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 18),
+
+                      // Action Button: Trigger Manual Flush Now
+                      FilledButton.icon(
+                        onPressed: isFlushing
+                            ? null
+                            : () async {
+                                setModalState(() => isFlushing = true);
+                                try {
+                                  final result = await ClassroomEngine.instance.flushAttendanceDataNow();
+                                  metadata = await ClassroomEngine.instance.getRetentionFlushMetadata();
+                                  final purgedTotal = (result['purged_sessions_count'] as int? ?? 0) +
+                                      (result['purged_exports_count'] as int? ?? 0) +
+                                      (result['purged_videos_count'] as int? ?? 0) +
+                                      (result['purged_temp_files_count'] as int? ?? 0);
+                                  final bytes = result['purged_bytes_total'] as int? ?? 0;
+                                  if (mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(purgedTotal > 0
+                                            ? 'Auto-flush complete: Purged $purgedTotal expired item(s) (${formatBytes(bytes)} freed)'
+                                            : 'Storage is clean! No attendance records older than 15 days.'),
+                                        backgroundColor: AppTheme.discordGreen,
+                                      ),
+                                    );
+                                  }
+                                } catch (e) {
+                                  if (mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(content: Text('Flush failed: $e')),
+                                    );
+                                  }
+                                } finally {
+                                  setModalState(() => isFlushing = false);
+                                }
+                              },
+                        icon: isFlushing
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                              )
+                            : const Icon(Icons.cleaning_services_rounded, size: 18),
+                        label: Text(
+                          isFlushing ? 'Scanning & Flushing...' : 'Flush Expired Records Now',
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                        ),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: AppTheme.discordGreen,
+                          foregroundColor: Colors.white,
+                          minimumSize: const Size(double.infinity, 50),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildRetentionMetricCard({
+    required double width,
+    required IconData icon,
+    required Color iconColor,
+    required String title,
+    required String value,
+    required bool isDark,
+  }) {
+    return Container(
+      width: width,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E1F22) : const Color(0xFFF2F3F5),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: isDark ? Colors.white12 : Colors.black12,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 15, color: iconColor),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.bold,
+              color: isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _clearDatabase() async {
@@ -1519,6 +1917,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 ),
                               );
                             }
+                            if (value == 'retention') _showDataRetentionModal();
                             if (value == 'export') _exportCurrentRoster();
                             if (value == 'import') _importRosterDialog();
                             if (value == 'clear') _clearDatabase();
@@ -1541,6 +1940,16 @@ class _HomeScreenState extends State<HomeScreen> {
                                   Icon(Icons.analytics_rounded, size: 18, color: AppTheme.discordGreen),
                                   const SizedBox(width: 10),
                                   Text('Benchmark Mode', style: TextStyle(color: isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary)),
+                                ],
+                              ),
+                            ),
+                            PopupMenuItem(
+                              value: 'retention',
+                              child: Row(
+                                children: [
+                                  Icon(Icons.auto_delete_rounded, size: 18, color: AppTheme.discordCyan),
+                                  const SizedBox(width: 10),
+                                  Text('Data Retention (15 Days)', style: TextStyle(color: isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary)),
                                 ],
                               ),
                             ),
@@ -1982,6 +2391,81 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
                   const SizedBox(height: 14),
+
+                  // 15-Day Auto-Flush Data Retention Pill
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 14),
+                    child: GlassCard(
+                      borderRadius: 16,
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      onTap: _showDataRetentionModal,
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(5),
+                            decoration: BoxDecoration(
+                              color: AppTheme.discordGreen.withValues(alpha: 0.16),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(Icons.auto_delete_rounded, size: 14, color: AppTheme.discordGreen),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Row(
+                                  children: [
+                                    Text(
+                                      'Data Retention',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                        color: isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                      decoration: BoxDecoration(
+                                        color: AppTheme.discordGreen.withValues(alpha: 0.18),
+                                        borderRadius: BorderRadius.circular(5),
+                                      ),
+                                      child: const Text(
+                                        '15-DAY FLUSH',
+                                        style: TextStyle(
+                                          color: AppTheme.discordGreen,
+                                          fontSize: 8.5,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 1),
+                                Text(
+                                  'Old sweep clips & CSV exports auto-purged • Tap to inspect',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 10.5,
+                                    color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Icon(
+                            Icons.arrow_forward_ios_rounded,
+                            size: 11,
+                            color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
 
                   // Actions Grid (Take Attendance & Enroll Students)
                   IntrinsicHeight(

@@ -111,3 +111,4 @@ class AttendanceSession {
         isCompleted: (json['is_completed'] as bool?) ?? false,
       );
 }
+

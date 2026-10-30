@@ -124,7 +124,13 @@ class ClassroomEngine {
       print('WARNING: Model assets missing from assets/models/: $e');
     }
     
-    return ClassroomEngine._(yunet, retinaface, haar, arcface, dir.path);
+    final engine = ClassroomEngine._(yunet, retinaface, haar, arcface, dir.path);
+    // Automatically purge attendance sessions, sweep clips, and CSV exports older than 15 days
+    engine.autoFlushExpiredAttendanceData().catchError((e) {
+      print('WARNING: Auto-flush background execution encountered: $e');
+      return <String, dynamic>{'status': 'error', 'error': e.toString()};
+    });
+    return engine;
   }
 
   static Future<String> _extractAsset(String assetKey, String destPath) async {
@@ -388,6 +394,8 @@ class ClassroomEngine {
     if (await activeFile.exists()) {
       await activeFile.delete();
     }
+    // Clean up any historical sessions or temp files older than retention policy
+    autoFlushExpiredAttendanceData().catchError((_) => <String, dynamic>{});
   }
 
   /// Records a new sweep into the active session (or creates a new session if none exists).
@@ -515,6 +523,270 @@ class ClassroomEngine {
     final exportFile = File(p.join(tempDir.path, fileName));
     await exportFile.writeAsString(buffer.toString());
     return exportFile;
+  }
+
+  /// Default data retention time span for on-device attendance records (15 days).
+  static const Duration defaultRetentionPeriod = Duration(days: 15);
+
+  /// Automatically purges attendance data stored on this device older than [retentionPeriod] (default: 15 days).
+  ///
+  /// Flushed items:
+  /// - Historical archived attendance session records (`session_*_archived_*.json`) in application support directory.
+  /// - Stale / abandoned unfinalized sessions (`session_*_active.json`) untouched for > 15 days.
+  /// - Referenced sweep video recordings captured during flushed sessions.
+  /// - Exported attendance CSV reports (`attendance_*.csv`) in temporary and application directories.
+  /// - Temporary scratch face verification databases (`face_test_*.db`) in temporary directory.
+  ///
+  /// CRITICAL PRIVACY & SAFETY GUARANTEE:
+  /// Enrolled student reference models and roster databases (`roster_*.db` and `classes.json`)
+  /// are NEVER touched or deleted by this retention policy.
+  Future<Map<String, dynamic>> autoFlushExpiredAttendanceData({
+    Duration retentionPeriod = defaultRetentionPeriod,
+  }) async {
+    final now = DateTime.now();
+    final cutoff = now.subtract(retentionPeriod);
+    int sessionsPurged = 0;
+    int exportsPurged = 0;
+    int videosPurged = 0;
+    int tempFilesPurged = 0;
+    int bytesReclaimed = 0;
+
+    final videoPathsToPurge = <String>{};
+
+    // 1. Scan Application Support Directory (_baseDir)
+    try {
+      final baseDirEntity = Directory(_baseDir);
+      if (await baseDirEntity.exists()) {
+        await for (final entity in baseDirEntity.list(followLinks: false)) {
+          if (entity is! File) continue;
+          final filename = p.basename(entity.path);
+
+          // Never delete roster templates or class registrations or ONNX models
+          if (filename.startsWith('roster_') ||
+              filename == 'classes.json' ||
+              filename.endsWith('.onnx') ||
+              filename.endsWith('.xml') ||
+              filename == 'attendance_flush_metadata.json') {
+            continue;
+          }
+
+          // A) Archived Sessions: session_<class>_archived_<epoch>.json
+          if (filename.startsWith('session_') && filename.contains('_archived_') && filename.endsWith('.json')) {
+            bool isExpired = false;
+            final match = RegExp(r'_archived_(\d+)').firstMatch(filename);
+            if (match != null) {
+              final epoch = int.tryParse(match.group(1)!);
+              if (epoch != null && DateTime.fromMillisecondsSinceEpoch(epoch).isBefore(cutoff)) {
+                isExpired = true;
+              }
+            }
+
+            if (!isExpired) {
+              final stat = await entity.stat();
+              if (stat.modified.isBefore(cutoff)) {
+                isExpired = true;
+              }
+            }
+
+            if (isExpired) {
+              try {
+                // Collect referenced sweep video paths to purge them as well
+                final content = await entity.readAsString();
+                final data = jsonDecode(content);
+                if (data is Map && data['checkpoints'] is List) {
+                  for (final cp in data['checkpoints']) {
+                    if (cp is Map && cp['video_paths'] is List) {
+                      for (final vp in cp['video_paths']) {
+                        if (vp is String && vp.isNotEmpty) {
+                          videoPathsToPurge.add(vp);
+                        }
+                      }
+                    }
+                  }
+                }
+              } catch (_) {}
+
+              final size = await entity.length();
+              await entity.delete();
+              bytesReclaimed += size;
+              sessionsPurged++;
+            }
+          }
+
+          // B) Stale / Abandoned active session (> 15 days without update)
+          else if (filename.startsWith('session_') && filename.endsWith('_active.json')) {
+            try {
+              final stat = await entity.stat();
+              if (stat.modified.isBefore(cutoff)) {
+                final content = await entity.readAsString();
+                final data = jsonDecode(content);
+                DateTime? lastUpdated;
+                if (data is Map && data['last_updated'] is String) {
+                  lastUpdated = DateTime.tryParse(data['last_updated']);
+                }
+                if (lastUpdated != null && lastUpdated.isBefore(cutoff)) {
+                  final size = await entity.length();
+                  await entity.delete();
+                  bytesReclaimed += size;
+                  sessionsPurged++;
+                }
+              }
+            } catch (_) {}
+          }
+
+          // C) Exported CSV reports in base directory
+          else if (filename.startsWith('attendance_') && filename.endsWith('.csv')) {
+            final stat = await entity.stat();
+            if (stat.modified.isBefore(cutoff)) {
+              final size = await entity.length();
+              await entity.delete();
+              bytesReclaimed += size;
+              exportsPurged++;
+            }
+          }
+        }
+      }
+    } catch (e) {
+      print('Error scanning base directory during auto-flush: $e');
+    }
+
+    // 2. Scan Temporary Directory for CSV exports, scratch DBs, and cached sweep videos
+    try {
+      final tempDir = await getTemporaryDirectory();
+      if (await tempDir.exists()) {
+        await for (final entity in tempDir.list(followLinks: false)) {
+          if (entity is! File) continue;
+          final filename = p.basename(entity.path);
+
+          // CSV reports
+          if (filename.startsWith('attendance_') && filename.endsWith('.csv')) {
+            final stat = await entity.stat();
+            if (stat.modified.isBefore(cutoff)) {
+              final size = await entity.length();
+              await entity.delete();
+              bytesReclaimed += size;
+              exportsPurged++;
+            }
+          }
+          // Scratch verification DBs
+          else if (filename.startsWith('face_test_') && filename.endsWith('.db')) {
+            final stat = await entity.stat();
+            if (stat.modified.isBefore(cutoff)) {
+              final size = await entity.length();
+              await entity.delete();
+              bytesReclaimed += size;
+              tempFilesPurged++;
+            }
+          }
+          // Temporary roster JSON exports
+          else if (filename.startsWith('classroom_roster_') && filename.endsWith('.json')) {
+            final stat = await entity.stat();
+            if (stat.modified.isBefore(cutoff)) {
+              final size = await entity.length();
+              await entity.delete();
+              bytesReclaimed += size;
+              tempFilesPurged++;
+            }
+          }
+          // Temporary video recordings (*.mp4, *.mov, *.m4v, *.webm)
+          else if (['.mp4', '.mov', '.m4v', '.webm'].any((ext) => filename.toLowerCase().endsWith(ext))) {
+            final stat = await entity.stat();
+            if (stat.modified.isBefore(cutoff) || videoPathsToPurge.contains(entity.path)) {
+              final size = await entity.length();
+              await entity.delete();
+              bytesReclaimed += size;
+              videosPurged++;
+            }
+          }
+        }
+      }
+    } catch (e) {
+      print('Error scanning temp directory during auto-flush: $e');
+    }
+
+    // 3. Clean any explicitly referenced video paths that were stored elsewhere
+    for (final vPath in videoPathsToPurge) {
+      try {
+        final f = File(vPath);
+        if (await f.exists()) {
+          final size = await f.length();
+          await f.delete();
+          bytesReclaimed += size;
+          videosPurged++;
+        }
+      } catch (_) {}
+    }
+
+    // 4. Update flush audit metadata record
+    final flushSummary = <String, dynamic>{
+      'last_flush_timestamp': now.toIso8601String(),
+      'retention_days': retentionPeriod.inDays,
+      'purged_sessions_count': sessionsPurged,
+      'purged_exports_count': exportsPurged,
+      'purged_videos_count': videosPurged,
+      'purged_temp_files_count': tempFilesPurged,
+      'purged_bytes_total': bytesReclaimed,
+      'status': 'success',
+    };
+
+    try {
+      final metaFile = File(p.join(_baseDir, 'attendance_flush_metadata.json'));
+      int priorTotalBytes = 0;
+      int priorTotalItems = 0;
+      if (await metaFile.exists()) {
+        try {
+          final existing = jsonDecode(await metaFile.readAsString());
+          if (existing is Map) {
+            priorTotalBytes = (existing['cumulative_purged_bytes'] as num?)?.toInt() ?? 0;
+            priorTotalItems = (existing['cumulative_purged_items'] as num?)?.toInt() ?? 0;
+          }
+        } catch (_) {}
+      }
+
+      final totalItemsCurrent = sessionsPurged + exportsPurged + videosPurged + tempFilesPurged;
+      flushSummary['cumulative_purged_bytes'] = priorTotalBytes + bytesReclaimed;
+      flushSummary['cumulative_purged_items'] = priorTotalItems + totalItemsCurrent;
+
+      await metaFile.writeAsString(jsonEncode(flushSummary), flush: true);
+    } catch (e) {
+      print('Error saving flush metadata: $e');
+    }
+
+    return flushSummary;
+  }
+
+  /// Retrieves the latest auto-flush audit metadata.
+  Future<Map<String, dynamic>> getRetentionFlushMetadata() async {
+    try {
+      final metaFile = File(p.join(_baseDir, 'attendance_flush_metadata.json'));
+      if (await metaFile.exists()) {
+        final content = await metaFile.readAsString();
+        final decoded = jsonDecode(content);
+        if (decoded is Map<String, dynamic>) {
+          return decoded;
+        }
+      }
+    } catch (_) {}
+
+    return {
+      'last_flush_timestamp': null,
+      'retention_days': defaultRetentionPeriod.inDays,
+      'purged_sessions_count': 0,
+      'purged_exports_count': 0,
+      'purged_videos_count': 0,
+      'purged_temp_files_count': 0,
+      'purged_bytes_total': 0,
+      'cumulative_purged_bytes': 0,
+      'cumulative_purged_items': 0,
+      'status': 'not_run_yet',
+    };
+  }
+
+  /// Manually triggers an immediate flush with the configured retention period.
+  Future<Map<String, dynamic>> flushAttendanceDataNow({
+    Duration retentionPeriod = defaultRetentionPeriod,
+  }) {
+    return autoFlushExpiredAttendanceData(retentionPeriod: retentionPeriod);
   }
 
   /// Returns a list of all currently enrolled students: [{'student_id': '...', 'name': '...'}]
