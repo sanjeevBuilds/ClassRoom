@@ -2,6 +2,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 
 import '../models/attendance_result.dart';
+import '../models/attendance_session.dart';
 import '../native/classroom_engine.dart';
 import '../theme/app_theme.dart';
 import '../widgets/glass_card.dart';
@@ -16,6 +17,7 @@ class ProcessingScreen extends StatefulWidget {
   final List<String> videoPaths;
   final ClassroomEngine engine;
   final List<AttendanceResult>? initialExistingResults;
+  final String? checkpointLabel;
 
   /// Single video sweep constructor
   ProcessingScreen({
@@ -23,6 +25,7 @@ class ProcessingScreen extends StatefulWidget {
     required String videoPath,
     required this.engine,
     this.initialExistingResults,
+    this.checkpointLabel,
   }) : videoPaths = [videoPath];
 
   /// Multi-sweep video constructor
@@ -31,6 +34,7 @@ class ProcessingScreen extends StatefulWidget {
     required this.videoPaths,
     required this.engine,
     this.initialExistingResults,
+    this.checkpointLabel,
   });
 
   @override
@@ -65,17 +69,22 @@ class _ProcessingScreenState extends State<ProcessingScreen> {
         },
       );
 
-      List<AttendanceResult> finalResults = results;
-      if (widget.initialExistingResults != null && widget.initialExistingResults!.isNotEmpty) {
-        finalResults = widget.engine.aggregateAttendanceResults(
-          widget.initialExistingResults!,
-          results,
-        );
-      }
+      // Record this sweep into the persistent classroom session
+      final session = await widget.engine.recordSessionSweep(
+        classId: widget.engine.currentClassId,
+        sweepResults: results,
+        checkpointLabel: widget.checkpointLabel,
+        videoPaths: widget.videoPaths,
+      );
 
       if (!mounted) return;
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => ResultsScreen(initialResults: finalResults)),
+        MaterialPageRoute(
+          builder: (_) => ResultsScreen(
+            session: session,
+            initialResults: session.consolidatedResults,
+          ),
+        ),
       );
     } catch (e) {
       if (mounted) setState(() => _error = '$e');

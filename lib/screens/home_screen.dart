@@ -3,6 +3,7 @@ import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 import 'package:share_plus/share_plus.dart';
+import '../models/attendance_session.dart';
 import '../native/classroom_engine.dart';
 import '../theme/app_theme.dart';
 import '../widgets/glass_card.dart';
@@ -10,6 +11,7 @@ import '../widgets/ambient_background.dart';
 import 'capture_screen.dart';
 import 'enrollment_screen.dart';
 import 'processing_screen.dart';
+import 'results_screen.dart';
 import 'benchmark_validation_screen.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -26,6 +28,7 @@ class _HomeScreenState extends State<HomeScreen> {
   
   List<Map<String, dynamic>> enrolledStudents = [];
   bool isLoading = true;
+  AttendanceSession? activeSession;
 
   @override
   void initState() {
@@ -43,6 +46,67 @@ class _HomeScreenState extends State<HomeScreen> {
     });
     _autoSelectClassBasedOnTime();
     await _loadStudents();
+    await _loadActiveSession();
+  }
+
+  Future<void> _loadActiveSession() async {
+    final session = await ClassroomEngine.instance.getActiveSession(selectedClass);
+    if (mounted) {
+      setState(() {
+        activeSession = session;
+      });
+    }
+  }
+
+  Future<void> _exportActiveSessionCsv() async {
+    if (activeSession == null) return;
+    try {
+      final file = await ClassroomEngine.instance.exportSessionCsv(activeSession!);
+      if (mounted) {
+        await Share.shareXFiles([XFile(file.path)], text: '$selectedClass Consolidated Attendance Report');
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Export failed: $e')));
+      }
+    }
+  }
+
+  Future<void> _endActiveSession() async {
+    if (activeSession == null) return;
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('End Class Session?'),
+        content: Text(
+          'This will finalize the consolidated attendance for $selectedClass (${activeSession!.presentCount} Present, ${activeSession!.absentCount} Absent across ${activeSession!.checkpoints.length} sweeps). The session report will be archived, allowing a fresh session to start next class.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Keep Active'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppTheme.discordPurple),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Finalize Session'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true && mounted) {
+      await ClassroomEngine.instance.finalizeActiveSession(selectedClass);
+      await _loadActiveSession();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Class session finalized and archived.'),
+            backgroundColor: AppTheme.discordGreen,
+          ),
+        );
+      }
+    }
   }
 
   void _autoSelectClassBasedOnTime() {
@@ -131,6 +195,7 @@ class _HomeScreenState extends State<HomeScreen> {
       });
       ClassroomEngine.instance.switchClass(selectedClass);
       await _loadStudents();
+      await _loadActiveSession();
     }
   }
 
@@ -206,6 +271,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           setState(() => selectedClass = c);
                           ClassroomEngine.instance.switchClass(selectedClass);
                           _loadStudents();
+                          _loadActiveSession();
                         },
                       )),
                     ],
@@ -317,15 +383,22 @@ class _HomeScreenState extends State<HomeScreen> {
       final picker = ImagePicker();
       final picked = await picker.pickVideo(source: ImageSource.gallery);
       if (picked != null && mounted) {
+        final cpNumber = (activeSession?.checkpoints.length ?? 0) + 1;
         await Navigator.push(
           context,
           MaterialPageRoute(
             builder: (_) => ProcessingScreen(
               videoPath: picked.path,
               engine: ClassroomEngine.instance,
+              initialExistingResults: activeSession?.consolidatedResults,
+              checkpointLabel: cpNumber == 1 ? 'Start of Class' : (cpNumber == 2 ? 'Mid-Class Check' : 'Sweep Checkpoint #$cpNumber'),
             ),
           ),
         );
+        if (mounted) {
+          await _loadActiveSession();
+          await _loadStudents();
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -377,14 +450,26 @@ class _HomeScreenState extends State<HomeScreen> {
                   Row(
                     children: [
                       Expanded(
-                        child: Text(
-                          'Take Attendance',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: -0.3,
-                            color: isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary,
-                          ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              activeSession != null
+                                  ? 'Take Sweep #${activeSession!.checkpoints.length + 1}'
+                                  : 'Take Attendance',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: -0.3,
+                                color: isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary,
+                              ),
+                            ),
+                            if (activeSession != null)
+                              Text(
+                                'Consolidating with active session (${activeSession!.presentCount} verified)',
+                                style: TextStyle(fontSize: 11, color: secondaryTextColor),
+                              ),
+                          ],
                         ),
                       ),
                       Container(
@@ -428,9 +513,17 @@ class _HomeScreenState extends State<HomeScreen> {
                         await Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (_) => CaptureScreen(cameras: cameras, engine: ClassroomEngine.instance),
+                            builder: (_) => CaptureScreen(
+                              cameras: cameras,
+                              engine: ClassroomEngine.instance,
+                              initialExistingResults: activeSession?.consolidatedResults,
+                            ),
                           ),
                         );
+                        if (mounted) {
+                          await _loadActiveSession();
+                          await _loadStudents();
+                        }
                       },
                       child: Container(
                         padding: const EdgeInsets.all(14),
@@ -934,17 +1027,24 @@ class _HomeScreenState extends State<HomeScreen> {
                       if (selectedVideos.isNotEmpty) ...[
                         const SizedBox(height: 10),
                         FilledButton.icon(
-                          onPressed: () {
+                          onPressed: () async {
                             Navigator.pop(ctx);
-                            Navigator.push(
+                            final cpNumber = (activeSession?.checkpoints.length ?? 0) + 1;
+                            await Navigator.push(
                               context,
                               MaterialPageRoute(
                                 builder: (_) => ProcessingScreen.multi(
                                   videoPaths: selectedVideos,
                                   engine: ClassroomEngine.instance,
+                                  initialExistingResults: activeSession?.consolidatedResults,
+                                  checkpointLabel: 'Batch Sweep #$cpNumber (${selectedVideos.length} clips)',
                                 ),
                               ),
                             );
+                            if (mounted) {
+                              await _loadActiveSession();
+                              await _loadStudents();
+                            }
                           },
                           icon: const Icon(Icons.bolt_rounded, size: 18),
                           label: Text(
@@ -1483,6 +1583,227 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   const SizedBox(height: 20),
                   
+                  // Active Classroom Attendance Session Card (if an active session exists)
+                  if (activeSession != null) ...[
+                    GlassCard(
+                      hasGlow: true,
+                      glowColor: AppTheme.discordGreen,
+                      borderColor: AppTheme.discordGreen.withValues(alpha: 0.45),
+                      padding: const EdgeInsets.all(18),
+                      borderRadius: 24,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Header: Session Status & Class
+                          Row(
+                            children: [
+                              Container(
+                                width: 10,
+                                height: 10,
+                                decoration: BoxDecoration(
+                                  color: AppTheme.discordGreen,
+                                  shape: BoxShape.circle,
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: AppTheme.discordGreen.withValues(alpha: 0.6),
+                                      blurRadius: 8,
+                                      spreadRadius: 2,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text(
+                                      'ACTIVE ATTENDANCE SESSION',
+                                      style: TextStyle(
+                                        fontSize: 10.5,
+                                        fontWeight: FontWeight.w800,
+                                        color: AppTheme.discordGreen,
+                                        letterSpacing: 0.5,
+                                      ),
+                                    ),
+                                    Text(
+                                      'Started at ${activeSession!.startTime.hour.toString().padLeft(2, '0')}:${activeSession!.startTime.minute.toString().padLeft(2, '0')} • ${activeSession!.checkpoints.length} checkpoint sweep(s)',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.archive_outlined, size: 20),
+                                color: isDark ? Colors.white60 : Colors.black54,
+                                tooltip: 'Finalize & End Session',
+                                onPressed: _endActiveSession,
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 14),
+
+                          // Live Verified Tally Row
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.discordGreen.withValues(alpha: 0.12),
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(color: AppTheme.discordGreen.withValues(alpha: 0.3)),
+                                  ),
+                                  child: Column(
+                                    children: [
+                                      Text(
+                                        '${activeSession!.presentCount}',
+                                        style: const TextStyle(
+                                          fontSize: 20,
+                                          fontWeight: FontWeight.bold,
+                                          color: AppTheme.discordGreen,
+                                        ),
+                                      ),
+                                      const Text(
+                                        'Present',
+                                        style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: AppTheme.discordGreen),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.discordRed.withValues(alpha: 0.12),
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(color: AppTheme.discordRed.withValues(alpha: 0.3)),
+                                  ),
+                                  child: Column(
+                                    children: [
+                                      Text(
+                                        '${activeSession!.absentCount}',
+                                        style: const TextStyle(
+                                          fontSize: 20,
+                                          fontWeight: FontWeight.bold,
+                                          color: AppTheme.discordRed,
+                                        ),
+                                      ),
+                                      const Text(
+                                        'Absent',
+                                        style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: AppTheme.discordRed),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.discordPurple.withValues(alpha: 0.12),
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(color: AppTheme.discordPurple.withValues(alpha: 0.3)),
+                                  ),
+                                  child: Column(
+                                    children: [
+                                      Text(
+                                        '${activeSession!.attendanceRate}%',
+                                        style: const TextStyle(
+                                          fontSize: 20,
+                                          fontWeight: FontWeight.bold,
+                                          color: AppTheme.discordPurple,
+                                        ),
+                                      ),
+                                      const Text(
+                                        'Rate',
+                                        style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: AppTheme.discordPurple),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 14),
+
+                          // Quick Action Buttons
+                          Row(
+                            children: [
+                              // Button 1: Sweep Now (+)
+                              Expanded(
+                                flex: 6,
+                                child: FilledButton.icon(
+                                  onPressed: _showAttendanceOptionsModal,
+                                  icon: const Icon(Icons.add_a_photo_rounded, size: 16),
+                                  label: Text(
+                                    'Take Sweep #${activeSession!.checkpoints.length + 1}',
+                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                                  ),
+                                  style: FilledButton.styleFrom(
+                                    backgroundColor: AppTheme.discordPurple,
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+
+                              // Button 2: View Attendance
+                              Expanded(
+                                flex: 5,
+                                child: OutlinedButton.icon(
+                                  onPressed: () async {
+                                    await Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => ResultsScreen(session: activeSession),
+                                      ),
+                                    );
+                                    if (mounted) {
+                                      await _loadActiveSession();
+                                      await _loadStudents();
+                                    }
+                                  },
+                                  icon: const Icon(Icons.checklist_rounded, size: 16),
+                                  label: const Text(
+                                    'Roster',
+                                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
+                                  ),
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary,
+                                    padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+                                    side: BorderSide(
+                                      color: isDark ? Colors.white24 : AppTheme.discordPurple.withValues(alpha: 0.35),
+                                    ),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+
+                              // Button 3: Export CSV at any time
+                              IconButton(
+                                icon: const Icon(Icons.ios_share_rounded, size: 20),
+                                color: AppTheme.discordPurple,
+                                tooltip: 'Export CSV at Any Time',
+                                onPressed: _exportActiveSessionCsv,
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+
                   // Dashboard Stats Card (Glassmorphism + Glow)
                   GlassCard(
                     hasGlow: true,

@@ -11,6 +11,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import '../models/attendance_result.dart';
+import '../models/attendance_session.dart';
 import '../models/embedding.dart';
 import '../modules/pose_estimation/face_pose.dart';
 import 'classroom_bindings.dart';
@@ -346,6 +347,174 @@ class ClassroomEngine {
     }
 
     return [...studentMap.values, ...guests];
+  }
+
+  String _sessionFilePath(String classId) => p.join(_baseDir, 'session_${classId}_active.json');
+
+  /// Gets the currently active attendance session for [classId], if any.
+  Future<AttendanceSession?> getActiveSession([String? classId]) async {
+    final target = classId ?? currentClassId;
+    final file = File(_sessionFilePath(target));
+    if (!await file.exists()) return null;
+    try {
+      final jsonStr = await file.readAsString();
+      final data = jsonDecode(jsonStr) as Map<String, dynamic>;
+      return AttendanceSession.fromJson(data);
+    } catch (e) {
+      print('Warning: could not read active session: $e');
+      return null;
+    }
+  }
+
+  /// Saves the active attendance session to disk.
+  Future<void> saveActiveSession(AttendanceSession session) async {
+    final file = File(_sessionFilePath(session.classId));
+    await file.writeAsString(jsonEncode(session.toJson()), flush: true);
+  }
+
+  /// Finalizes the active attendance session, archives it with a timestamp,
+  /// and clears the active session state.
+  Future<void> finalizeActiveSession([String? classId]) async {
+    final target = classId ?? currentClassId;
+    final session = await getActiveSession(target);
+    if (session != null) {
+      session.isCompleted = true;
+      session.lastUpdated = DateTime.now();
+      final ts = session.startTime.millisecondsSinceEpoch;
+      final archiveFile = File(p.join(_baseDir, 'session_${target}_archived_$ts.json'));
+      await archiveFile.writeAsString(jsonEncode(session.toJson()), flush: true);
+    }
+    final activeFile = File(_sessionFilePath(target));
+    if (await activeFile.exists()) {
+      await activeFile.delete();
+    }
+  }
+
+  /// Records a new sweep into the active session (or creates a new session if none exists).
+  ///
+  /// - Any student detected as present in this sweep is marked Present.
+  /// - Students previously marked Present remain Present.
+  /// - Checkpoint metadata (index, time, label) is saved.
+  /// - The consolidated attendance is updated and persisted immediately.
+  Future<AttendanceSession> recordSessionSweep({
+    required String classId,
+    required List<AttendanceResult> sweepResults,
+    String? checkpointLabel,
+    List<String> videoPaths = const [],
+  }) async {
+    AttendanceSession? session = await getActiveSession(classId);
+
+    if (session == null) {
+      // Start of Class Session (Checkpoint 1)
+      final label = checkpointLabel ?? 'Start of Class';
+      final checkpoint = SessionCheckpoint(
+        index: 1,
+        timestamp: DateTime.now(),
+        label: label,
+        presentCount: sweepResults.where((r) => r.status == AttendanceStatus.present && r.studentId != '__pipeline_debug__').length,
+        newPresentCount: sweepResults.where((r) => r.status == AttendanceStatus.present && r.studentId != '__pipeline_debug__').length,
+        videoPaths: videoPaths,
+      );
+
+      session = AttendanceSession(
+        sessionId: 'session_${classId}_${DateTime.now().millisecondsSinceEpoch}',
+        classId: classId,
+        startTime: DateTime.now(),
+        lastUpdated: DateTime.now(),
+        checkpoints: [checkpoint],
+        consolidatedResults: sweepResults,
+        overrides: {},
+        isCompleted: false,
+      );
+    } else {
+      // Mid-Class or Follow-Up Checkpoint (Sweep 2, 3...)
+      final prevPresentCount = session.presentCount;
+      final updatedResults = aggregateAttendanceResults(session.consolidatedResults, sweepResults);
+
+      final newTotalPresent = updatedResults.where((r) {
+        if (r.studentId == '__pipeline_debug__' || r.status == AttendanceStatus.unknownGuest) return false;
+        final key = r.studentId ?? r.name ?? '';
+        final overridden = session!.overrides[key];
+        return overridden ?? (r.status == AttendanceStatus.present);
+      }).length;
+
+      final newlyAddedPresent = max(0, newTotalPresent - prevPresentCount);
+      final checkpointNumber = session.checkpoints.length + 1;
+      final defaultLabel = checkpointNumber == 2 ? 'Mid-Class Check' : 'Sweep #$checkpointNumber';
+
+      final checkpoint = SessionCheckpoint(
+        index: checkpointNumber,
+        timestamp: DateTime.now(),
+        label: checkpointLabel ?? defaultLabel,
+        presentCount: newTotalPresent,
+        newPresentCount: newlyAddedPresent,
+        videoPaths: videoPaths,
+      );
+
+      session.checkpoints.add(checkpoint);
+      session.consolidatedResults = updatedResults;
+      session.lastUpdated = DateTime.now();
+    }
+
+    await saveActiveSession(session);
+    return session;
+  }
+
+  /// Exports an attendance session as a structured CSV file.
+  Future<File> exportSessionCsv(AttendanceSession session) async {
+    final buffer = StringBuffer();
+    buffer.writeln('# ClassRoom Consolidated Attendance Report');
+    buffer.writeln('# Class: ${session.classId}');
+    buffer.writeln('# Session Started: ${session.startTime.toLocal()}');
+    buffer.writeln('# Last Sweep: ${session.lastUpdated.toLocal()}');
+    buffer.writeln('# Total Checkpoint Sweeps: ${session.checkpoints.length}');
+    buffer.writeln('# Verified Present: ${session.presentCount} / ${session.totalCount} (${session.attendanceRate}%)');
+    buffer.writeln();
+
+    // Checkpoint summary header
+    buffer.writeln('# Checkpoints Conducted:');
+    for (final cp in session.checkpoints) {
+      final timeStr = "${cp.timestamp.hour.toString().padLeft(2, '0')}:${cp.timestamp.minute.toString().padLeft(2, '0')}";
+      buffer.writeln('#   • Checkpoint ${cp.index}: ${cp.label} at $timeStr (${cp.presentCount} present, +${cp.newPresentCount} new)');
+    }
+    buffer.writeln();
+
+    // Student records table
+    buffer.writeln('Student ID,Name,Consolidated Status,Match Similarity,Frames Detected,Session Checkpoints');
+
+    final knownResults = session.consolidatedResults
+        .where((r) => r.studentId != '__pipeline_debug__' && r.status != AttendanceStatus.unknownGuest)
+        .toList();
+
+    for (final r in knownResults) {
+      final key = r.studentId ?? r.name ?? '';
+      final isOverridden = session.overrides[key];
+      final isPresent = isOverridden ?? (r.status == AttendanceStatus.present);
+      final statusStr = isPresent ? 'PRESENT' : 'ABSENT';
+      final simStr = (r.similarityScore * 100).toStringAsFixed(1) + '%';
+      final frameCount = r.frameIds.length;
+
+      buffer.writeln('${r.studentId ?? "N/A"},${r.name ?? "Unknown"},$statusStr,$simStr,$frameCount,${session.checkpoints.length}');
+    }
+
+    // Append unknown guests if any
+    final guests = session.consolidatedResults
+        .where((r) => r.status == AttendanceStatus.unknownGuest && r.studentId != '__pipeline_debug__')
+        .toList();
+    if (guests.isNotEmpty) {
+      buffer.writeln();
+      buffer.writeln('# Unenrolled Classroom Guests Detected: ${guests.length}');
+      for (int i = 0; i < guests.length; i++) {
+        final g = guests[i];
+        buffer.writeln('GUEST_${i + 1},Unenrolled Guest,UNKNOWN_GUEST,${(g.similarityScore * 100).toStringAsFixed(1)}%,${g.frameIds.length},${session.checkpoints.length}');
+      }
+    }
+
+    final tempDir = await getTemporaryDirectory();
+    final fileName = 'attendance_${session.classId}_${session.startTime.year}${session.startTime.month.toString().padLeft(2, '0')}${session.startTime.day.toString().padLeft(2, '0')}_${session.startTime.hour}${session.startTime.minute}.csv';
+    final exportFile = File(p.join(tempDir.path, fileName));
+    await exportFile.writeAsString(buffer.toString());
+    return exportFile;
   }
 
   /// Returns a list of all currently enrolled students: [{'student_id': '...', 'name': '...'}]

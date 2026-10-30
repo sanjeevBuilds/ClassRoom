@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import '../models/attendance_result.dart';
+import '../models/attendance_session.dart';
 import '../native/classroom_engine.dart';
 import '../theme/app_theme.dart';
 import '../widgets/glass_card.dart';
@@ -14,9 +15,14 @@ import 'capture_screen.dart';
 import 'processing_screen.dart';
 
 class ResultsScreen extends StatefulWidget {
-  final List<AttendanceResult> initialResults;
+  final AttendanceSession? session;
+  final List<AttendanceResult>? initialResults;
 
-  const ResultsScreen({super.key, required this.initialResults});
+  const ResultsScreen({
+    super.key,
+    this.session,
+    this.initialResults,
+  });
 
   @override
   State<ResultsScreen> createState() => _ResultsScreenState();
@@ -26,16 +32,30 @@ class _ResultsScreenState extends State<ResultsScreen> {
   // Track manual overrides (Student ID -> isPresent)
   final Map<String, bool> _overrides = {};
   String _searchQuery = '';
+  late AttendanceSession? _session;
 
-  AttendanceResult? get _debugEntry => widget.initialResults
+  @override
+  void initState() {
+    super.initState();
+    _session = widget.session;
+    if (_session != null) {
+      _overrides.addAll(_session!.overrides);
+    }
+  }
+
+  List<AttendanceResult> get _allResults => _session != null
+      ? _session!.consolidatedResults
+      : (widget.initialResults ?? []);
+
+  AttendanceResult? get _debugEntry => _allResults
       .where((r) => r.studentId == '__pipeline_debug__')
       .firstOrNull;
 
-  List<AttendanceResult> get _knownResults => widget.initialResults
+  List<AttendanceResult> get _knownResults => _allResults
       .where((r) => r.studentId != '__pipeline_debug__')
       .toList();
 
-  int get unknownGuestCount => widget.initialResults
+  int get unknownGuestCount => _allResults
       .where((r) => r.status == AttendanceStatus.unknownGuest && r.studentId != '__pipeline_debug__')
       .length;
 
@@ -59,21 +79,79 @@ class _ResultsScreenState extends State<ResultsScreen> {
     return count;
   }
 
-  Future<void> _exportCsv() async {
-    final buffer = StringBuffer('Student ID,Name,Status,Similarity Score\n');
-    for (final r in _knownResults) {
-      final key = r.studentId ?? r.name ?? r.hashCode.toString();
-      final isPresent = _overrides[key] ?? (r.status == AttendanceStatus.present);
-      final status = isPresent ? 'present' : 'absent';
-      buffer.writeln('${r.studentId ?? "N/A"},${r.name ?? "Unknown"},$status,${r.similarityScore.toStringAsFixed(4)}');
+  void _toggleOverride(String key, bool currentIsPresent) async {
+    setState(() {
+      _overrides[key] = !currentIsPresent;
+    });
+    if (_session != null) {
+      _session!.overrides[key] = !currentIsPresent;
+      await ClassroomEngine.instance.saveActiveSession(_session!);
     }
+  }
 
-    final dir = await getTemporaryDirectory();
-    final file = File(p.join(dir.path, 'attendance_${DateTime.now().millisecondsSinceEpoch}.csv'));
-    await file.writeAsString(buffer.toString());
+  Future<void> _exportCsv() async {
+    try {
+      File file;
+      if (_session != null) {
+        file = await ClassroomEngine.instance.exportSessionCsv(_session!);
+      } else {
+        final buffer = StringBuffer('Student ID,Name,Status,Similarity Score\n');
+        for (final r in _knownResults) {
+          final key = r.studentId ?? r.name ?? r.hashCode.toString();
+          final isPresent = _overrides[key] ?? (r.status == AttendanceStatus.present);
+          final status = isPresent ? 'present' : 'absent';
+          buffer.writeln('${r.studentId ?? "N/A"},${r.name ?? "Unknown"},$status,${r.similarityScore.toStringAsFixed(4)}');
+        }
+        final dir = await getTemporaryDirectory();
+        file = File(p.join(dir.path, 'attendance_${DateTime.now().millisecondsSinceEpoch}.csv'));
+        await file.writeAsString(buffer.toString());
+      }
 
-    if (!mounted) return;
-    await Share.shareXFiles([XFile(file.path)], text: 'Attendance results');
+      if (!mounted) return;
+      await Share.shareXFiles([XFile(file.path)], text: 'Consolidated attendance report');
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Export failed: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _confirmEndSession() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Finalize & Archive Session?'),
+        content: Text(
+          'This will finalize the attendance session for ${_session?.classId ?? "this class"} ($presentCount Present, $absentCount Absent across ${_session?.checkpoints.length ?? 1} sweep checkpoints). The session will be archived, allowing a fresh session to be started next class.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Keep Active'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppTheme.discordPurple),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Finalize Session'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true && mounted) {
+      await ClassroomEngine.instance.finalizeActiveSession(_session?.classId);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Class session finalized and archived successfully.'),
+            backgroundColor: AppTheme.discordGreen,
+          ),
+        );
+        Navigator.pop(context, true);
+      }
+    }
   }
 
   List<AttendanceResult> _consolidatedResultsWithOverrides() {
@@ -93,6 +171,8 @@ class _ResultsScreenState extends State<ResultsScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final primaryTextColor = isDark ? const Color(0xFFF2F3F5) : const Color(0xFF23272A);
     final secondaryTextColor = isDark ? Colors.white60 : Colors.black54;
+    final checkpointNumber = (_session?.checkpoints.length ?? 0) + 1;
+    final checkpointTitle = checkpointNumber == 2 ? 'Mid-Class Checkpoint' : 'Sweep Checkpoint #$checkpointNumber';
 
     showModalBottomSheet(
       context: context,
@@ -134,7 +214,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    'Add Sweep to Current Session',
+                    'Record $checkpointTitle',
                     style: TextStyle(
                       fontSize: (size.width * 0.045).clamp(16.0, 19.0),
                       fontWeight: FontWeight.bold,
@@ -144,7 +224,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Currently $presentCount present and $absentCount absent. Record or upload an additional sweep angle (e.g. rear rows or opposite wing) to verify missing students.',
+                    'Currently $presentCount verified Present ($absentCount Absent). Sweep now to mark newly arrived or previously obscured students as Present without resetting existing records.',
                     style: TextStyle(
                       fontSize: (size.width * 0.031).clamp(12.0, 13.5),
                       color: secondaryTextColor,
@@ -220,7 +300,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
                                   ),
                                   const SizedBox(height: 2),
                                   Text(
-                                    'Scan missing rows with gyro alignment',
+                                    'Scan students with real-time gyro guidelines',
                                     style: TextStyle(fontSize: 12, color: secondaryTextColor),
                                   ),
                                 ],
@@ -257,6 +337,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
                                   videoPath: picked.path,
                                   engine: ClassroomEngine.instance,
                                   initialExistingResults: _consolidatedResultsWithOverrides(),
+                                  checkpointLabel: checkpointTitle,
                                 ),
                               ),
                             );
@@ -299,7 +380,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    'Upload Additional Sweep Video',
+                                    'Upload Sweep Video Clip',
                                     style: TextStyle(
                                       fontWeight: FontWeight.bold,
                                       fontSize: 15,
@@ -308,7 +389,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
                                   ),
                                   const SizedBox(height: 2),
                                   Text(
-                                    'Aggregate video file from device storage',
+                                    'Import video clip from device storage',
                                     style: TextStyle(fontSize: 12, color: secondaryTextColor),
                                   ),
                                 ],
@@ -369,7 +450,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Text(
-                            'Attendance Results',
+                            _session != null ? '${_session!.classId} Attendance Session' : 'Attendance Results',
                             style: TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.bold,
@@ -379,7 +460,9 @@ class _ResultsScreenState extends State<ResultsScreen> {
                           ),
                           const SizedBox(height: 1),
                           Text(
-                            '$totalCount Enrolled • $presentCount Verified',
+                            _session != null
+                                ? 'Session Active (${_session!.checkpoints.length} sweep${_session!.checkpoints.length > 1 ? "s" : ""}) • $presentCount/$totalCount Verified'
+                                : '$totalCount Enrolled • $presentCount Verified',
                             style: TextStyle(fontSize: 11, color: secondaryTextColor),
                           ),
                         ],
@@ -387,14 +470,20 @@ class _ResultsScreenState extends State<ResultsScreen> {
                     ),
                     IconButton(
                       icon: const Icon(Icons.add_a_photo_rounded, color: AppTheme.discordPurple, size: 20),
-                      tooltip: 'Add another sweep & aggregate',
+                      tooltip: 'Take another sweep & aggregate',
                       onPressed: _showAddSweepSessionModal,
                     ),
                     IconButton(
                       icon: const Icon(Icons.ios_share_rounded, color: AppTheme.discordPurple, size: 20),
-                      tooltip: 'Export as CSV',
+                      tooltip: 'Export CSV at any time',
                       onPressed: _exportCsv,
                     ),
+                    if (_session != null)
+                      IconButton(
+                        icon: const Icon(Icons.archive_outlined, color: AppTheme.discordLightPurple, size: 20),
+                        tooltip: 'Finalize & End Class Session',
+                        onPressed: _confirmEndSession,
+                      ),
                   ],
                 ),
               ),
@@ -431,6 +520,82 @@ class _ResultsScreenState extends State<ResultsScreen> {
                   ),
                 ),
               ),
+
+              // Checkpoint History Timeline (Shows sweeps taken across the class)
+              if (_session != null && _session!.checkpoints.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 6, 16, 2),
+                  child: SizedBox(
+                    height: 38,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: _session!.checkpoints.length + 1,
+                      separatorBuilder: (_, __) => const SizedBox(width: 8),
+                      itemBuilder: (context, idx) {
+                        if (idx == _session!.checkpoints.length) {
+                          // "+ Sweep Again" quick action chip
+                          return ActionChip(
+                            avatar: const Icon(Icons.add_a_photo_rounded, size: 14, color: AppTheme.discordPurple),
+                            label: const Text('Sweep Again', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.discordPurple)),
+                            backgroundColor: AppTheme.discordPurple.withValues(alpha: 0.12),
+                            side: BorderSide(color: AppTheme.discordPurple.withValues(alpha: 0.3)),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                            onPressed: _showAddSweepSessionModal,
+                          );
+                        }
+                        final cp = _session!.checkpoints[idx];
+                        final timeStr = "${cp.timestamp.hour.toString().padLeft(2, '0')}:${cp.timestamp.minute.toString().padLeft(2, '0')}";
+                        return Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: isDark ? const Color(0xFF1E1F22) : const Color(0xFFF2F3F5),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                              color: isDark ? Colors.white12 : Colors.black12,
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                width: 18,
+                                height: 18,
+                                decoration: const BoxDecoration(
+                                  color: AppTheme.discordGreen,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Center(
+                                  child: Text(
+                                    '${cp.index}',
+                                    style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                '${cp.label} ($timeStr)',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: primaryTextColor,
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                '${cp.presentCount} present',
+                                style: const TextStyle(
+                                  fontSize: 10.5,
+                                  color: AppTheme.discordGreen,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ),
 
               if (absentCount > 0)
                 Padding(
@@ -680,11 +845,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
                                 const SizedBox(width: 8),
                                 // Sleek Interactive Status Toggle Pill
                                 InkWell(
-                                  onTap: () {
-                                    setState(() {
-                                      _overrides[key] = !isPresent;
-                                    });
-                                  },
+                                  onTap: () => _toggleOverride(key, isPresent),
                                   borderRadius: BorderRadius.circular(12),
                                   child: AnimatedContainer(
                                     duration: const Duration(milliseconds: 150),
@@ -759,39 +920,65 @@ class _ResultsScreenState extends State<ResultsScreen> {
                 ),
               ),
 
-            // Confirm & Save Button
+            // Bottom Action Bar: [Sweep Again (+)] and [Save Progress]
             SafeArea(
               top: false,
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 6, 16, 12),
-                child: SizedBox(
-                  width: double.infinity,
-                  height: 50,
-                  child: ElevatedButton.icon(
-                    onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Attendance verified & saved.'),
-                          backgroundColor: AppTheme.discordGreen,
-                          duration: Duration(seconds: 2),
+                child: Row(
+                  children: [
+                    // Button 1: Sweep Again (Take Next Sweep)
+                    Expanded(
+                      flex: 5,
+                      child: OutlinedButton.icon(
+                        onPressed: _showAddSweepSessionModal,
+                        icon: const Icon(Icons.add_a_photo_rounded, size: 17),
+                        label: const Text(
+                          'Sweep Again',
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5),
                         ),
-                      );
-                      Navigator.pop(context);
-                    },
-                    icon: const Icon(Icons.check_circle_outline, color: Colors.white, size: 18),
-                    label: const Text(
-                      'Confirm & Save',
-                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.white),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary,
+                          minimumSize: const Size(0, 48),
+                          side: BorderSide(
+                            color: AppTheme.discordPurple.withValues(alpha: 0.4),
+                            width: 1.5,
+                          ),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        ),
+                      ),
                     ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.discordPurple,
-                      elevation: 3,
-                      shadowColor: AppTheme.discordPurple.withValues(alpha: 0.4),
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
-                      alignment: Alignment.center,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    const SizedBox(width: 10),
+
+                    // Button 2: Save Progress & Return
+                    Expanded(
+                      flex: 6,
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Session progress saved to device.'),
+                              backgroundColor: AppTheme.discordGreen,
+                              duration: Duration(seconds: 2),
+                            ),
+                          );
+                          Navigator.pop(context, true);
+                        },
+                        icon: const Icon(Icons.check_rounded, color: Colors.white, size: 18),
+                        label: const Text(
+                          'Save Progress',
+                          style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.discordPurple,
+                          elevation: 3,
+                          shadowColor: AppTheme.discordPurple.withValues(alpha: 0.4),
+                          minimumSize: const Size(0, 48),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        ),
+                      ),
                     ),
-                  ),
+                  ],
                 ),
               ),
             ),
